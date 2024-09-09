@@ -1,7 +1,7 @@
-# Localized image watermarking
+# Video watermarking
 
-[[`Research doc`](https://docs.google.com/document/d/12X-wMz1OrJhKICaSZIzXohDrqy5LJsdyYi_jn7eLQ0s/edit)]
-[[`Method overview`](https://docs.google.com/document/d/12X-wMz1OrJhKICaSZIzXohDrqy5LJsdyYi_jn7eLQ0s/edit#heading=h.pm136y2xhylv)]
+[[`Diary`](https://docs.google.com/document/d/1hQ8fd-ft1UAwsXCvlefA_MK3guwbVRyNmqhZMZy-0pQ/edit)]
+<!-- [[`Method overview`]()] -->
 
 
 
@@ -35,16 +35,13 @@ To run on 2 GPUs:
 
 ### Launching experiments on SLURM cluster - clutils
 
-To launch the expe of json file `expes/test/segmark_minimal.json`:
+To launch the expe of json file `expes/test/minimal.json`:
 
-`python clutils/main.py sweep expes/test/segmark_minimal.json`
+`python clutils/main.py sweep expes/test/minimal.json`
 
 Should:
-- Create the folder `/checkpoint/$USER/2024_logs/segmark_minimal`
-- Clone the repo in `/checkpoint/$USER/2024_logs/segmark_minimal/code` corresponding to the branch `commit` of the json file (if the branch is not specified, it will clone the master branch).
+- Create the folder `/checkpoint/$USER/$YEAR_logs/minimal`
+- Clone the repo in `/checkpoint/$USER/$YEAR_logs/minimal/code` corresponding to the branch `commit` of the json file (if the branch is not specified, it will clone the master branch).
 - Run the experiments in the folder for every sweep of HPs.
-
-
-## TODOs
 
 
