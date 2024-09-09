@@ -73,7 +73,7 @@ class LPIPSWithDiscriminator(nn.Module):
         weights,
         last_layer,
         total_norm=0,
-        choose_norm_idx=2,
+        choose_norm_idx=-1,
         eps=1e-12
     ) -> list:
         # calculate gradients for each loss
@@ -93,10 +93,9 @@ class LPIPSWithDiscriminator(nn.Module):
 
         # choose total_norm to be the norm of the biggest weight
         assert choose_norm_idx or total_norm > 0, "Either choose_norm_idx or total_norm should be provided"
-        if total_norm <= 0:  # if not provided, use the norm of the biggest weight
-            # max_idx = ratios.index(max(ratios))
-            max_idx = choose_norm_idx
-            total_norm = grad_norms[max_idx]
+        if total_norm <= 0:  # if not provided, use the norm of the chosen weight
+            # choose_norm_idx = ratios.index(max(ratios))
+            total_norm = grad_norms[choose_norm_idx]
 
         # calculate adaptive weights
         scales = [r * total_norm / (eps + norm)
@@ -107,73 +106,66 @@ class LPIPSWithDiscriminator(nn.Module):
                 inputs: torch.Tensor, reconstructions: torch.Tensor,
                 masks: torch.Tensor, msgs: torch.Tensor, preds: torch.Tensor,
                 optimizer_idx: int, global_step: int,
-                last_layer=None, cond=None, msgs2=None
+                last_layer=None, cond=None,
                 ):
 
         if optimizer_idx == 0:  # embedder update
-            weights = [self.percep_weight,
-                       self.disc_weight, self.detect_weight]
-            losses = []
+            weights = {}
+            losses = {}
             # perceptual loss
-            losses.append(self.perceptual_loss(
-                imgs=imnet_to_lpips(inputs.contiguous()),
-                imgs_w=imnet_to_lpips(reconstructions.contiguous()),
-            ).mean())
+            if self.percep_weight > 0:
+                losses["percep"] = self.perceptual_loss(
+                    imgs=imnet_to_lpips(inputs.contiguous()),
+                    imgs_w=imnet_to_lpips(reconstructions.contiguous()),
+                ).mean()
+                weights["percep"] = self.percep_weight
             # discriminator loss
-            logits_fake = self.discriminator(reconstructions.contiguous())
-            disc_factor = adopt_weight(
-                1.0, global_step, threshold=self.discriminator_iter_start)
-            losses.append(- logits_fake.mean())
+            if self.disc_weight > 0:
+                logits_fake = self.discriminator(reconstructions.contiguous())
+                disc_factor = adopt_weight(
+                    1.0, global_step, threshold=self.discriminator_iter_start)
+                losses["disc"] = - logits_fake.mean()
+                weights["disc"] = disc_factor * self.disc_weight
             # detection loss
-            detection_loss = self.detection_loss(preds[:, 0:1, :, :].contiguous(
-            ), masks.max(1).values.unsqueeze(1).contiguous().float()).mean()
-            losses.append(detection_loss)
+            if self.detect_weight > 0:
+                detection_loss = self.detection_loss(
+                    preds[:, 0:1, :, :].contiguous(), 
+                    masks.contiguous(),
+                ).mean()
+                losses["detect"] = detection_loss
+                weights["detect"] = self.detect_weight
             # decoding loss
-            losses_decoding = []
             if len(msgs.shape) > 1 and self.decode_weight > 0:
-                # flatten and select pixels where mask is =1
+                # flatten and select pixels where mask is = 1
                 msg_preds = preds[:, 1:, :, :]  # b nbits h w
-                for num_msg in range(msgs.shape[1]):
-                    msg_targs = msgs[:, num_msg, :]
-                    # b nbits h w
-                    msg_targs = msg_targs.unsqueeze(
-                        -1).unsqueeze(-1).expand_as(msg_preds)
-                    mask = masks[:, num_msg].unsqueeze(
-                        1).expand_as(msg_preds).bool()
-                    msg_preds_ = msg_preds.masked_select(mask)
-                    msg_targs = msg_targs.masked_select(mask)
-                    # non empty mask
-                    if len(msg_preds_) > 0:
-                        losses_decoding.append(self.decoding_loss(
-                            msg_preds_.contiguous(), msg_targs.contiguous().float()))
-                if len(losses_decoding) > 0:
-                    combined_loss = torch.cat(losses_decoding, dim=0)
-                    average_loss = combined_loss.mean()
-                    losses.append(average_loss)
-                    weights.append(self.decode_weight)
+                masks = masks.expand_as(msg_preds).bool()
+                bsz, nbits, h, w = msg_preds.size()    
+                msg_targs = msgs.unsqueeze(-1).unsqueeze(-1).expand_as(msg_preds) # b nbits h w
+                msg_preds_ = msg_preds.masked_select(masks).view(bsz, nbits, -1)  # b 1 h w -> b nbits n
+                msg_targs_ = msg_targs.masked_select(masks).view(bsz, nbits, -1)  # b 1 h w -> b nbits n
+                decoding_loss = self.decoding_loss(
+                    msg_preds_.contiguous(), 
+                    msg_targs_.contiguous().float()
+                ).mean()
+                losses["decode"] = decoding_loss
+                weights["decode"] = self.decode_weight
             # calculate adaptive weights
             if last_layer is not None and self.balanced:
                 scales = self.calculate_adaptive_weights(
-                    losses=losses,
-                    weights=weights,
+                    losses=losses.values(),
+                    weights=weights.values(),
                     last_layer=last_layer,
                     total_norm=self.total_norm,
                 )
+                scales = {k: v for k, v in zip(weights.keys(), scales)}
             else:
                 scales = weights
-            total_loss = sum(scales[i] * losses[i] for i in range(len(losses)))
+            total_loss = sum(scales[key] * losses[key] for key in losses)
             # log
             log = {
                 "total_loss": total_loss.clone().detach().mean(),
-                "percep_loss": losses[0].clone().detach().mean(),
-                "percep_scale": scales[0],
-                "disc_loss": losses[1].clone().detach().mean(),
-                "disc_scale": scales[1],
-                "detect_loss": losses[2].clone().detach().mean(),
-                "detect_scale": scales[2],
-                # 0.0,
-                "decode_loss": losses[3].clone().detach().mean() if len(losses) > 3 else -1,
-                "decode_scale": scales[3] if len(losses) > 3 else -1,  # 0.0,
+                **{f"loss_{k}": v.clone().detach().mean() for k, v in losses.items()},
+                **{f"scale_{k}": v for k, v in scales.items()}
             }
             return total_loss, log
 

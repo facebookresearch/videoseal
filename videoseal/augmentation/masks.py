@@ -90,20 +90,14 @@ class RandomIrregularMaskEmbedder:
                                           draw_method=self.draw_method)
 
 
-import numpy as np
-
 def make_random_rectangle_mask(shape, margin=10, bbox_min_size=30, bbox_max_size=100, min_times=0, max_times=3, no_overlap=False):
     height, width = shape
     union_mask = np.zeros((height, width), np.float32)
-    
-    
     bbox_max_size = min(bbox_max_size, height - margin * 2, width - margin * 2)
     times = np.random.randint(min_times, max_times + 1)
     individual_masks = np.zeros((times, 1, height, width), np.float32)  # Store each rectangle separately
-
     occupied = np.zeros((height, width), bool)  # To check overlap
-    
-    for i in range(times):
+    for ii in range(times):
         valid = False
         attempts = 0
         while not valid and attempts < 100:
@@ -111,19 +105,14 @@ def make_random_rectangle_mask(shape, margin=10, bbox_min_size=30, bbox_max_size
             box_height = np.random.randint(bbox_min_size, bbox_max_size + 1)
             start_x = np.random.randint(margin, width - margin - box_width + 1)
             start_y = np.random.randint(margin, height - margin - box_height + 1)
-            
-            if no_overlap:
-                # Check if the selected area is free
-                if not np.any(occupied[start_y:start_y + box_height, start_x:start_x + box_width]):
+            if no_overlap and not np.any(occupied[start_y:start_y + box_height, start_x:start_x + box_width]):
                     valid = True
             else:
                 valid = True
-            
             if valid:
                 union_mask[start_y:start_y + box_height, start_x:start_x + box_width] = 1
-                individual_masks[i, 0, start_y:start_y + box_height, start_x:start_x + box_width] = 1
-                if no_overlap:
-                    occupied[start_y:start_y + box_height, start_x:start_x + box_width] = True
+                individual_masks[ii, 0, start_y:start_y + box_height, start_x:start_x + box_width] = 1
+                occupied[start_y:start_y + box_height, start_x:start_x + box_width] = True
             attempts += 1
         if not valid:
             print(f"Warning: Could not place non-overlapping rectangle for mask {i + 1}")
@@ -141,16 +130,15 @@ class RandomRectangleMaskEmbedder:
         self.max_times = max_times
         self.ramp = LinearRamp(**ramp_kwargs) if ramp_kwargs is not None else None
 
-    def __call__(self, img, iter_i=None, raw_image=None, no_overlap=False, nb_times = None):
+    def __call__(self, img, iter_i=None, raw_image=None, no_overlap=False, nb_times=None):
         coef = self.ramp(iter_i) if (self.ramp is not None) and (iter_i is not None) else 1
         cur_bbox_max_size = int(self.bbox_min_size + 1 + (self.bbox_max_size - self.bbox_min_size) * coef)
-        cur_max_times = int(self.min_times + (self.max_times - self.min_times) * coef)
-        if nb_times is not None:
+        if nb_times:
             min_times = nb_times
             max_times = nb_times
         else:
             min_times = self.min_times
-            max_times = cur_max_times
+            max_times = int(self.min_times + (self.max_times - self.min_times) * coef)
         return make_random_rectangle_mask(img.shape[1:], margin=self.margin, bbox_min_size=self.bbox_min_size,
                                           bbox_max_size=cur_bbox_max_size, min_times=min_times,
                                           max_times=max_times, no_overlap=no_overlap)
@@ -296,18 +284,29 @@ class FullMaskEmbedder:
     def __init__(self, invert_proba=0.5):
         self.invert_proba = invert_proba
 
-    def __call__(self, img, iter_i=None, raw_image=None):
-        mask = np.zeros((img.shape[-2], img.shape[-1]), np.float32)
-        if self.invert_proba > 0 and np.random.random() < self.invert_proba:
-            mask = 1 - mask
-        return mask[None, ...]
+    def __call__(self, img, iter_i=None, raw_image=None, **kwargs):
+        result = np.zeros((img.shape[-2], img.shape[-1]), np.float32)
+        if np.random.random() < self.invert_proba:
+            result = 1 - result
+        return torch.tensor(result[None, ...])
 
 
 class CocoSegmentationMaskEmbedder:
     def __init__(self):
         ## Empty class
         pass
-        
+
+
+class NoMaskEmbedder:
+    def __init__(self, **kwargs):
+        ## Empty class
+        pass
+
+    def __call__(self, imgs, iter_i=None, raw_image=None, **kwargs):
+        return torch.ones_like(imgs[:, 0:1, ...])
+
+    def sample_representative_masks(self, img):
+        return torch.ones((1, 1, img.shape[-2], img.shape[-1]))
 
 
 class MixedMaskEmbedder:
@@ -388,7 +387,7 @@ class MixedMaskEmbedder:
     ) -> torch.Tensor:
         kind = np.random.choice(len(self.probas), p=self.probas)
         gen = self.gens[kind]
-        kwargs = {"no_overlap": no_overlap, "nb_times":nb_times} if isinstance(gen, RandomRectangleMaskEmbedder) else {}
+        kwargs = {"no_overlap": no_overlap, "nb_times": nb_times} if isinstance(gen, RandomRectangleMaskEmbedder) else {}
         if isinstance(gen, CocoSegmentationMaskEmbedder):
             result = masks
         else:
@@ -418,12 +417,6 @@ class MixedMaskEmbedder:
         masks = [full_mask, rect_mask, inverted_rect_mask, irregular_mask, inverted_irregular_mask]
         return torch.tensor(np.stack(masks))
 
-    def sample_multiwm_masks(self, img, nb_times=None):
-        # TODO: Fix issue when probas at 0 and gens are not created
-        # Generate masks using the first generator (rectangular)
-        union, individuals = self.gens[1](img, no_overlap=True, nb_times=nb_times)
-        return torch.tensor(union), torch.tensor(individuals)
-
     
 def get_mask_embedder(kind, **kwargs):
     if kind is None:
@@ -431,14 +424,10 @@ def get_mask_embedder(kind, **kwargs):
     if kwargs is None:
         kwargs = {}
 
-    if kind == "mixed":
+    if kind == "none":
+        cl = NoMaskEmbedder
+    elif kind == "mixed":
         cl = MixedMaskEmbedder
-    elif kind == "full":
-        cl = FullMaskEmbedder
-    elif kind == "outpainting":
-        cl = OutpaintingMaskEmbedder
-    elif kind == "dumb":
-        cl = DumbAreaMaskEmbedder
     else:
         raise NotImplementedError(f"No such embedder kind = {kind}")
     return cl(**kwargs)

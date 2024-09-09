@@ -4,8 +4,8 @@ from torch import nn
 from videoseal.data.transforms import rgb_to_yuv, yuv_to_rgb
 from videoseal.modules.hidden import HiddenEncoder
 from videoseal.modules.msg_processor import MsgProcessor
-from videoseal.modules.unet import UnetMsg
-from videoseal.modules.unet_plus import UNetMsgPlus
+from videoseal.modules.unet_old import UnetMsg
+from videoseal.modules.unet import UNetMsgPlus
 from videoseal.modules.vae import VAEDecoder, VAEEncoder
 
 

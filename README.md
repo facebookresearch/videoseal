@@ -9,9 +9,9 @@
 
 ### Requirements
 
-Version of Python is 3.10 (pytorch 2.1.0, torchvision 0.16.0, torchaudio 2.1.0, cuda 12.1).
+Version of Python is 3.10 (pytorch > 2.3, torchvision 0.16.0, torchaudio 2.1.0, cuda 12.1).
 ```
-conda install pytorch==2.1.0 torchvision==0.16.0 torchaudio==2.1.0 pytorch-cuda=12.1 -c pytorch -c nvidia
+conda install pytorch==2.4.0 torchvision==0.19.0 torchaudio==2.4.0 pytorch-cuda=12.1 -c pytorch -c nvidia
 ```
 
 Other dependencies:

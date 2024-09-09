@@ -56,26 +56,40 @@ class Wam(nn.Module):
     def get_random_msg(self, bsz: int = 1, nb_repetitions=1) -> torch.Tensor:
         return self.embedder.get_random_msg(bsz, nb_repetitions)  # b x k
 
-    def get_secong_msg(self, msgs, prop_swith_min=0.5, prop_switch_max=0.75) -> torch.Tensor:
-        msgs2 = msgs.clone()
-
-        # Determine the number of columns to flip
-        num_columns = msgs.shape[1]
-        num_columns_to_flip = random.randint(
-            int(prop_swith_min * num_columns), int(prop_switch_max * num_columns))
-
-        # Randomly choose columns to flip
-        columns_to_flip = random.sample(
-            range(num_columns), num_columns_to_flip)
-
-        # Flip the bits in the chosen columns
-        for col in columns_to_flip:
-            msgs2[:, col] = 1 - msgs2[:, col]
-
-        msgs2 = msgs2.to(msgs.device)
-        return (msgs2)
-
     def forward(
+        self,
+        imgs: torch.Tensor,
+        masks: torch.Tensor,
+        msgs: torch.Tensor = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Generate watermarked images from the input images.
+        """
+        # optionally create message
+        if msgs is None:
+            msgs = self.get_random_msg(imgs.shape[0])  # b x k
+            msgs = msgs.to(imgs.device)
+        # generate watermarked images
+        deltas_w = self.embedder(imgs, msgs)
+        imgs_w = self.scaling_i * imgs + self.scaling_w * deltas_w
+        # augment
+        imgs_aug, masks, selected_aug = self.augmenter(imgs_w, imgs, masks)
+
+        # detect watermark
+        preds = self.detector(imgs_aug)
+
+        outputs = {
+            "msgs": msgs,  # original messages: b k
+            "masks": masks,  # augmented masks: b 1 h w
+            "deltas_w": deltas_w,  # predicted watermarks: b c h w
+            "imgs_w": imgs_w,  # watermarked images: b c h w
+            "imgs_aug": imgs_aug,  # augmented images: b c h w
+            "preds": preds,  # predicted masks and/or messages: b (1+nbits) h w
+            "selected_aug": selected_aug,  # selected augmentation
+        }
+        return outputs
+
+    def forward_multi(
         self,
         imgs: torch.Tensor,
         masks: torch.Tensor,

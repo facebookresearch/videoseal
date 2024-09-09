@@ -90,6 +90,6 @@ class HiddenDecoder(nn.Module):
     def forward(self, img_w):
 
         x = self.layers(img_w) # b d h w
-        x = self.linear(x)
+        x = self.linear(x) # b l+1 h w
         return x
 

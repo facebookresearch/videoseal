@@ -1,13 +1,14 @@
 """
-Example usage (local):
+Example usage (cluster 2 gpus):
     torchrun --nproc_per_node=2 train.py --local_rank 0
 Example usage (cluster 1 gpu):
     torchrun train.py --debug_slurm
     For eval ful only:
-        torchrun train.py --debug_slurm --double_w False --only_eval True --output_dir /checkpoint/tomsander/2406-segmark/0628_doublewm_vs_onewm_fixed/_lambda_w=1_double_w=false
-Example usage (cluster 2 gpus):
-    torchrun --nproc_per_node=2 train.py --local_rank 0 --debug_slurm
+        torchrun train.py --debug_slurm --only_eval True --output_dir output/
 
+Example:  decoding only, hidden like
+    torchrun --nproc_per_node=2 train.py --local_rank 0 --nbits 32 --saveimg_freq 1 --lambda_i 0 --lambda_det 0 --lambda_dec 1 --lambda_d 0  --img_size 128 --img_size_extractor 128 --embedder_model hidden --extractor_model hidden
+        
 Args inventory:
     --scheduler CosineLRScheduler,lr_min=1e-6,t_initial=100,warmup_lr_init=1e-6,warmup_t=5
     --optimizer Lamb,lr=1e-3
@@ -15,16 +16,9 @@ Args inventory:
     --resume_from /checkpoint/pfz/2024_logs/0611_segmark_lpipsmse/_lambda_d=0.25_lambda_i=0.5_scaling_w=0.4/checkpoint050.pth
     --extractor_model dino2s_indices=11_upscale=1_14 --img_size 336 --batch_size 8 --extractor_config configs/extractor_dinos.yaml
     --embedder_model vae_sd --embedder_config configs/embedder_sd.yaml
+    --local_rank 0  --only_eval True --scaling_w 0.4 --embedder_model vae_small --extractor_model sam_small --augmentation_config configs/all_augs.yaml --resume_from /checkpoint/pfz/2024_logs/0708_segmark_bigger_vae/_scaling_w=0.4_embedder_model=vae_small_extractor_model=sam_small/checkpoint.pth
+    --local_rank 0  --only_eval True --scaling_w 2.0 --scaling_i 1.0 --nbits 16 --lambda_dec 6.0 --lambda_det 1.0 --lambda_d 0.0 --lambda_i 0.0 --perceptual_loss none --seed 0 --scheduler none --optimizer AdamW,lr=1e-5 --epochs 50 --batch_size_eval 32 --batch_size 16 --img_size 256 --attenuation jnd_1_3 --resume_from /checkpoint/pfz/2024_logs/0708_segmark_bigger_vae/_scaling_w=0.4_embedder_model=vae_small_extractor_model=sam_small/checkpoint.pth --embedder_model vae_small --extractor_model sam_small --augmentation_config configs/all_augs.yaml
 
-torchrun --nproc_per_node=2 train.py  --local_rank 0  --only_eval True --scaling_w 0.4 --embedder_model vae_small --extractor_model sam_small --augmentation_config configs/all_augs.yaml --resume_from /checkpoint/pfz/2024_logs/0708_segmark_bigger_vae/_scaling_w=0.4_embedder_model=vae_small_extractor_model=sam_small/checkpoint.pth
-torchrun --nproc_per_node=2 train.py  --local_rank 0  --only_eval True --scaling_w 2.0 --scaling_i 1.0 --nbits 16 --lambda_w2 6.0 --lambda_w 1.0 --lambda_d 0.0 --lambda_i 0.0 --perceptual_loss none --seed 0 --scheduler none --optimizer AdamW,lr=1e-5 --epochs 50 --batch_size_eval 32 --batch_size 16 --img_size 256 --attenuation jnd_1_3 --resume_from /checkpoint/pfz/2024_logs/0708_segmark_bigger_vae/_scaling_w=0.4_embedder_model=vae_small_extractor_model=sam_small/checkpoint.pth --embedder_model vae_small --extractor_model sam_small --augmentation_config configs/all_augs.yaml
-
-
-    
-torchrun --nproc_per_node=2 train.py --local_rank 0  \
-    --img_size 128      --saveimg_freq 1  \
-    --lambda_i 1.0 --lambda_w 0 --lambda_d 0.0  \
-    --perceptual_loss watson_vgg --scaling_i 0 --embedder_tanh_out false 
 """
 
 import argparse
@@ -102,11 +96,11 @@ def get_parser():
        help="Name of the extractor model")
 
     group = parser.add_argument_group('Image and watermark parameters')
-    aa("--nbits", type=int, default=16,
+    aa("--nbits", type=int, default=32,
        help="Number of bits used to generate the message. If 0, no message is used.")
     aa("--img_size", type=int, default=256, help="Size of the input images")
     aa("--img_size_extractor", type=int,
-       default=256, help="Size of the input images")
+       default=256, help="Images are resized to this size before being fed to the extractor")
     aa("--attenuation", type=str, default="None", help="Attenuation model to use")
     aa("--scaling_w", type=float, default=0.2,
        help="Scaling factor for the watermark in the embedder model")
@@ -114,8 +108,6 @@ def get_parser():
        help="Scaling factor for the watermark in the embedder model")
     aa("--scaling_i", type=float, default=1.0,
        help="Scaling factor for the image in the embedder model")
-    aa("--double_w", type=utils.bool_inst, default=False,
-       help="Use 2 watermarks instead of 1. Can not be used with a detection loss simultanuously.")
     aa("--threshold_mask", type=float, default=0.6,
        help="Threshold for the mask prediction using heatmap only (default: 0.7)")
 
@@ -135,9 +127,9 @@ def get_parser():
        help='Path to the checkpoint to resume from')
 
     group = parser.add_argument_group('Losses parameters')
-    aa('--lambda_w', default=1.0, type=float,
+    aa('--lambda_det', default=0.0, type=float,
        help='Weight for the watermark detection loss')
-    aa('--lambda_w2', default=4.0, type=float,
+    aa('--lambda_dec', default=4.0, type=float,
        help='Weight for the watermark decoding loss')
     aa('--lambda_i', default=1.0, type=float, help='Weight for the image loss')
     aa('--lambda_d', default=0.5, type=float,
@@ -157,6 +149,8 @@ def get_parser():
     aa('--only_eval', type=utils.bool_inst,
        default=False, help='If True, only runs evaluate')
     aa('--eval_freq', default=5, type=int, help='Frequency for evaluation')
+    aa('--full_eval_freq', default=50, type=int,
+       help='Frequency for full evaluation')
     aa('--saveimg_freq', default=5, type=int, help='Frequency for saving images')
     aa('--saveckpt_freq', default=50, type=int, help='Frequency for saving ckpts')
     aa('--seed', default=0, type=int, help='Random seed')
@@ -170,11 +164,6 @@ def get_parser():
 
 
 def main(params):
-    # Incompatibility between multiw and detection
-    if (params.double_w and params.lambda_w != 0):
-        print("Incompatible parameters: double_w and lambda_w!=0, setting lambda_w to 0 ")
-        params.lambda_w = 0
-
     # Distributed mode
     udist.init_distributed_mode(params)
 
@@ -238,7 +227,7 @@ def main(params):
 
     # build the complete model
     wam = Wam(embedder, extractor, augmenter, attenuation,
-              params.scaling_w, params.scaling_i, params.double_w)
+              params.scaling_w, params.scaling_i)
     wam.to(device)
     # print(wam)
 
@@ -246,7 +235,7 @@ def main(params):
     image_detection_loss = LPIPSWithDiscriminator(
         balanced=params.balanced, total_norm=params.total_gnorm,
         disc_weight=params.lambda_d, percep_weight=params.lambda_i,
-        detect_weight=params.lambda_w, decode_weight=params.lambda_w2,
+        detect_weight=params.lambda_det, decode_weight=params.lambda_dec,
         disc_start=params.disc_start, disc_num_layers=params.disc_num_layers,
         percep_loss=params.perceptual_loss
     ).to(device)
@@ -345,16 +334,19 @@ def main(params):
         (GaussianBlur,      [3, 5, 9, 17]),
         (MedianFilter,      [3, 5, 9, 17]),
     ]
+    validation_augs_subset = [
+        (Identity,          [0]),  # No parameters needed for identity
+        (Brightness,        [0.5]),
+        (Crop,              [0.75]),  # size ratio
+        (JPEG,              [60]),
+    ]
     dummy_img = torch.ones(3, params.img_size, params.img_size)
     validation_masks = augmenter.mask_embedder.sample_representative_masks(
-        dummy_img)  # 5 1 h w
-    if udist.is_main_process():
-        save_image(validation_masks, os.path.join(
-            params.output_dir, 'validation_masks.png'))
-
+        dummy_img)  # n 1 h w, full of ones, may be changed later
+    
     # evaluation only
     if params.only_eval:
-        val_stats = eval_full(wam, val_loader, image_detection_loss,
+        val_stats = eval_one_epoch(wam, val_loader, image_detection_loss,
                               0, validation_augs, validation_masks, params)
         if udist.is_main_process():
             with open(os.path.join(params.output_dir, 'log_only_eval.txt'), 'a') as f:
@@ -383,8 +375,9 @@ def main(params):
                      {f'train_{k}': v for k, v in train_stats.items()}}
 
         if epoch % params.eval_freq == 0:
-            val_stats = eval_full(wam, val_loader, image_detection_loss,
-                                  epoch, validation_augs, validation_masks, params)
+            augs = validation_augs if epoch % params.full_eval_freq == 0 else validation_augs_subset
+            val_stats = eval_one_epoch(wam, val_loader, image_detection_loss,
+                                  epoch, augs, validation_masks, params)
             # val_stats = eval_one_epoch(wam_ddp, val_loader, image_detection_loss, epoch, params)
             log_stats = {**log_stats, **
                          {f'val_{k}': v for k, v in val_stats.items()}}
@@ -424,7 +417,7 @@ def train_one_epoch(
     metric_logger = ulogger.MetricLogger(delimiter="  ")
 
     for it, (imgs, masks) in enumerate(metric_logger.log_every(train_loader, 10, header)):
-
+        # masks are only used if segm_proba > 0
         imgs = imgs.to(device, non_blocking=True)
 
         # forward
@@ -444,48 +437,45 @@ def train_one_epoch(
             # last_layer = imgs
 
         for optimizer_idx in [1, 0]:
+            # index 1 for discriminator, 0 for embedder/extractor
             loss, logs = image_detection_loss(
                 imgs, outputs["imgs_w"],
                 outputs["masks"], outputs["msgs"], outputs["preds"],
                 optimizer_idx, epoch,
-                last_layer=last_layer, msgs2=outputs["msgs2"]
+                last_layer=last_layer,
             )
             optimizers[optimizer_idx].zero_grad()
             loss.backward()
             optimizers[optimizer_idx].step()
 
         # log stats
+        log_stats = {
+            **logs, 
+            'psnr': psnr(outputs["imgs_w"], imgs).mean().item(), 
+            'lr': optimizers[0].param_groups[0]['lr'], 
+        }
+        bit_preds = outputs["preds"][:, 1:, :, :]  # b k h w
+        mask_preds = outputs["preds"][:, 0:1, :, :]  # b 1 h w
+
+        # bit accuracy
         if params.nbits > 0:
             bit_accuracy_ = bit_accuracy(
-                outputs["preds"][:, 1:, :, :],
-                outputs["msgs"],
+                bit_preds,  # b k h w
+                outputs["msgs"],  # b k
                 outputs["masks"]
             ).nanmean().item()
-
-        mask_preds = outputs["preds"][:, 0:1, :, :]  # b 1 h w
-        # Mask pred using only the heatmap
-        mask_preds_hm, mask_preds_hm_dynamic = detect_wm_hm(
-            outputs["preds"], outputs["msgs"], bit_accuracy_, params)
-        log_stats = {**logs, 'psnr': psnr(outputs["imgs_w"], imgs).mean().item(
-        ), 'lr': optimizers[0].param_groups[0]['lr'], 'avg_target': outputs["masks"].mean().item()}
-        for method, mask in zip(["", "_hm", "_hm_dynamic"], [mask_preds, mask_preds_hm, mask_preds_hm_dynamic]):
-            log_stats.update({
-                f'acc{method}': accuracy(mask, outputs["masks"]).mean().item(),
-                f'iou_0{method}': iou(mask, outputs["masks"], label=0).mean().item(),
-                f'iou_1{method}': iou(mask, outputs["masks"], label=1).mean().item(),
-                f'avg_pred{method}': mask.mean().item(),
-                f'norm_avg{method}': torch.norm(mask, p=2).item(),
-            })
-            log_stats[f'miou{method}'] = (
-                log_stats[f'iou_0{method}'] + log_stats[f'iou_1{method}']) / 2
-        if params.nbits > 0:
             log_stats['bit_acc'] = bit_accuracy_
+
+        # localization metrics
+        if params.lambda_det > 0:
+            iou0 = iou(mask_preds, outputs["masks"], label=0).mean().item()
+            iou1 = iou(mask_preds, outputs["masks"], label=1).mean().item()
+            log_stats.update({
+                f'acc': accuracy(mask_preds, outputs["masks"]).mean().item(),
+                f'miou': (iou0 + iou1) / 2,
+            })
         torch.cuda.synchronize()
         for name, loss in log_stats.items():
-            # if name == 'bit_acc' and math.isnan(loss):
-            #     continue
-            # if name in ['decode_loss', 'decode_scale'] and loss==-1:
-            #     continue  # Skip this update or replace with a default value
             metric_logger.update(**{name: loss})
 
         # save images
@@ -502,10 +492,11 @@ def train_one_epoch(
             save_image(unnormalize_img(outputs["imgs_aug"]),
                        os.path.join(params.output_dir, f'{epoch:03}_{it:03}_train_3_aug.png'), nrow=8)
             # save pred and target masks
-            save_image(outputs["masks"],
-                       os.path.join(params.output_dir, f'{epoch:03}_{it:03}_train_4_mask.png'), nrow=8)
-            save_image(F.sigmoid(mask_preds / params.temperature),
-                       os.path.join(params.output_dir, f'{epoch:03}_{it:03}_train_5_pred.png'), nrow=8)
+            if params.lambda_det > 0:
+                save_image(outputs["masks"],
+                        os.path.join(params.output_dir, f'{epoch:03}_{it:03}_train_4_mask.png'), nrow=8)
+                save_image(F.sigmoid(mask_preds / params.temperature),
+                        os.path.join(params.output_dir, f'{epoch:03}_{it:03}_train_5_pred.png'), nrow=8)
 
     metric_logger.synchronize_between_processes()
     print("Averaged {} stats:".format('train'), metric_logger)
@@ -518,104 +509,30 @@ def eval_one_epoch(
     val_loader: torch.utils.data.DataLoader,
     image_detection_loss: LPIPSWithDiscriminator,
     epoch: int,
-    params: argparse.Namespace,
-):
-    # In July 2024, this function is not used
-    wam.eval()
-    header = 'Val - Epoch: [{}/{}]'.format(epoch, params.epochs)
-    metric_logger = ulogger.MetricLogger(delimiter="  ")
-    aug_metrics = {}
-    for it, (imgs, masks) in enumerate(metric_logger.log_every(val_loader, 10, header)):
-        imgs = imgs.to(device, non_blocking=True)
-
-        # forward
-        outputs = wam(imgs)
-        outputs["preds"] /= params.temperature
-
-        # compute loss
-        loss, logs = image_detection_loss(
-            imgs, outputs["imgs_w"],
-            outputs["masks"], outputs["msgs"], outputs["preds"],
-            0, epoch, None
-        )
-        if params.nbits > 0:
-            bit_accuracy_ = bit_accuracy(
-                outputs["preds"][:, 1:, :, :],
-                outputs["msgs"],
-                outputs["masks"]
-            ).nanmean().item()
-        # log stats
-        mask_preds = outputs["preds"][:, 0:1, :, :]  # b 1 h w
-        # Mask pred using only the heatmap
-        mask_preds_hm, mask_preds_hm_dynamic = detect_wm_hm(
-            outputs["preds"], outputs["msgs"], bit_accuracy_, params)
-        selected_aug = outputs["selected_aug"]
-        if selected_aug not in aug_metrics:
-            aug_metrics[selected_aug] = ulogger.MetricLogger(delimiter="  ")
-        log_stats = {**logs, 'psnr': psnr(outputs["imgs_w"], imgs).mean().item(
-        ), 'lr': optimizers[0].param_groups[0]['lr'], 'avg_target': outputs["masks"].mean().item()}
-        for method, mask in zip(["", "_hm", "_hm_dynamic"], [mask_preds, mask_preds_hm, mask_preds_hm_dynamic]):
-            log_stats.update({
-                f'acc{method}': accuracy(mask, outputs["masks"]).mean().item(),
-                f'iou_0{method}': iou(mask, outputs["masks"], label=0).mean().item(),
-                f'iou_1{method}': iou(mask, outputs["masks"], label=1).mean().item(),
-                f'avg_pred{method}': mask.mean().item(),
-                f'norm_avg{method}': torch.norm(mask, p=2).item(),
-            })
-            log_stats[f'miou{method}'] = (
-                log_stats[f'iou_0{method}'] + log_stats[f'iou_1{method}']) / 2
-        if params.nbits > 0:
-            log_stats['bit_acc'] = bit_accuracy_
-        aug_metrics[selected_aug].update(**log_stats)
-        torch.cuda.synchronize()
-        for name, loss in log_stats.items():
-            if name == 'bit_acc' and math.isnan(loss):
-                continue
-            metric_logger.update(**{name: loss})
-        # save images
-        if epoch % params.saveimg_freq == 0 and it == 0 and udist.is_main_process():
-            save_image(unnormalize_img(imgs), os.path.join(
-                params.output_dir, f'{epoch:03}_{it:03}_val_ori.png'), nrow=8)
-            save_image(unnormalize_img(outputs["imgs_w"]), os.path.join(
-                params.output_dir, f'{epoch:03}_{it:03}_val_w.png'), nrow=8)
-
-    for aug, logger in aug_metrics.items():
-        logger.synchronize_between_processes()
-        print(f"Averaged stats for selected_aug {aug}: {logger}")
-        for k, meter in logger.meters.items():
-            metric_logger.update(**{f"{k}_{aug}": meter.global_avg})
-    metric_logger.synchronize_between_processes()
-    print("Averaged {} stats:".format('val'), metric_logger)
-    return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
-
-
-@torch.no_grad()
-def eval_full(
-    wam: Wam,
-    val_loader: torch.utils.data.DataLoader,
-    image_detection_loss: LPIPSWithDiscriminator,
-    epoch: int,
     validation_augs: List,
-    validation_masks: List,
+    validation_masks: torch.Tensor,
     params: argparse.Namespace,
-):
+) -> dict:
+    """ 
+    Evaluate the model on the validation set, with different augmentations
+
+    Args:
+        wam (Wam): the model
+        val_loader (torch.utils.data.DataLoader): the validation loader
+        image_detection_loss (LPIPSWithDiscriminator): the loss function
+        epoch (int): the current epoch
+        validation_augs (List): list of augmentations to apply
+        validation_masks (torch.Tensor): the validation masks, full of ones for now
+        params (argparse.Namespace): the parameters
+    """
     if torch.is_tensor(validation_masks):
         validation_masks = list(torch.unbind(validation_masks, dim=0))
     wam.eval()
     header = 'Val Full - Epoch: [{}/{}]'.format(epoch, params.epochs)
     metric_logger = ulogger.MetricLogger(delimiter="  ")
 
-    # to save
-    tosave = {
-        nb_wm: [f"mask={1}_aug={'crop_0.75'}", f"mask={2}_aug={'resize_0.75'}",
-                f"mask={3}_aug={'brightness_1.5'}", f"mask={4}_aug={'jpeg_60'}", f"mask={5}_aug={'identity_0'}"]
-        for nb_wm in ["1wm", "2wm"]}
-    imgs_tosave = {"1wm": [], "2wm": []}
-
     aug_metrics = {}
     for it, (imgs, masks) in enumerate(metric_logger.log_every(val_loader, 10, header)):
-        validation_masks_and_seg = validation_masks + [masks]
-        # TODO: loaded masks are not used for evaluation at the moment
 
         if it * params.batch_size_eval >= 100:
             break
@@ -623,134 +540,98 @@ def eval_full(
         imgs = imgs.to(device, non_blocking=True)
         msgs = wam.get_random_msg(imgs.shape[0])  # b x k
         msgs = msgs.to(imgs.device)
-        msgs2 = wam.get_secong_msg(msgs)  # b x k
 
         # generate watermarked images
         deltas_w = wam.embedder(imgs, msgs)
         imgs_w = wam.scaling_i * imgs + wam.scaling_w * deltas_w
 
-        # generate watermarked images
-        deltas_w2 = wam.embedder(imgs, msgs2)
-        imgs_w2 = wam.scaling_i * imgs + wam.scaling_w * deltas_w2
-
         # attenuate
         if wam.attenuation is not None:
             imgs_w = wam.attenuation(imgs, imgs_w)
-            imgs_w2 = wam.attenuation(imgs, imgs_w2)
 
-        for mask_id, masks in enumerate(validation_masks_and_seg):
+        for mask_id, masks in enumerate(validation_masks):
             # watermark masking
             masks = masks.to(imgs.device, non_blocking=True)  # 1 h w
             if len(masks.shape) < 4:
                 masks = masks.unsqueeze(0).repeat(
                     imgs_w.shape[0], 1, 1, 1)  # b 1 h w
             imgs_masked = imgs_w * masks + imgs * (1 - masks)
-            imgs_2wm = imgs_w * masks + imgs_w2 * (1 - masks)
 
-            for nb_wm, imgs_masked_ in [("1wm", imgs_masked)]:
-                # for nb_wm, imgs_masked_ in [("1wm", imgs_masked), ("2wm", imgs_2wm)]:
-                for transform, strengths in validation_augs:
-                    # Create an instance of the transformation
-                    transform_instance = transform()
+            for transform, strengths in validation_augs:
+                # Create an instance of the transformation
+                transform_instance = transform()
 
-                    for strength in strengths:
-                        do_resize = True  # hardcode for now, might need to change
-                        if not do_resize:
-                            imgs_aug, masks_aug = transform_instance(
-                                imgs_masked_, masks, strength)
-                        else:
-                            # h, w = imgs_w.shape[-2:]
-                            h, w = params.img_size_extractor, params.img_size_extractor
-                            imgs_aug, masks_aug = transform_instance(
-                                imgs_masked_, masks, strength)
-                            if imgs_aug.shape[-2:] != (h, w):
-                                imgs_aug = nn.functional.interpolate(imgs_aug, size=(
-                                    h, w), mode='bilinear', align_corners=False, antialias=True)
-                                masks_aug = nn.functional.interpolate(masks_aug, size=(
-                                    h, w), mode='bilinear', align_corners=False, antialias=True)
-                        selected_aug = str(
-                            transform.__name__).lower() + '_' + str(strength)
+                for strength in strengths:
+                    do_resize = True  # hardcode for now, might need to change
+                    if not do_resize:
+                        imgs_aug, masks_aug = transform_instance(
+                            imgs_masked, masks, strength)
+                    else:
+                        # h, w = imgs_w.shape[-2:]
+                        h, w = params.img_size_extractor, params.img_size_extractor
+                        imgs_aug, masks_aug = transform_instance(
+                            imgs_masked, masks, strength)
+                        if imgs_aug.shape[-2:] != (h, w):
+                            imgs_aug = nn.functional.interpolate(imgs_aug, size=(
+                                h, w), mode='bilinear', align_corners=False, antialias=True)
+                            masks_aug = nn.functional.interpolate(masks_aug, size=(
+                                h, w), mode='bilinear', align_corners=False, antialias=True)
+                    selected_aug = str(
+                        transform.__name__).lower() + '_' + str(strength)
 
-                        # detect watermark
-                        preds = wam.detector(imgs_aug)
-                        if params.nbits > 0:
-                            bit_preds = preds[:, 1:, :, :]
-                            bit_accuracy_ = bit_accuracy(
-                                bit_preds,
-                                msgs,
-                                masks_aug
-                            ).nanmean().item()
-                        # Start with masks by using the first bit of the prediction
-                        mask_preds = preds[:, 0:1, :, :]  # b 1 h w
-                        # Threshold on bit accuracy
-                        mask_preds_hm, mask_preds_hm_dynamic = detect_wm_hm(
-                            preds, msgs, bit_accuracy_, params)
-                        log_stats = {}
-                        if params.nbits > 0:
-                            log_stats[f'bit_acc_{nb_wm}'] = bit_accuracy_
+                    # extract watermark
+                    preds = wam.detector(imgs_aug)
+                    mask_preds = preds[:, 0:1, :, :]  # b 1 h w
+                    bit_preds = preds[:, 1:, :, :] # b k h w
 
-                        # compute stats for the augmentation and strength
-                        for method, mask_preds_ in [('', mask_preds)]:
-                            # for method, mask_preds_ in [('', mask_preds), ('_hm', mask_preds_hm), ('_hm_dynamic', mask_preds_hm_dynamic)]:
-                            log_stats.update({
-                                f'acc{method}_{nb_wm}': accuracy(mask_preds_, masks_aug).mean().item(),
-                                f'iou_0{method}_{nb_wm}': iou(mask_preds_, masks_aug, label=0).mean().item(),
-                                f'iou_1{method}_{nb_wm}': iou(mask_preds_, masks_aug, label=1).mean().item(),
-                                f'avg_pred{method}_{nb_wm}': mask_preds_.mean().item(),
-                                f'avg_target{method}_{nb_wm}': masks_aug.mean().item(),
-                                f'norm_avg{method}_{nb_wm}': torch.norm(mask_preds_, p=2).item(),
-                            })
-                            log_stats[f'miou{method}_{nb_wm}'] = (
-                                log_stats[f'iou_0{method}_{nb_wm}'] + log_stats[f'iou_1{method}_{nb_wm}']) / 2
-                            if params.nbits > 0:
-                                for decode_method in ['semihard']:
-                                    # for decode_method in ['hard', 'semihard', 'soft']:
-                                    log_stats[f"bit_acc{method}_{nb_wm}_{decode_method}"] = bit_accuracy_inference(
-                                        bit_preds,
-                                        msgs,
-                                        F.sigmoid(mask_preds_),  # b h w
-                                        method=decode_method
-                                    ).nanmean().item()
-                        current_key = f"mask={mask_id}_aug={selected_aug}"
-                        log_stats = {f"{k}_{current_key}": v for k,
-                                     v in log_stats.items()}
+                    log_stats = {}
+                    if params.nbits > 0:
+                        bit_accuracy_ = bit_accuracy(
+                            bit_preds,
+                            msgs,
+                        ).nanmean().item()
+                    
+                    if params.nbits > 0:
+                        log_stats[f'bit_acc'] = bit_accuracy_
 
-                        # save stats of the current augmentation
-                        aug_metrics = {**aug_metrics, **log_stats}
+                    if params.lambda_det > 0:
+                        iou0 = iou(mask_preds, masks, label=0).mean().item()
+                        iou1 = iou(mask_preds, masks, label=1).mean().item()
+                        log_stats.update({
+                            f'acc': accuracy(mask_preds, masks).mean().item(),
+                            f'miou': (iou0 + iou1) / 2,
+                        })
+                    
+                    current_key = f"mask={mask_id}_aug={selected_aug}"
+                    log_stats = {f"{k}_{current_key}": v for k,
+                                    v in log_stats.items()}
 
-                        # save some of the images
-                        if (epoch % params.saveimg_freq == 0 or params.only_eval) and udist.is_main_process():
-                            if current_key in tosave[nb_wm]:
-                                # consider 1 image per augmentation
-                                idx = len(imgs_tosave[nb_wm]) // 6
-                                imgs_tosave[nb_wm].append(
-                                    unnormalize_img(imgs[idx].cpu()))
-                                imgs_tosave[nb_wm].append(
-                                    unnormalize_img(imgs_w[idx].cpu()))
-                                imgs_tosave[nb_wm].append(
-                                    unnormalize_img(imgs_aug[idx].cpu()))
-                                imgs_tosave[nb_wm].append(
-                                    masks_aug[idx].cpu().repeat(3, 1, 1))
-                                imgs_tosave[nb_wm].append(
-                                    F.sigmoid(mask_preds[idx]).cpu().repeat(3, 1, 1))
-                                imgs_tosave[nb_wm].append(
-                                    F.sigmoid(mask_preds_hm_dynamic[idx]).cpu().repeat(3, 1, 1))
-                                tosave[nb_wm].remove(current_key)
+                    # save stats of the current augmentation
+                    aug_metrics = {**aug_metrics, **log_stats}
+
+                    # save some of the images
+                    if (epoch % params.saveimg_freq == 0 or params.only_eval) and it == 0 and udist.is_main_process():
+                        save_image(unnormalize_img(imgs),
+                                   os.path.join(params.output_dir, f'{epoch:03}_{it:03}_val_0_ori.png'), nrow=8)
+                        save_image(unnormalize_img(imgs_w),
+                                   os.path.join(params.output_dir, f'{epoch:03}_{it:03}_val_1_w.png'), nrow=8)
+                        save_image(create_diff_img(imgs, imgs_w),
+                                   os.path.join(params.output_dir, f'{epoch:03}_{it:03}_val_2_diff.png'), nrow=8)
+                        save_image(unnormalize_img(imgs_aug),
+                                   os.path.join(params.output_dir, f'{epoch:03}_{it:03}_val_3_aug.png'), nrow=8)
+                        if params.lambda_det > 0:
+                            save_image(masks,
+                                    os.path.join(params.output_dir, f'{epoch:03}_{it:03}_val_4_mask.png'), nrow=8)
+                            save_image(F.sigmoid(mask_preds / params.temperature),
+                                    os.path.join(params.output_dir, f'{epoch:03}_{it:03}_val_5_pred.png'), nrow=8)
 
         torch.cuda.synchronize()
         for name, loss in aug_metrics.items():
-            if name == 'bit_acc' and math.isnan(loss):
-                continue
-            if name in ["decode_loss", "decode_scale"] and loss == -1:
-                continue  # Skip this update or replace with a default value
+            # if name == 'bit_acc' and math.isnan(loss):
+            #     continue
+            # if name in ["decode_loss", "decode_scale"] and loss == -1:
+            #     continue  # Skip this update or replace with a default value
             metric_logger.update(**{name: loss})
-
-    # save images
-    if (epoch % params.saveimg_freq == 0 or params.only_eval) and udist.is_main_process():
-        aux = "" if not params.only_eval else "_only_eval"
-        save_image(torch.stack(imgs_tosave["1wm"]), os.path.join(
-            params.output_dir, f'{epoch:03}_val_full{aux}.png'), nrow=6)
-        # save_image(torch.stack(imgs_tosave["2wm"]), os.path.join(params.output_dir, f'{epoch:03}_val_full_2wm{aux}.png'), nrow=6)
 
     metric_logger.synchronize_between_processes()
     print("Averaged {} stats:".format('val'), metric_logger)

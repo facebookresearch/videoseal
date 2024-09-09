@@ -56,30 +56,34 @@ def accuracy(
     accuracy = torch.mean(correct, dim=(1,2,3))  # b
     return accuracy
 
-def bit_accuracy(preds: torch.Tensor, targets: torch.Tensor, masks: torch.Tensor = None, threshold: float = 0.0) -> torch.Tensor:
+def bit_accuracy(
+    preds: torch.Tensor, 
+    targets: torch.Tensor, 
+    mask: torch.Tensor = None,
+    threshold: float = 0.0
+) -> torch.Tensor:
     """
-    Computes the bit accuracy for each pixel, then averages over all pixels where the mask is not zero.
-    This version supports multiple messages and corresponding masks.
-    
+    Return bit accuracy
     Args:
-        preds (torch.Tensor): Predicted bits with shape [B, K, H, W]
-        targets (torch.Tensor): Target bits with shape [B, Z, K]
-        masks (torch.Tensor): Mask with shape [B, Z, H, W] (optional)
-            Used to compute bit accuracy only on non-masked pixels.
+        preds (torch.Tensor): Predicted bits with shape BxKxHxW
+        targets (torch.Tensor): Target bits with shape BxK
+        mask (torch.Tensor): Mask with shape Bx1xHxW (optional)
+            Used to compute bit accuracy only on non masked pixels.
             Bit accuracy will be NaN if all pixels are masked.
     """
-    if len(targets.shape) !=3:
-        print(f"targets.shape: {targets.shape}")
-        targets = targets.unsqueeze(1)
-    preds = preds > threshold  # B, K, H, W
-    targets = targets > 0.5  # B, Z, K
-    correct = (preds.unsqueeze(1) == targets.unsqueeze(-1).unsqueeze(-1)).float()  # B, Z, K, H, W
-    if masks is not None:
-        masks = masks.unsqueeze(2)  # B, Z, 1, H, W to align with K dimension
-        correct = correct * masks  # Apply masks
-        bit_acc =  correct.sum() / (masks.sum() * correct.shape[2]) 
-    # Optionally, handle NaNs if all pixels are masked
-    # bit_acc = torch.nan_to_num(bit_acc, nan=0.0)
+    preds = preds > threshold  # b k h w
+    targets = targets > 0.5  # b k
+    correct = (preds == targets.unsqueeze(-1).unsqueeze(-1)).float()  # b k h w
+    if mask is not None:  
+        bsz, nbits, h, w = preds.size()
+        mask = mask.expand_as(correct).bool()
+        preds = preds.masked_select(mask).view(bsz, nbits, -1)  # b k n
+        correct = correct.masked_select(mask).view(bsz, nbits, -1)  # b k n
+        correct = correct.unsqueeze(-1)  # b k n 1
+    # Perform majority vote for each bit
+    # preds_majority, _ = torch.mode(preds, dim=-1)  # b k
+    # Compute bit accuracy
+    bit_acc = torch.mean(correct, dim=(1,2,3))  # b
     return bit_acc
 
 def bit_accuracy_1msg(
@@ -192,40 +196,3 @@ def bit_accuracy_mv(
     # bit_acc = torch.mean(correct, dim=(1,2,3))  # b
     bit_acc = torch.mean(correct, dim=-1)  # b
     return bit_acc
-
-def bit_accuracy_repeated(
-    preds: torch.Tensor, 
-    targets: torch.Tensor, 
-    nb_repetitions,
-    masks: torch.Tensor = None,
-    threshold: float = 0.0,
-    factor: int = 2,
-) -> torch.Tensor:
-    """
-    Return bit accuracy
-    Args:
-        preds (torch.Tensor): Predicted bits with shape BxKxHxW
-        targets (torch.Tensor): Target bits with shape BxK
-        masks (torch.Tensor): Mask with shape Bx1xHxW (optional)
-            Used to compute bit accuracy only on non masked pixels.
-            Bit accuracy will be NaN if all pixels are masked.
-    """
-
-    assert preds.shape[1] % nb_repetitions == 0, preds.shape[1] % nb_repetitions
-    a = preds.shape[1] // nb_repetitions
-    for i in range(nb_repetitions-1):
-        preds[:, :a, :, :] += preds[:, (1+i)*a:(i+2)*a, :, :]
-    preds = (preds > threshold)[:, :a, :, :]
-    targets = (targets > 0.5)[:, :a]  # b k//nb_repetitions
-    correct = (preds == targets.unsqueeze(-1).unsqueeze(-1)).float()  # b k' h w
-    if masks is not None:  
-        masks = masks[:, :a, :, :]
-        bsz, nbits, h, w = preds.size()
-        masks = masks.expand_as(correct).bool()
-        preds = preds.masked_select(masks).view(bsz, nbits, -1)  # b k' n
-        correct = correct.masked_select(masks).view(bsz, nbits, -1)  # b k' n
-        correct = correct.unsqueeze(-1)  # b k' n 1
-    # Compute bit accuracy
-    bit_acc = torch.mean(correct, dim=(1,2,3))  # b
-    return bit_acc
-
