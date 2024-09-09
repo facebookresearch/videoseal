@@ -1,0 +1,7 @@
+__pycache__
+output
+outputs
+# *.pth
+core
+core*
+*egg-info

@@ -1,0 +1,41 @@
+{
+    "cmd": "/private/home/pfz/anaconda3/envs/segmark/bin/python train.py",
+    "git": "git@github.com:fairinternal/ssl_watermarking.git",
+    "preload": "MKL_THREADING_LAYER=GNU",
+    "precmd": [],
+    "commit": "segmark",
+    "params": {
+        "img_size":             128,
+        "epochs":               100,
+        "optimizer":            ["AdamW,lr=5e-5"],
+        "seed":                 [0, 7, 42],
+        "perceptual_loss":      "lpips",
+        "scheduler":            "None",
+        "aug_invert_p":         0.5,
+        "nbits":                16,
+        "scaling_i":            1.0,
+        "scaling_w":            0.2,
+        "lambda_w":             1.5,
+        "lambda_i":             1.0,
+        "lambda_d":             1.0,
+        "disc_start":           0,
+        "generator_tanh_out":   true,
+        "master_port":          "__SAMPLE__(10000, 20000)"
+    },
+    "machine": {
+        "constraint":       "volta32gb",
+        "gres":             "gpu:4",
+        "nodes":            "1",
+        "tasks-per-node":   "4",
+        "partition":        "devlab,learnlab",
+        "cpus-per-task":    "10",
+        "time":             4320,
+        "mem-per-cpu":      "10G"
+    },
+    "meta": {
+        "group":     "", 
+        "name":      "0305_segmark_mb_lower",
+        "dest-arg":  "yes",
+        "dest-name": "output_dir"
+   }
+}

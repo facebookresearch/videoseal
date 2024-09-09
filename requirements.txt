@@ -1,0 +1,5 @@
+opencv-python
+omegaconf
+einops
+lpips
+timm==0.9.16
