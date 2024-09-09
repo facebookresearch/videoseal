@@ -363,7 +363,6 @@ def main(params):
             scheduler.step(epoch)
         if scaling_scheduler is not None:
             scaling_scheduler.step(epoch)
-        print(f'Epoch {epoch} - scaling_w: {wam.scaling_w}')
 
         if params.distributed:
             train_loader.sampler.set_epoch(epoch)
@@ -429,9 +428,10 @@ def train_one_epoch(
         elif params.embedder_model.startswith("unet_plus"):
             last_layer = wam.module.embedder.unet.outc.weight if params.distributed else wam.embedder.unet.outc.weight
         elif params.embedder_model.startswith("unet"):
-            last_layer = wam.module.embedder.unet.model.up[
-                2].weight if params.distributed else wam.embedder.unet.model.up[2].weight
-        else:
+            last_layer = wam.module.embedder.unet.model.up[2].weight if params.distributed else wam.embedder.unet.model.up[2].weight
+        elif params.embedder_model.startswith("hidden"):
+            last_layer = wam.module.embedder.hidden_encoder.final_layer.weight if params.distributed else wam.embedder.hidden.hidden_encoder.final_layer.weight
+        else:    
             last_layer = None
             # imgs.requires_grad = True
             # last_layer = imgs
