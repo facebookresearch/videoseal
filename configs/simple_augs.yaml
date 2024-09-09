@@ -5,9 +5,9 @@ masks:
 # The probability of applying the augmentation.
 augs:
   identity:       1
-  jpeg:           0
-  resize:         0
-  crop:           0
+  jpeg:           1
+  resize:         1
+  crop:           1
   rotate:         0
   hflip:          0
   perspective:    0
