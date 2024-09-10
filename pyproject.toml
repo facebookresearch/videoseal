@@ -24,6 +24,8 @@ dependencies = [
     "PyWavelets",
     "av",
     "scikit-image",
+    "decord",
+    "pandas",
 ]
 
 [project.optional-dependencies]
