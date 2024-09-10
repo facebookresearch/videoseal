@@ -425,10 +425,8 @@ def train_one_epoch(
 
         if params.embedder_model.startswith("vae"):
             last_layer = wam.module.embedder.decoder.conv_out.weight if params.distributed else wam.embedder.decoder.conv_out.weight
-        elif params.embedder_model.startswith("unet_plus"):
-            last_layer = wam.module.embedder.unet.outc.weight if params.distributed else wam.embedder.unet.outc.weight
         elif params.embedder_model.startswith("unet"):
-            last_layer = wam.module.embedder.unet.model.up[2].weight if params.distributed else wam.embedder.unet.model.up[2].weight
+            last_layer = wam.module.embedder.unet.outc.weight if params.distributed else wam.embedder.unet.outc.weight
         elif params.embedder_model.startswith("hidden"):
             last_layer = wam.module.embedder.hidden_encoder.final_layer.weight if params.distributed else wam.embedder.hidden.hidden_encoder.final_layer.weight
         else:    

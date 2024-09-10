@@ -55,6 +55,21 @@ unet_small_bw_zero_init:
     bw: True
     zero_init: True
 
+unet_small_notanh:
+  msg_processor:
+    nbits: 16
+    hidden_size: 32     # nbits * 2
+    msg_processor_type: 'binary+concat'
+  unet:
+    in_channels: 3
+    out_channels: 3
+    z_channels: 16
+    num_blocks: 3
+    activation: 'silu'
+    normalization: 'rms'
+    z_channels_mults: [1, 2, 4]
+    last_tanh: False
+
 unet:
   msg_processor:
     nbits: 16
@@ -65,6 +80,21 @@ unet:
     out_channels: 3
     z_channels: 32
     num_blocks: 4
+    activation: 'silu'
+    normalization: 'rms'
+    z_channels_mults: [1, 2, 4, 8]
+    last_tanh: True
+
+unet_small2:
+  msg_processor:
+    nbits: 16
+    hidden_size: 32     # nbits * 2
+    msg_processor_type: 'binary+concat'
+  unet:
+    in_channels: 3
+    out_channels: 3
+    z_channels: 16
+    num_blocks: 8
     activation: 'silu'
     normalization: 'rms'
     z_channels_mults: [1, 2, 4, 8]
@@ -85,36 +115,6 @@ unet_bw:
     z_channels_mults: [1, 2, 4, 8]
     last_tanh: True
     bw: True
-  
-unetger:
-  msg_processor:
-    nbits: 16
-    hidden_size: 32     # nbits * 2
-    msg_processor_type: 'binary+concat'
-  unet:
-    in_channels: 3
-    out_channels: 3
-    z_channels: 64
-    num_blocks: 4
-    activation: 'silu'
-    normalization: 'rms'
-    z_channels_mults: [1, 2, 4, 8]
-
-
-unet_small_notanh:
-  msg_processor:
-    nbits: 16
-    hidden_size: 32     # nbits * 2
-    msg_processor_type: 'binary+concat'
-  unet:
-    in_channels: 3
-    out_channels: 3
-    z_channels: 16
-    num_blocks: 3
-    activation: 'silu'
-    normalization: 'rms'
-    z_channels_mults: [1, 2, 4]
-    last_tanh: False
 
 unet_notanh:
   msg_processor:
@@ -130,6 +130,22 @@ unet_notanh:
     normalization: 'rms'
     z_channels_mults: [1, 2, 4, 8]
     last_tanh: False
+  
+unet_big:
+  msg_processor:
+    nbits: 16
+    hidden_size: 32     # nbits * 2
+    msg_processor_type: 'binary+concat'
+  unet:
+    in_channels: 3
+    out_channels: 3
+    z_channels: 64
+    num_blocks: 4
+    activation: 'silu'
+    normalization: 'rms'
+    z_channels_mults: [1, 2, 4, 8]
+
+
 
 vae_tiny:
   msg_processor:
