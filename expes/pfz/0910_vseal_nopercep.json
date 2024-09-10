@@ -32,14 +32,14 @@
         "gres":             "gpu:8",
         "nodes":            "1",
         "tasks-per-node":   "8",
-        "partition":        "devlab",
+        "partition":        "learnlab",
         "cpus-per-task":    "10",
         "time":             4320,
         "mem-per-cpu":      "10G"
     },
     "meta": {
         "group":     "", 
-        "name":      "0910_vseal_nopercep",
+        "name":      "0910_vseal_nopercep_bis",
         "dest-arg":  "yes",
         "dest-name": "output_dir"
    }
