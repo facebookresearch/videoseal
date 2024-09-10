@@ -102,6 +102,8 @@ def main(args):
 
     # Save results to CSV
     df = pd.DataFrame(results)
+    if not os.path.exists(args.output_dir):
+        os.makedirs(args.output_dir)
     df.to_csv(os.path.join(args.output_dir, 'speed_results.csv'), index=False)
     
 
