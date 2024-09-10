@@ -1,6 +1,7 @@
 
 import torch
 from torch import nn
+
 from videoseal.data.transforms import rgb_to_yuv, yuv_to_rgb
 from videoseal.modules.hidden import HiddenEncoder
 from videoseal.modules.msg_processor import MsgProcessor

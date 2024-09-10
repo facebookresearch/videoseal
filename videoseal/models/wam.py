@@ -9,8 +9,8 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from ..augmentation.augmenter import Augmenter
-from ..modules.jnd import JND
+from videoseal.augmentation.augmenter import Augmenter
+from videoseal.modules.jnd import JND
 from .embedder import Embedder
 from .extractor import Extractor
 

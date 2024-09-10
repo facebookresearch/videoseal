@@ -6,36 +6,11 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
-from .common import ChanRMSNorm, Upsample
+from .common import ChanRMSNorm, Upsample, Downsample
 
 # https://github.com/lucidrains/imagen-pytorch/blob/main/imagen_pytorch/imagen_pytorch.py
 # https://github.com/milesial/Pytorch-UNet/blob/master/train.py
 
-
-
-class Downsample(nn.Module):
-    def __init__(self, in_channels, out_channels, act_layer, do_init=True):
-        super().__init__()
-        conv = nn.Conv2d(in_channels * 4, out_channels, 1)
-        self.net = nn.Sequential(
-            nn.PixelUnshuffle(2),
-            conv,
-            act_layer()
-        )
-        if do_init:
-            self.init_conv_(conv)
-
-    def init_conv_(self, conv):
-        o, i, h, w = conv.weight.shape
-        conv_weight = torch.empty(o, i // 4, h, w)
-        nn.init.kaiming_uniform_(conv_weight)
-        conv_weight = einops.repeat(conv_weight, 'o i ... -> o (i 4) ...')
-
-        conv.weight.data.copy_(conv_weight)
-        nn.init.zeros_(conv.bias.data)
-
-    def forward(self, x):
-        return self.net(x)
 
 
 class ResnetBlock(nn.Module):
@@ -62,7 +37,6 @@ class ResnetBlock(nn.Module):
 class UBlock(nn.Module):
     def __init__(self, in_channels, out_channels, act_layer, norm_layer, upsampling_type='bilinear'):
         super().__init__()
-        self.act_layer = act_layer
         self.up = Upsample(upsampling_type, in_channels, out_channels, 2, act_layer)
         self.conv = ResnetBlock(out_channels, out_channels, act_layer, norm_layer)
 
@@ -168,7 +142,7 @@ class UNetMsg(nn.Module):
         # Downward path
         self.downs = nn.ModuleList()
         for ii in range(len(z_channels) - 1):
-            self.downs.append(DBlock(z_channels[ii], z_channels[ii + 1], act_layer, norm_layer, upsampling_type))
+            self.downs.append(DBlock(z_channels[ii], z_channels[ii + 1], act_layer, norm_layer, downsampling_type))
 
         # Message mixing and middle blocks
         z_channels[-1] = z_channels[-1] + self.msg_processor.hidden_size

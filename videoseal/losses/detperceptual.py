@@ -129,24 +129,29 @@ class LPIPSWithDiscriminator(nn.Module):
             # detection loss
             if self.detect_weight > 0:
                 detection_loss = self.detection_loss(
-                    preds[:, 0:1, :, :].contiguous(), 
+                    preds[:, 0:1].contiguous(), 
                     masks.contiguous(),
                 ).mean()
                 losses["detect"] = detection_loss
                 weights["detect"] = self.detect_weight
             # decoding loss
-            if len(msgs.shape) > 1 and self.decode_weight > 0:
-                # flatten and select pixels where mask is = 1
-                msg_preds = preds[:, 1:, :, :]  # b nbits h w
-                masks = masks.expand_as(msg_preds).bool()
-                bsz, nbits, h, w = msg_preds.size()    
-                msg_targs = msgs.unsqueeze(-1).unsqueeze(-1).expand_as(msg_preds) # b nbits h w
-                msg_preds_ = msg_preds.masked_select(masks).view(bsz, nbits, -1)  # b 1 h w -> b nbits n
-                msg_targs_ = msg_targs.masked_select(masks).view(bsz, nbits, -1)  # b 1 h w -> b nbits n
-                decoding_loss = self.decoding_loss(
-                    msg_preds_.contiguous(), 
-                    msg_targs_.contiguous().float()
-                ).mean()
+            if self.decode_weight > 0:
+                msg_preds = preds[:, 1:]  # b nbits ...
+                if msg_preds.dim() == 2:  # extract predicts msg
+                    decoding_loss = self.decoding_loss(
+                        msg_preds.contiguous(),  # b nbits
+                        msgs.contiguous().float()
+                    ).mean()
+                else:  # extract predicts msg per pixel
+                    masks = masks.expand_as(msg_preds).bool()  # b nbits h w
+                    bsz, nbits, h, w = msg_preds.size()    
+                    msg_targs = msgs.unsqueeze(-1).unsqueeze(-1).expand_as(msg_preds) # b nbits h w
+                    msg_preds_ = msg_preds.masked_select(masks).view(bsz, nbits, -1)  # b 1 h w -> b nbits n
+                    msg_targs_ = msg_targs.masked_select(masks).view(bsz, nbits, -1)  # b 1 h w -> b nbits n
+                    decoding_loss = self.decoding_loss(
+                        msg_preds_.contiguous(), 
+                        msg_targs_.contiguous().float()
+                    ).mean()
                 losses["decode"] = decoding_loss
                 weights["decode"] = self.decode_weight
             # calculate adaptive weights

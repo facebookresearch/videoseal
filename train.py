@@ -333,16 +333,16 @@ def main(params):
         (JPEG,              [40, 60, 80]),
         (GaussianBlur,      [3, 5, 9, 17]),
         (MedianFilter,      [3, 5, 9, 17]),
-    ]
+    ]  # augs evaluated every full_eval_freq
     validation_augs_subset = [
         (Identity,          [0]),  # No parameters needed for identity
         (Brightness,        [0.5]),
         (Crop,              [0.75]),  # size ratio
         (JPEG,              [60]),
-    ]
+    ]  # augs evaluated every eval_freq
     dummy_img = torch.ones(3, params.img_size, params.img_size)
     validation_masks = augmenter.mask_embedder.sample_representative_masks(
-        dummy_img)  # n 1 h w, full of ones, may be changed later
+        dummy_img)  # n 1 h w, full of ones or random masks depending on config
     
     # evaluation only
     if params.only_eval:
@@ -452,8 +452,8 @@ def train_one_epoch(
             'psnr': psnr(outputs["imgs_w"], imgs).mean().item(), 
             'lr': optimizers[0].param_groups[0]['lr'], 
         }
-        bit_preds = outputs["preds"][:, 1:, :, :]  # b k h w
-        mask_preds = outputs["preds"][:, 0:1, :, :]  # b 1 h w
+        bit_preds = outputs["preds"][:, 1:]  # b k h w
+        mask_preds = outputs["preds"][:, 0:1]  # b 1 h w
 
         # bit accuracy
         if params.nbits > 0:
@@ -579,8 +579,8 @@ def eval_one_epoch(
 
                     # extract watermark
                     preds = wam.detector(imgs_aug)
-                    mask_preds = preds[:, 0:1, :, :]  # b 1 h w
-                    bit_preds = preds[:, 1:, :, :] # b k h w
+                    mask_preds = preds[:, 0:1]  # b 1 h w
+                    bit_preds = preds[:, 1:] # b k h w
 
                     log_stats = {}
                     if params.nbits > 0:

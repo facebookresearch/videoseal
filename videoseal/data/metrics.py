@@ -71,19 +71,16 @@ def bit_accuracy(
             Used to compute bit accuracy only on non masked pixels.
             Bit accuracy will be NaN if all pixels are masked.
     """
-    preds = preds > threshold  # b k h w
-    targets = targets > 0.5  # b k
-    correct = (preds == targets.unsqueeze(-1).unsqueeze(-1)).float()  # b k h w
-    if mask is not None:  
+    preds = preds > threshold  # b k ...
+    if preds.dim() == 4:
         bsz, nbits, h, w = preds.size()
-        mask = mask.expand_as(correct).bool()
+        mask = mask.expand_as(preds).bool()
         preds = preds.masked_select(mask).view(bsz, nbits, -1)  # b k n
-        correct = correct.masked_select(mask).view(bsz, nbits, -1)  # b k n
-        correct = correct.unsqueeze(-1)  # b k n 1
-    # Perform majority vote for each bit
-    # preds_majority, _ = torch.mode(preds, dim=-1)  # b k
-    # Compute bit accuracy
-    bit_acc = torch.mean(correct, dim=(1,2,3))  # b
+        preds = preds.mean(dim=-1, dtype=float)  # b k
+    preds = preds > 0.5  # b k
+    targets = targets > 0.5  # b k
+    correct = (preds == targets).float()  # b k
+    bit_acc = torch.mean(correct, dim=-1)  # b
     return bit_acc
 
 def bit_accuracy_1msg(

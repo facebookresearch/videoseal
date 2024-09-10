@@ -1,7 +1,7 @@
 model: unet
 
 hidden:
-  num_blocks: 4  # in the bottleneck
+  num_blocks: 4
   num_bits: 16
   z_channels: 64
   normalization: 'group'
@@ -157,8 +157,8 @@ vae_tiny:
     z_channels: 4
     resolution: 256  # only used for attn_resolutions
     out_ch: 3
-    ch: 32
-    ch_mult: [1, 1, 1, 1]
+    ch: 16
+    ch_mult: [1, 2, 2, 4]
     num_res_blocks: 2
     attn_resolutions: []
     dropout: 0.0
@@ -168,8 +168,8 @@ vae_tiny:
     z_channels: 36      # hidden_size + z_channels
     resolution: 256
     out_ch: 3
-    ch: 32
-    ch_mult: [1, 1, 1, 1]
+    ch: 16
+    ch_mult: [1, 2, 2, 4]
     num_res_blocks: 2
     attn_resolutions: []
     dropout: 0.0
@@ -187,7 +187,7 @@ vae_small:
     resolution: 256  # only used for attn_resolutions
     out_ch: 3
     ch: 32
-    ch_mult: [1, 1, 1, 2]
+    ch_mult: [1, 2, 2, 4]
     num_res_blocks: 2
     attn_resolutions: []
     dropout: 0.0
@@ -198,7 +198,7 @@ vae_small:
     resolution: 256
     out_ch: 3
     ch: 32
-    ch_mult: [1, 1, 1, 2]
+    ch_mult: [1, 2, 2, 4]
     num_res_blocks: 2
     attn_resolutions: []
     dropout: 0.0
@@ -217,7 +217,7 @@ vae_small_yuv:
     resolution: 256  # only used for attn_resolutions
     out_ch: 3
     ch: 32
-    ch_mult: [1, 1, 1, 2]
+    ch_mult: [1, 2, 2, 4]
     num_res_blocks: 2
     attn_resolutions: []
     dropout: 0.0
@@ -228,7 +228,7 @@ vae_small_yuv:
     resolution: 256
     out_ch: 3
     ch: 32
-    ch_mult: [1, 1, 1, 2]
+    ch_mult: [1, 2, 2, 4]
     num_res_blocks: 2
     attn_resolutions: []
     dropout: 0.0
@@ -245,7 +245,7 @@ vae_small_bw:
     resolution: 256  # only used for attn_resolutions
     out_ch: 3
     ch: 32
-    ch_mult: [1, 1, 1, 2]
+    ch_mult: [1, 2, 2, 4]
     num_res_blocks: 2
     attn_resolutions: []
     dropout: 0.0
@@ -256,7 +256,7 @@ vae_small_bw:
     resolution: 256
     out_ch: 3
     ch: 32
-    ch_mult: [1, 1, 1, 2]
+    ch_mult: [1, 2, 2, 4]
     num_res_blocks: 2
     attn_resolutions: []
     dropout: 0.0
@@ -291,35 +291,6 @@ vae_big:
     dropout: 0.0
     tanh_out: True
 
-  #### Large ####
-  # msg_processor:
-  #   nbits: 16
-  #   hidden_size: 32     # nbits * 2
-  #   msg_processor_type: 'binary+concat'
-
-  # encoder:
-  #   in_channels: 3
-  #   z_channels: 4
-  #   resolution: 256  # only used for attn_resolutions
-  #   out_ch: 3
-  #   ch: 32
-  #   ch_mult: [1, 1, 1, 2]
-  #   num_res_blocks: 4
-  #   attn_resolutions: []
-  #   dropout: 0.0
-  #   double_z: False
-
-  # decoder:
-  #   in_channels: 3
-  #   z_channels: 36      # hidden_size + z_channels
-  #   resolution: 256
-  #   out_ch: 3
-  #   ch: 64
-  #   ch_mult: [1, 1, 1, 2]
-  #   num_res_blocks: 4
-  #   attn_resolutions: []
-  #   dropout: 0.0
-  #   tanh_out: True
     
 # Config from the VAE of SD is:
 #   double_z: true

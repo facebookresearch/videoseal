@@ -72,24 +72,25 @@ class HiddenDecoder(nn.Module):
     The input image may have various kinds of noise applied to it,
     such as Crop, JpegCompression, and so on. See Noise layers for more.
     """
-    def __init__(self, num_blocks, num_bits, z_channels, normalization="batch"):
+    def __init__(self, num_blocks, num_bits, z_channels, normalization="batch", pixelwise=False):
         super(HiddenDecoder, self).__init__()
         self.num_bits = num_bits
 
         layers = [ConvBNRelu(3, z_channels, normalization)]
-        for _ in range(num_blocks - 1):
+        for _ in range(num_blocks):
             layers.append(ConvBNRelu(z_channels, z_channels, normalization))
-
-        layers.append(ConvBNRelu(z_channels, z_channels, normalization))
-        # layers.append(nn.AdaptiveAvgPool2d(output_size=(1, 1)))
         self.layers = nn.Sequential(*layers)
 
-        # self.linear = nn.Linear(num_bits, num_bits)
-        self.linear = nn.Conv2d(z_channels, num_bits+1, stride=1, kernel_size=1)
+        self.pixelwise = pixelwise
+        if self.pixelwise:
+            self.linear = nn.Conv2d(z_channels, num_bits+1, stride=1, kernel_size=1)
+        else:
+            self.linear = nn.Linear(z_channels, num_bits+1)
 
     def forward(self, img_w):
-
-        x = self.layers(img_w) # b d h w
-        x = self.linear(x) # b l+1 h w
+        x = self.layers(img_w) # b d ...
+        if not self.pixelwise:  # not pixelwise
+            x = x.mean(dim=[-2, -1])  # b d      
+        x = self.linear(x) # b l+1 ...
         return x
 
