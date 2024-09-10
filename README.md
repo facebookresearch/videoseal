@@ -45,4 +45,5 @@ Should:
 - Clone the repo in `/checkpoint/$USER/$YEAR_logs/minimal/code` corresponding to the branch `commit` of the json file (if the branch is not specified, it will clone the master branch).
 - Run the experiments in the folder for every sweep of HPs.
 
+More details in the clutils' [README](clutils/README.md).
 

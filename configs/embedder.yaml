@@ -8,7 +8,7 @@ unet_small:
   unet:
     in_channels: 3
     out_channels: 3
-    z_channels: 16
+    z_channels: 32
     num_blocks: 3
     activation: 'silu'
     normalization: 'rms'

@@ -53,31 +53,33 @@ The configuration file should be in JSON format. Ex:
 {
    "args": {
       "arg1": ["val1", "val2"],
-      "arg3": {
+      "arg2": {
          "val1": {
-            "arg3_1": ["val1"],
-            "arg3_2": ["val1"]
+            "arg3": ["val1"],
          },
          "val2": {
-            "arg3_1": ["val2"],
-            "arg3_2": ["val2"]
+            "arg3": ["val2"],
          }
       }
       ...
    },
-   "options": {
+   "machine": {
       "partition": "partition_name",
       "time": "time_limit",
+      ...
+   },
+   "meta": {
+      "name": "jobname",
       ...
    }
 }
 ```
 This will generate the following grid:
 ```
-arg1=val1, arg3=val1, arg3_1=val1, arg3_2=val1
-arg1=val1, arg3=val2, arg3_1=val2, arg3_2=val2
-arg1=val2, arg3=val1, arg3_1=val1, arg3_2=val1
-arg1=val2, arg3=val2, arg3_1=val2, arg3_2=val2
+arg1=val1, arg2=val1, arg3=val1
+arg1=val1, arg2=val2, arg3=val2
+arg1=val2, arg2=val1, arg3=val1
+arg1=val2, arg2=val2, arg3=val2
 ```
 
 
