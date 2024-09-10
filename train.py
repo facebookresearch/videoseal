@@ -479,8 +479,8 @@ def train_one_epoch(
             metric_logger.update(**{name: loss})
 
         # save images
-        # if epoch % params.saveimg_freq == 0 and it == 0 and udist.is_main_process():
-        if epoch % params.saveimg_freq == 0 and it % 200 == 0 and udist.is_main_process():
+        if epoch % params.saveimg_freq == 0 and it == 0 and udist.is_main_process():
+        # if epoch % params.saveimg_freq == 0 and it % 200 == 0 and udist.is_main_process():
             # save images and diff
             save_image(unnormalize_img(imgs),
                        os.path.join(params.output_dir, f'{epoch:03}_{it:03}_train_0_ori.png'), nrow=8)
