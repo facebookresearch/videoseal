@@ -51,7 +51,8 @@ class VideoDataset(torch.utils.data.Dataset):
         filter_long_videos: Union[int, float] = int(10**9),
         # Optional, specific duration in seconds for each clip
         duration: Optional[float] = None,
-        output_resolution: tuple = (224, 224)  # Desired output resolution
+        output_resolution: tuple = (224, 224),  # Desired output resolution
+        num_workers: int = 1  # numbers of cpu to run the preprocessing of each batch
     ):
         self.folder_paths = folder_paths
         self.datasets_weights = datasets_weights
@@ -66,6 +67,7 @@ class VideoDataset(torch.utils.data.Dataset):
         self.filter_long_videos = filter_long_videos
         self.duration = duration
         self.output_resolution = output_resolution
+        self.num_workers = num_workers
         if VideoReader is None:
             raise ImportError(
                 'Unable to import "decord" which is required to read videos.')
@@ -148,7 +150,8 @@ class VideoDataset(torch.utils.data.Dataset):
             return [], None
 
         try:
-            vr = VideoReader(fname, num_threads=-1, ctx=cpu(0))
+            vr = VideoReader(
+                fname, num_threads=self.num_workers, ctx=cpu(0))
         except Exception:
             return [], None
 
@@ -239,7 +242,9 @@ if __name__ == "__main__":
         folder_paths=[video_folder_path],
         frames_per_clip=16,
         frame_step=4,
-        num_clips=10
+        num_clips=10,
+        output_resolution=(1920, 1080),
+        num_workers=50,
     )
 
     # Load and print stats for 3 videos for demonstration

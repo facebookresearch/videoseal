@@ -248,7 +248,7 @@ def get_video_dataloader(
     })
 
     # Create an instance of the VideoDataset
-    dataset = VideoDataset(**dataset_kwargs)
+    dataset = VideoDataset(num_workers=num_workers, **dataset_kwargs)
     # Check if distributed training is available and initialized
     if is_dist_avail_and_initialized():
         sampler = DistributedSampler(dataset, shuffle=shuffle)
@@ -267,17 +267,29 @@ if __name__ == "__main__":
     # run
     # python -m videoseal.data.loader
 
+    def print_video_batch_stats(video_batch, batch_index):
+        """Prints statistics for a batch of videos."""
+        print(f"Batch {batch_index + 1}:")
+        print(f"  Number of clips in batch: {len(video_batch)}")
+        for i, (clips, indices) in enumerate(zip(*video_batch)):
+            print(f"  Clip {i + 1}:")
+            print(f"    Number of clips: {len(clips)}")
+            print(f"    Shape of first clip: {clips[0].shape}")
+            print(f"    frame indices: {indices}")
+
     # Path to the directory containing the video files
     video_folder_path = "./assets/videos/"
-    # Create the video dataloader with specific dataset configurations
+
+    # Create the video dataloader
     video_dataloader = get_video_dataloader(
         data_dir=video_folder_path,
         frames_per_clip=16,
         frame_step=4,
-        num_clips=1,
-        batch_size=2,  # Adjust batch size as needed
+        num_clips=4,
+        batch_size=5,
         shuffle=True,
-        num_workers=4  # Adjust number of workers based on your system capabilities
+        num_workers=50,
+        output_resolution=(1920, 1080),
     )
     # Iterate through the dataloader and print stats for each batch
     for batch_index, video_batch in enumerate(video_dataloader):
