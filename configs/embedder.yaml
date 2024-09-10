@@ -64,28 +64,13 @@ unet:
     in_channels: 3
     out_channels: 3
     z_channels: 32
-    num_blocks: 3
-    activation: 'silu'
-    normalization: 'rms'
-    z_channels_mults: [1, 2, 4]
-    last_tanh: True
-
-unet_big:
-  msg_processor:
-    nbits: 16
-    hidden_size: 32     # nbits * 2
-    msg_processor_type: 'binary+concat'
-  unet:
-    in_channels: 3
-    out_channels: 3
-    z_channels: 32
     num_blocks: 4
     activation: 'silu'
     normalization: 'rms'
     z_channels_mults: [1, 2, 4, 8]
     last_tanh: True
 
-unet_big_bw:
+unet_bw:
   msg_processor:
     nbits: 16
     hidden_size: 32     # nbits * 2
@@ -101,7 +86,7 @@ unet_big_bw:
     last_tanh: True
     bw: True
   
-unet_bigger:
+unetger:
   msg_processor:
     nbits: 16
     hidden_size: 32     # nbits * 2
@@ -146,7 +131,7 @@ unet_notanh:
     z_channels_mults: [1, 2, 4]
     last_tanh: False
 
-unet_big_notanh:
+unet_notanh:
   msg_processor:
     nbits: 16
     hidden_size: 32     # nbits * 2
