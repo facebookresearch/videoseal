@@ -4,8 +4,7 @@ from torch import nn
 from videoseal.data.transforms import rgb_to_yuv, yuv_to_rgb
 from videoseal.modules.hidden import HiddenEncoder
 from videoseal.modules.msg_processor import MsgProcessor
-from videoseal.modules.unet_old import UnetMsg
-from videoseal.modules.unet import UNetMsgPlus
+from videoseal.modules.unet import UNetMsg
 from videoseal.modules.vae import VAEDecoder, VAEEncoder
 
 
@@ -164,24 +163,15 @@ def build_embedder(name, cfg, nbits):
         decoder = VAEDecoder(**cfg.decoder)
         yuv = cfg.get('yuv', False)
         embedder = VAEEmbedder(encoder, decoder, msg_processor, yuv)
-    elif name.startswith('unet_plus'):
-        # updates some cfg
-        cfg.msg_processor.nbits = nbits
-        cfg.msg_processor.hidden_size = nbits * 2
-        # build the encoder, decoder and msg processor
-        msg_processor = MsgProcessor(**cfg.msg_processor)
-        unet = UNetMsgPlus(msg_processor=msg_processor, **cfg.unet)
-        yuv = cfg.get('yuv', False)
-        embedder = UnetEmbedder(unet, msg_processor, yuv)
     elif name.startswith('unet'):
         # updates some cfg
         cfg.msg_processor.nbits = nbits
         cfg.msg_processor.hidden_size = nbits * 2
         # build the encoder, decoder and msg processor
         msg_processor = MsgProcessor(**cfg.msg_processor)
-        unet = UnetMsg(msg_processor=msg_processor, **cfg.unet)
+        unet = UNetMsg(msg_processor=msg_processor, **cfg.unet)
         yuv = cfg.get('yuv', False)
-        embedder = UnetEmbedder(unet, msg_processor)
+        embedder = UnetEmbedder(unet, msg_processor, yuv)
     elif name.startswith('hidden'):
         # updates some cfg
         cfg.num_bits = nbits

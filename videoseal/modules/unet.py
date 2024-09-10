@@ -105,7 +105,7 @@ class BottleNeck(nn.Module):
         return self.model(x)  # b c+c' h w -> b c h w
 
 
-class UNetMsgPlus(nn.Module):
+class UNetMsg(nn.Module):
     def __init__(self, 
         msg_processor: nn.Module,
         in_channels: int,
@@ -121,7 +121,7 @@ class UNetMsgPlus(nn.Module):
         zero_init: bool = False,
         bw: bool = False,
     ):
-        super(UNetMsgPlus, self).__init__()
+        super(UNetMsg, self).__init__()
         self.msg_processor = msg_processor
         self.in_channels = in_channels
         self.out_channels = out_channels
