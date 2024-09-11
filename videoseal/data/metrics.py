@@ -72,11 +72,14 @@ def bit_accuracy(
             Bit accuracy will be NaN if all pixels are masked.
     """
     preds = preds > threshold  # b k ...
-    if preds.dim() == 4:
+    if preds.dim() == 4:  # bit preds are pixelwise
         bsz, nbits, h, w = preds.size()
-        mask = mask.expand_as(preds).bool()
-        preds = preds.masked_select(mask).view(bsz, nbits, -1)  # b k n
-        preds = preds.mean(dim=-1, dtype=float)  # b k
+        if mask is not None:
+            mask = mask.expand_as(preds).bool()
+            preds = preds.masked_select(mask).view(bsz, nbits, -1)  # b k n
+            preds = preds.mean(dim=-1, dtype=float)  # b k
+        else:
+            preds = preds.mean(dim=(-2, -1), dtype=float) # b k
     preds = preds > 0.5  # b k
     targets = targets > 0.5  # b k
     correct = (preds == targets).float()  # b k
