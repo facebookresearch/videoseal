@@ -131,16 +131,11 @@ def init_distributed_mode(params):
         assert params.master_port == -1
 
         # read environment variables
-        # params.global_rank = int(os.environ['RANK'])
-        # params.world_size = int(os.environ['WORLD_SIZE'])
-        # params.n_gpu_per_node = int(os.environ['NGPU'])
-
-        # # number of nodes / node ID
-        # params.n_nodes = params.world_size // params.n_gpu_per_node
-        # params.node_id = params.global_rank // params.n_gpu_per_node
         params.global_rank = int(os.environ["RANK"])
         params.world_size = int(os.environ['WORLD_SIZE'])
         params.local_rank = int(os.environ['LOCAL_RANK'])
+
+        # # number of nodes / node ID
         params.n_gpu_per_node = 2
         params.n_nodes = 1
         params.node_id = 0
@@ -200,6 +195,7 @@ def init_distributed_mode(params):
         torch.cuda.set_device(params.local_rank)
         dist.barrier()
         setup_for_distributed(params.is_master)
+
 
 
 

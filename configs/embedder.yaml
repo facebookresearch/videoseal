@@ -1,6 +1,13 @@
-model: vae_small
+model: unet
 
-unet_plus_small:
+hidden:
+  num_blocks: 4
+  num_bits: 16
+  z_channels: 64
+  normalization: 'group'
+  last_tanh: True
+
+unet_small:
   msg_processor:
     nbits: 16
     hidden_size: 32     # nbits * 2
@@ -15,7 +22,7 @@ unet_plus_small:
     z_channels_mults: [1, 2, 4]
     last_tanh: True
 
-unet_plus_small_bw:
+unet_small_bw:
   msg_processor:
     nbits: 16
     hidden_size: 32     # nbits * 2
@@ -31,7 +38,7 @@ unet_plus_small_bw:
     last_tanh: True
     bw: True
 
-unet_plus_small_bw_zero_init:
+unet_small_bw_zero_init:
   msg_processor:
     nbits: 16
     hidden_size: 32     # nbits * 2
@@ -48,68 +55,7 @@ unet_plus_small_bw_zero_init:
     bw: True
     zero_init: True
 
-unet_plus:
-  msg_processor:
-    nbits: 16
-    hidden_size: 32     # nbits * 2
-    msg_processor_type: 'binary+concat'
-  unet:
-    in_channels: 3
-    out_channels: 3
-    z_channels: 32
-    num_blocks: 3
-    activation: 'silu'
-    normalization: 'rms'
-    z_channels_mults: [1, 2, 4]
-    last_tanh: True
-
-unet_plus_big:
-  msg_processor:
-    nbits: 16
-    hidden_size: 32     # nbits * 2
-    msg_processor_type: 'binary+concat'
-  unet:
-    in_channels: 3
-    out_channels: 3
-    z_channels: 32
-    num_blocks: 4
-    activation: 'silu'
-    normalization: 'rms'
-    z_channels_mults: [1, 2, 4, 8]
-    last_tanh: True
-
-unet_plus_big_bw:
-  msg_processor:
-    nbits: 16
-    hidden_size: 32     # nbits * 2
-    msg_processor_type: 'binary+concat'
-  unet:
-    in_channels: 3
-    out_channels: 3
-    z_channels: 32
-    num_blocks: 4
-    activation: 'silu'
-    normalization: 'rms'
-    z_channels_mults: [1, 2, 4, 8]
-    last_tanh: True
-    bw: True
-  
-unet_plus_bigger:
-  msg_processor:
-    nbits: 16
-    hidden_size: 32     # nbits * 2
-    msg_processor_type: 'binary+concat'
-  unet:
-    in_channels: 3
-    out_channels: 3
-    z_channels: 64
-    num_blocks: 4
-    activation: 'silu'
-    normalization: 'rms'
-    z_channels_mults: [1, 2, 4, 8]
-
-
-unet_plus_small_notanh:
+unet_small_notanh:
   msg_processor:
     nbits: 16
     hidden_size: 32     # nbits * 2
@@ -124,7 +70,7 @@ unet_plus_small_notanh:
     z_channels_mults: [1, 2, 4]
     last_tanh: False
 
-unet_plus_notanh:
+unet:
   msg_processor:
     nbits: 16
     hidden_size: 32     # nbits * 2
@@ -133,13 +79,44 @@ unet_plus_notanh:
     in_channels: 3
     out_channels: 3
     z_channels: 32
-    num_blocks: 3
+    num_blocks: 4
     activation: 'silu'
     normalization: 'rms'
-    z_channels_mults: [1, 2, 4]
-    last_tanh: False
+    z_channels_mults: [1, 2, 4, 8]
+    last_tanh: True
 
-unet_plus_big_notanh:
+unet_small2:
+  msg_processor:
+    nbits: 16
+    hidden_size: 32     # nbits * 2
+    msg_processor_type: 'binary+concat'
+  unet:
+    in_channels: 3
+    out_channels: 3
+    z_channels: 16
+    num_blocks: 8
+    activation: 'silu'
+    normalization: 'rms'
+    z_channels_mults: [1, 2, 4, 8]
+    last_tanh: True
+
+unet_bw:
+  msg_processor:
+    nbits: 16
+    hidden_size: 32     # nbits * 2
+    msg_processor_type: 'binary+concat'
+  unet:
+    in_channels: 3
+    out_channels: 3
+    z_channels: 32
+    num_blocks: 4
+    activation: 'silu'
+    normalization: 'rms'
+    z_channels_mults: [1, 2, 4, 8]
+    last_tanh: True
+    bw: True
+
+unet_notanh:
   msg_processor:
     nbits: 16
     hidden_size: 32     # nbits * 2
@@ -154,60 +131,50 @@ unet_plus_big_notanh:
     z_channels_mults: [1, 2, 4, 8]
     last_tanh: False
   
-unet:
-  msg_processor:
-    nbits: 16
-    hidden_size: 32     # nbits * 2
-    msg_processor_type: 'binary+concat'
-  unet:
-    in_channels: 3
-    out_channels: 3
-    num_blocks: 3  # in the bottleneck
-    z_channels: 32
-    last_tanh: True
-
-unet_notanh:
-  msg_processor:
-    nbits: 16
-    hidden_size: 32     # nbits * 2
-    msg_processor_type: 'binary+concat'
-  unet:
-    in_channels: 3
-    out_channels: 3
-    num_blocks: 3  # in the bottleneck
-    z_channels: 32
-    last_tanh: False
-  
 unet_big:
   msg_processor:
     nbits: 16
-    hidden_size: 64     # nbits * 2
+    hidden_size: 32     # nbits * 2
     msg_processor_type: 'binary+concat'
   unet:
     in_channels: 3
     out_channels: 3
-    num_blocks: 4  # in the bottleneck
-    z_channels: 128
-    last_tanh: True
-  
-unet_bigger:
+    z_channels: 64
+    num_blocks: 4
+    activation: 'silu'
+    normalization: 'rms'
+    z_channels_mults: [1, 2, 4, 8]
+
+
+
+vae_tiny:
   msg_processor:
     nbits: 16
-    hidden_size: 64     # nbits * 2
+    hidden_size: 32     # nbits * 2
     msg_processor_type: 'binary+concat'
-  unet:
+  encoder:
     in_channels: 3
-    out_channels: 3
-    num_blocks: 6  # in the bottleneck
-    z_channels: 196
-    last_tanh: True
+    z_channels: 4
+    resolution: 256  # only used for attn_resolutions
+    out_ch: 3
+    ch: 16
+    ch_mult: [1, 2, 2, 4]
+    num_res_blocks: 2
+    attn_resolutions: []
+    dropout: 0.0
+    double_z: False
+  decoder:
+    in_channels: 3
+    z_channels: 36      # hidden_size + z_channels
+    resolution: 256
+    out_ch: 3
+    ch: 16
+    ch_mult: [1, 2, 2, 4]
+    num_res_blocks: 2
+    attn_resolutions: []
+    dropout: 0.0
+    tanh_out: True
 
-hidden:
-  num_blocks: 4  # in the bottleneck
-  num_bits: 16
-  z_channels: 64
-  normalization: 'group'
-  last_tanh: True
 
 vae_small:
   msg_processor:
@@ -220,7 +187,7 @@ vae_small:
     resolution: 256  # only used for attn_resolutions
     out_ch: 3
     ch: 32
-    ch_mult: [1, 1, 1, 2]
+    ch_mult: [1, 2, 2, 4]
     num_res_blocks: 2
     attn_resolutions: []
     dropout: 0.0
@@ -231,7 +198,7 @@ vae_small:
     resolution: 256
     out_ch: 3
     ch: 32
-    ch_mult: [1, 1, 1, 2]
+    ch_mult: [1, 2, 2, 4]
     num_res_blocks: 2
     attn_resolutions: []
     dropout: 0.0
@@ -250,7 +217,7 @@ vae_small_yuv:
     resolution: 256  # only used for attn_resolutions
     out_ch: 3
     ch: 32
-    ch_mult: [1, 1, 1, 2]
+    ch_mult: [1, 2, 2, 4]
     num_res_blocks: 2
     attn_resolutions: []
     dropout: 0.0
@@ -261,7 +228,7 @@ vae_small_yuv:
     resolution: 256
     out_ch: 3
     ch: 32
-    ch_mult: [1, 1, 1, 2]
+    ch_mult: [1, 2, 2, 4]
     num_res_blocks: 2
     attn_resolutions: []
     dropout: 0.0
@@ -278,7 +245,7 @@ vae_small_bw:
     resolution: 256  # only used for attn_resolutions
     out_ch: 3
     ch: 32
-    ch_mult: [1, 1, 1, 2]
+    ch_mult: [1, 2, 2, 4]
     num_res_blocks: 2
     attn_resolutions: []
     dropout: 0.0
@@ -289,7 +256,7 @@ vae_small_bw:
     resolution: 256
     out_ch: 3
     ch: 32
-    ch_mult: [1, 1, 1, 2]
+    ch_mult: [1, 2, 2, 4]
     num_res_blocks: 2
     attn_resolutions: []
     dropout: 0.0
@@ -324,35 +291,6 @@ vae_big:
     dropout: 0.0
     tanh_out: True
 
-  #### Large ####
-  # msg_processor:
-  #   nbits: 16
-  #   hidden_size: 32     # nbits * 2
-  #   msg_processor_type: 'binary+concat'
-
-  # encoder:
-  #   in_channels: 3
-  #   z_channels: 4
-  #   resolution: 256  # only used for attn_resolutions
-  #   out_ch: 3
-  #   ch: 32
-  #   ch_mult: [1, 1, 1, 2]
-  #   num_res_blocks: 4
-  #   attn_resolutions: []
-  #   dropout: 0.0
-  #   double_z: False
-
-  # decoder:
-  #   in_channels: 3
-  #   z_channels: 36      # hidden_size + z_channels
-  #   resolution: 256
-  #   out_ch: 3
-  #   ch: 64
-  #   ch_mult: [1, 1, 1, 2]
-  #   num_res_blocks: 4
-  #   attn_resolutions: []
-  #   dropout: 0.0
-  #   tanh_out: True
     
 # Config from the VAE of SD is:
 #   double_z: true

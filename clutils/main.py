@@ -110,7 +110,7 @@ def jobname_default():
 
 def stool_stress(partition):
     """
-    Number of used CPU and GPU per user at `parititon`.
+    Number of used CPU and GPU per user at `partition`.
     """
     STRING = ("squeue " + partition + " --format \"%t %u %b\" "
               "| grep \"^R\" "
@@ -214,10 +214,6 @@ parser_check = subparsers.add_parser("check")
 
 parser_stress = subparsers.add_parser('stress')
 parser_stress.add_argument("--partition", type=str, default="")
-
-parser_nb = subparsers.add_parser('notebook')
-parser_nb.add_argument("json_path", type=str)
-parser_nb.add_argument("nb_path", type=str)
 
 args = parser.parse_args()
 if not IS_NEW_CLUSTER:
@@ -337,8 +333,14 @@ if args.command == 'sweep':
             f.write(cmdPre(config, None, name, log_stdout, log_stderr, filename, num_expes=len(paramset), pooling=args.pooling))
 
         with open(join(expdir, "params.txt"), "w") as f, open(join(expdir, "commands.txt"), "w") as f_cmd, open(join(expdir, "status.txt"), "w") as f_status:
-            for params in paramset:
+            for i_param, params in enumerate(paramset):
                 ext = generateExt(params, param_values, to_index=params_to_index)
+                if args.numeric:
+                    new_ext = "%d" % i_param
+                    with open(join(log_dir, new_ext + "_params.txt"), "w") as f_ext:
+                        f_ext.write(ext)
+                    ext = new_ext
+
                 params = replaceMacros(params)
 
                 log_stdout = join(log_dir, ext + ".stdout")
@@ -439,9 +441,6 @@ elif args.command == "status":
     users = [os.environ.get('USER')]
     users = ','.join(users)
     print(run_command('squeue -u ' + users + ' -o "%.18i %.50j %.9P %.2t %.10M %.6D %R" --sort=j'))
-elif args.command == "notebook":
-    assert os.path.exists(args.json_path)
-    assert not os.path.exists(args.nb_path)
 elif args.command == "check":
     assert os.path.exists(args.jobnames), "jobnames file not found at {}".format(args.jobnames)
     jobnames = loadlist(args.jobnames)

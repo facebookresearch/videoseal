@@ -1,6 +1,16 @@
+# Mask kind. Choose between mixed, full, etc.
+masks:
+  kind: mixed
+  invert_proba: 0.5
+  irregular_proba: 0.25
+  box_proba: 0.25
+  full_proba: 0.25
+  segm_proba: 0.25
+
 # Full masks (e.g. to train bits only)
 masks:
-  kind: none
+  kind: full
+  invert_proba: 1.0
 
 # The probability of applying the augmentation.
 augs:
