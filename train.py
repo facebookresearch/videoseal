@@ -416,6 +416,8 @@ def train_one_epoch(
     metric_logger = ulogger.MetricLogger(delimiter="  ")
 
     for it, (imgs, masks) in enumerate(metric_logger.log_every(train_loader, 10, header)):
+        if it>1:
+            break
         # masks are only used if segm_proba > 0
         imgs = imgs.to(device, non_blocking=True)
 
