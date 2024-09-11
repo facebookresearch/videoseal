@@ -51,6 +51,8 @@ class VideoDataset(torch.utils.data.Dataset):
         filter_long_videos: Union[int, float] = int(10**9),
         # Optional, specific duration in seconds for each clip
         duration: Optional[float] = None,
+        output_resolution: tuple = (224, 224),  # Desired output resolution
+        num_workers: int = 1  # numbers of cpu to run the preprocessing of each batch
     ):
         self.folder_paths = folder_paths
         self.datasets_weights = datasets_weights
@@ -64,6 +66,8 @@ class VideoDataset(torch.utils.data.Dataset):
         self.filter_short_videos = filter_short_videos
         self.filter_long_videos = filter_long_videos
         self.duration = duration
+        self.output_resolution = output_resolution
+        self.num_workers = num_workers
         if VideoReader is None:
             raise ImportError(
                 'Unable to import "decord" which is required to read videos.')
@@ -94,7 +98,6 @@ class VideoDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, index):
         sample = self.samples[index]
-
         # Keep trying to load videos until you find a valid sample
         loaded_video = False
         while not loaded_video:
@@ -109,14 +112,25 @@ class VideoDataset(torch.utils.data.Dataset):
             fpc = self.frames_per_clip
             nc = self.num_clips
             return [video[i*fpc:(i+1)*fpc] for i in range(nc)]
-
         # Parse video into frames & apply data augmentations
         if self.shared_transform is not None:
             buffer = self.shared_transform(buffer)
         buffer = split_into_clips(buffer)
         if self.transform is not None:
             buffer = [self.transform(clip) for clip in buffer]
-
+        # Convert buffer to PyTorch tensor and permute dimensions
+        # Permute is used to rearrange the dimensions of the tensor.
+        # In this case, we're rearranging the dimensions from (frames, height, width, channels)
+        # to (frames, channels, height, width), which is the expected input format for
+        # torch.nn.functional.interpolate.
+        buffer = torch.from_numpy(np.concatenate(
+            buffer, axis=0)).permute(0, 3, 1, 2).float()
+        # Apply torch.nn.functional.interpolate transformation
+        buffer = torch.nn.functional.interpolate(
+            buffer, size=self.output_resolution, mode='bilinear')
+        # Reshape buffer back to (num_clips, frames_per_clip, channels, height, width)
+        buffer = buffer.view(
+            self.num_clips, self.frames_per_clip, *buffer.shape[1:])
         return buffer, clip_indices
 
     def loadvideo_decord(self, sample):
@@ -136,7 +150,8 @@ class VideoDataset(torch.utils.data.Dataset):
             return [], None
 
         try:
-            vr = VideoReader(fname, num_threads=-1, ctx=cpu(0))
+            vr = VideoReader(
+                fname, num_threads=self.num_workers, ctx=cpu(0))
         except Exception:
             return [], None
 
@@ -217,8 +232,7 @@ class VideoDataset(torch.utils.data.Dataset):
 
 
 if __name__ == "__main__":
-
-    # run python -m videoseal.data.video_dataset
+    import time
 
     # Specify the path to the folder containing the MP4 files
     video_folder_path = "./assets/videos"
@@ -228,25 +242,23 @@ if __name__ == "__main__":
         folder_paths=[video_folder_path],
         frames_per_clip=16,
         frame_step=4,
-        num_clips=1
+        num_clips=10,
+        output_resolution=(1920, 1080),
+        num_workers=50,
     )
 
     # Load and print stats for 3 videos for demonstration
-    num_videos_to_print_stats = 3
+    num_videos_to_print_stats = 10
     for i in range(min(num_videos_to_print_stats, len(dataset))):
+        start_time = time.time()
         video_data, clip_indices = dataset[i]
+        end_time = time.time()
+        print(f"Stats for video {i+1}/{num_videos_to_print_stats}:")
         print(
-            f"Stats for video {i+1}/{num_videos_to_print_stats}, Clip indices: {clip_indices}")
-
-        # Assuming video_data is a list of clips, and each clip is a numpy array of frames
-        for clip_index, clip in enumerate(video_data):
-            print(f"  Stats for clip {clip_index+1}:")
-            print(f"    Number of frames: {len(clip)}")
-            print(f"    Shape of each frame: {clip[0].shape}")
-            print(f"    Data type of frames: {clip[0].dtype}")
-            print(f"    Min pixel value in first frame: {clip[0].min()}")
-            print(f"    Max pixel value in first frame: {clip[0].max()}")
-
+            f"  Time taken to load video: {end_time - start_time:.2f} seconds")
+        print(f"  Clip indices: {clip_indices}")
+        print(f"  Shape of video data: {video_data.shape}")
+        print(f"  Data type of video data: {video_data.dtype}")
         print(f"Finished processing video {i+1}/{num_videos_to_print_stats}")
 
     print("Completed video stats test.")
