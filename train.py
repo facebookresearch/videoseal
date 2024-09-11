@@ -579,14 +579,15 @@ def eval_one_epoch(
 
                     # extract watermark
                     preds = wam.detector(imgs_aug)
-                    mask_preds = preds[:, 0:1]  # b 1 h w
-                    bit_preds = preds[:, 1:] # b k h w
+                    mask_preds = preds[:, 0:1]  # b 1 ...
+                    bit_preds = preds[:, 1:] # b k ...
 
                     log_stats = {}
                     if params.nbits > 0:
                         bit_accuracy_ = bit_accuracy(
                             bit_preds,
                             msgs,
+                            masks_aug
                         ).nanmean().item()
                     
                     if params.nbits > 0:
