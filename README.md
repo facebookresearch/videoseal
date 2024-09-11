@@ -27,6 +27,10 @@ pip install -e .
     `/private/home/pfz/miniconda3/envs/img_wm`
 
 
+
+## Running experiments
+
+
 ### Launch simple experiment on Devfairs
 
 To run on 2 GPUs:
@@ -34,7 +38,7 @@ To run on 2 GPUs:
 `torchrun --nproc_per_node=2 train.py --local_rank 0`
 
 
-### Launching experiments on SLURM cluster - clutils
+### Launching experiments on SLURM cluster with clutils
 
 To launch the expe of json file `expes/test/minimal.json`:
 
@@ -47,3 +51,7 @@ Should:
 
 More details in the clutils' [README](clutils/README.md).
 
+### Logging
+
+The logs are saved in the output folders in `log.txt` files.
+The notebook `notebooks/plotlogs/plotlogs.ipynb` can be used to plot the logs.
