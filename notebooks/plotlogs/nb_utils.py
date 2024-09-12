@@ -153,28 +153,10 @@ def visu_diff(img_ori, img_comp, title=None, figsize=(20,30), crop=None, hori=Tr
 
     return diff
 
-# plot
-def plot_measure(measures):
-    fig, axes = plt.subplots(nrows=1, ncols=len(measures), figsize=(3*len(measures), 3))
-    for ii, path in enumerate(paths):
-        df = dfs[path]
-        param = params[path]
-
-        for jj, measure in enumerate(measures):
-            try:
-                ax = axes[jj]
-            except:
-                ax = axes
-            df = df.dropna(subset=[measure])
-            ax.plot(df['epoch'][:max_epoch], df[measure][:max_epoch], label=f"{path.replace('_', '')}",alpha=0.9)
-            ylabel = measure.replace('_', ' ').capitalize()
-            if 'acc' in ylabel: 
-                ax.set_ylim(0.5, 1.01)
-            ax.set_ylabel(ylabel)
-            xlabel = 'Epoch'
-            ax.set_xlabel(xlabel)
-            ax.grid(True)
-
-    plt.tight_layout()
-    plt.legend(loc='upper right', bbox_to_anchor=(1.04, -0.1), fontsize=16, ncol=1, fancybox=True, shadow=True)
-    plt.show()
+def remove_outliers(df, measure):
+    Q1 = df[measure].quantile(0.25)
+    Q3 = df[measure].quantile(0.75)
+    IQR = Q3 - Q1
+    lower_bound = Q1 - 1.5 * IQR
+    upper_bound = Q3 + 1.5 * IQR
+    return df[(df[measure] >= lower_bound) & (df[measure] <= upper_bound)]
