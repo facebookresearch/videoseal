@@ -1,0 +1,4 @@
+train_dir: ./assets/videos/
+val_dir: ./assets/videos/
+train_annotation_file: none
+val_annotation_file: none
