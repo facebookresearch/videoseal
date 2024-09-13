@@ -50,9 +50,7 @@ def get_transforms(
     saturation: float = 0.2,
     hue: float = 0.1,
 ):
-    # transformations should take care of converting of PIL and back to Tensor
     train_transform = transforms.Compose([
-        transforms.ToPILImage(),
         transforms.Resize(img_size),
         transforms.CenterCrop(img_size),
         transforms.ColorJitter(
@@ -62,7 +60,6 @@ def get_transforms(
         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
     ])
     val_transform = transforms.Compose([
-        transforms.ToPILImage(),
         transforms.Resize(img_size),
         transforms.CenterCrop(img_size),
         transforms.ToTensor(),
@@ -92,9 +89,7 @@ def get_transforms_segmentation(
             train_mask_transform: transforms.Compose: transforms for mask in training set
             val_transform: transforms.Compose: transforms for validation set
     """
-    # transformations should take care of converting of PIL and back to Tensor
     train_transform = transforms.Compose([
-        transforms.ToPILImage(),
         transforms.Resize(img_size),
         transforms.CenterCrop(img_size),
         transforms.ColorJitter(
@@ -103,22 +98,17 @@ def get_transforms_segmentation(
         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
     ])
     train_mask_transform = transforms.Compose([
-        transforms.ToPILImage(),
         transforms.Resize(img_size),
-        transforms.CenterCrop(img_size),
-        transforms.ToTensor(),
+        transforms.CenterCrop(img_size)
     ])
     val_transform = transforms.Compose([
-        transforms.ToPILImage(),
         transforms.Resize(img_size),
         transforms.CenterCrop(img_size),
         transforms.ToTensor(),
         normalize_img,
     ])
     val_mask_transform = transforms.Compose([
-        transforms.ToPILImage(),
         transforms.Resize(img_size),
-        transforms.CenterCrop(img_size),
-        transforms.ToTensor(),
+        transforms.CenterCrop(img_size)
     ])
     return train_transform, train_mask_transform, val_transform, val_mask_transform
