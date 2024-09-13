@@ -111,7 +111,7 @@ class VideoDataset(Dataset):
 
         # Initialize video buffer
         # Set the maximum size of the buffer
-        self.video_buffer = LRUDict(maxsize=10)
+        self.video_buffer = LRUDict(maxsize=100)
 
     def __getitem__(self, index):
         if self.flatten_clips_to_frames:
@@ -297,6 +297,10 @@ class VideoDataset(Dataset):
             all_indices.extend(list(indices))
 
         buffer = vr.get_batch(all_indices).asnumpy()
+
+        # returned video is between 0 and 255 now normalized to 0 - 1
+        buffer = buffer / 255.0
+
         return buffer, clip_indices
 
     # Before applying the transformation, we need to ensure that the input frame is in the correct format.
@@ -350,14 +354,14 @@ if __name__ == "__main__":
         frames_per_clip=16,
         frame_step=4,
         num_clips=10,
-        output_resolution=(250, 250),
+        output_resolution=(1250, 1250),
         num_workers=50,
-        flatten_clips_to_frames=False,
+        flatten_clips_to_frames=True,
         transform=train_transform
     )
 
     # Load and print stats for 3 videos for demonstration
-    num_videos_to_print_stats = 10
+    num_videos_to_print_stats = 3
     for i in range(min(num_videos_to_print_stats, len(dataset))):
         start_time = time.time()
         video_data, masks, frames_positions = dataset[i]
