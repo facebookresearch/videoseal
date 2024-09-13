@@ -8,7 +8,7 @@ Example usage (cluster 1 gpu):
 
 Example:  decoding only, hidden like
     torchrun --nproc_per_node=2 train.py --local_rank 0 --nbits 32 --saveimg_freq 1 --lambda_i 0 --lambda_det 0 --lambda_dec 1 --lambda_d 0  --img_size 128 --img_size_extractor 128 --embedder_model hidden --extractor_model hidden
-        
+
 Args inventory:
     --scheduler CosineLRScheduler,lr_min=1e-6,t_initial=100,warmup_lr_init=1e-6,warmup_t=5
     --optimizer Lamb,lr=1e-3
@@ -49,7 +49,8 @@ from videoseal.augmentation.geometric import (Crop, HorizontalFlip, Identity,
 from videoseal.augmentation.valuemetric import (JPEG, Brightness, Contrast,
                                                 GaussianBlur, Hue,
                                                 MedianFilter, Saturation)
-from videoseal.data.loader import get_dataloader, get_dataloader_segmentation
+from videoseal.data.loader import (get_dataloader, get_dataloader_segmentation,
+                                   get_video_dataloader)
 from videoseal.data.metrics import (accuracy, bit_accuracy,
                                     bit_accuracy_inference, iou, psnr)
 from videoseal.data.transforms import (get_transforms,
@@ -65,6 +66,12 @@ device = torch.device(
     'cuda') if torch.cuda.is_available() else torch.device('cpu')
 
 
+modality_to_datasets = {
+    "image": ["coco"],
+    "video": ["sa-v"]
+}
+
+
 def get_dataset_parser(parser):
     """
     Adds dataset-related arguments to the parser.
@@ -75,7 +82,7 @@ def get_dataset_parser(parser):
     group.add_argument("--modality", type=str, default="image",
                        choices=["image", "video"], help="Modality of the dataset. Options: 'image', 'video'")
     group.add_argument("--dataset", type=str, default="coco",
-                       choices=["coco", "sa-v"], help="Name of the dataset. Options: 'coco', 'sa-v'. If provided, will override explicit directory paths.")
+                       choices=[j for i in modality_to_datasets.values() for j in i], help="Name of the dataset. Options: 'coco', 'sa-v'. If provided, will override explicit directory paths.")
     group.add_argument("--train_dir", type=str, default=None,
                        help="Path to the training directory. Required if --dataset is not provided.")
     group.add_argument("--train_annotation_file", type=str, default=None,
@@ -89,7 +96,7 @@ def get_dataset_parser(parser):
 
 def parse_dataset_params(params):
     """
-    Parses the dataset parameters and loads the dataset configuration if necessary.
+    Parses the dataset parameters and loads the dataset configuration.
 
     Logic:
     1. If explicit directory paths are provided (--train_dir, --val_dir, etc.), use those.
@@ -99,9 +106,13 @@ def parse_dataset_params(params):
     Args:
         params (argparse.Namespace): The parsed command-line arguments.
 
+
     Returns:
         omegaconf.DictConfig: The parsed and merged dataset configuration.
     """
+    assert params.dataset in modality_to_datasets[
+        params.modality], f"Invalid dataset '{params.dataset}' for modality '{params.modality}'"
+
     if params.train_dir is not None and params.val_dir is not None:
         # Use explicit directory paths
         print("Warning: Using explicitly provided train and val directories. Ignoring dataset name.")
@@ -111,7 +122,11 @@ def parse_dataset_params(params):
         dataset_cfg = omegaconf.OmegaConf.load(
             f"configs/datasets/{params.dataset}.yaml")
         params_dict = vars(params)
-        params_dict = omegaconf.OmegaConf.merge(params_dict, dataset_cfg)
+        # Convert params_dict to OmegaConf object
+        params_omega = omegaconf.OmegaConf.create(params_dict)
+        # Merge params with dataset_cfg
+        merged_cfg = omegaconf.OmegaConf.merge(params_omega, dataset_cfg)
+        return merged_cfg
     else:
         # Raise an error if neither explicit directory paths nor a dataset name is provided
         raise ValueError(
@@ -122,7 +137,9 @@ def parse_dataset_params(params):
         assert params_dict['train_annotation_file'] is not None and params_dict['val_annotation_file'] is not None, \
             "Annotation files are required for image modality"
 
-    return params_dict
+    # Convert params_dict to OmegaConf object
+    params_omega = omegaconf.OmegaConf.create(params_dict)
+    return params_omega
 
 
 def get_parser():
@@ -239,7 +256,7 @@ def main(params):
 
     # Print the arguments
     print("__git__:{}".format(utils.get_sha()))
-    print("__log__:{}".format(json.dumps(vars(params))))
+    print("__log__:{}".format(omegaconf.OmegaConf.to_yaml(params)))
 
     # Copy the config files to the output dir
     if udist.is_main_process():
@@ -338,14 +355,32 @@ def main(params):
     # Data loaders
     train_transform, train_mask_transform, val_transform, val_mask_transform = get_transforms_segmentation(
         params.img_size)
-    train_loader = get_dataloader_segmentation(params.train_dir, params.train_annotation_file,
-                                               transform=train_transform, mask_transform=train_mask_transform,
-                                               batch_size=params.batch_size,
-                                               num_workers=params.workers, shuffle=True)
-    val_loader = get_dataloader_segmentation(params.val_dir, params.val_annotation_file,
-                                             transform=val_transform, mask_transform=val_mask_transform,
-                                             batch_size=params.batch_size_eval,
-                                             num_workers=params.workers, shuffle=False, random_nb_object=False)
+
+    if params.modality == "image":
+        train_loader = get_dataloader_segmentation(params.train_dir, params.train_annotation_file,
+                                                   transform=train_transform, mask_transform=train_mask_transform,
+                                                   batch_size=params.batch_size,
+                                                   num_workers=params.workers, shuffle=True)
+        val_loader = get_dataloader_segmentation(params.val_dir, params.val_annotation_file,
+                                                 transform=val_transform, mask_transform=val_mask_transform,
+                                                 batch_size=params.batch_size_eval,
+                                                 num_workers=params.workers, shuffle=False, random_nb_object=False)
+    elif params.modality == "video":
+        train_loader = get_video_dataloader(params.train_dir, batch_size=params.batch_size,
+                                            num_workers=params.workers, transform=train_transform,
+                                            mask_transform=train_mask_transform,
+                                            output_resolution=(
+                                                params.img_size, params.img_size),
+                                            flatten_clips_to_frames=True)
+        val_loader = get_video_dataloader(params.val_dir, batch_size=params.batch_size,
+                                          num_workers=params.workers, transform=val_transform,
+                                          mask_transform=val_mask_transform,
+                                          output_resolution=(
+                                              params.img_size, params.img_size),
+                                          flatten_clips_to_frames=True)
+    else:
+        raise ValueError(
+            f"Invalid modality: {params.modality}. Supported modalities are 'image' and 'video'.")
 
     # optionally resume training
     if params.resume_from is not None:
@@ -476,7 +511,13 @@ def train_one_epoch(
     header = 'Train - Epoch: [{}/{}]'.format(epoch, params.epochs)
     metric_logger = ulogger.MetricLogger(delimiter="  ")
 
-    for it, (imgs, masks) in enumerate(metric_logger.log_every(train_loader, 10, header)):
+    for it, batch_items in enumerate(metric_logger.log_every(train_loader, 10, header)):
+
+        if len(batch_items) == 3:
+            imgs, masks, frames_positions = batch_items
+        elif len(batch_items) == 2:
+            imgs, masks = batch_items
+
         # masks are only used if segm_proba > 0
         imgs = imgs.to(device, non_blocking=True)
 
