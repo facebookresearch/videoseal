@@ -39,7 +39,7 @@
     },
     "meta": {
         "group":     "", 
-        "name":      "hidden_minimal",
+        "name":      "minimal",
         "dest-arg":  "yes",
         "dest-name": "output_dir"
    }
