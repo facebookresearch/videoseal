@@ -371,13 +371,25 @@ def main(params):
                                             mask_transform=train_mask_transform,
                                             output_resolution=(
                                                 params.img_size, params.img_size),
-                                            flatten_clips_to_frames=True)
+                                            flatten_clips_to_frames=True,
+                                            frames_per_clip=16,
+                                            frame_step=4,
+                                            # TODO: Find a smart way to shuffle while making cache efficient
+                                            shuffle=False,
+                                            num_clips=20,
+                                            )
         val_loader = get_video_dataloader(params.val_dir, batch_size=params.batch_size,
                                           num_workers=params.workers, transform=val_transform,
                                           mask_transform=val_mask_transform,
                                           output_resolution=(
                                               params.img_size, params.img_size),
-                                          flatten_clips_to_frames=True)
+                                          flatten_clips_to_frames=True,
+                                          frames_per_clip=16,
+                                          # TODO: Find a smart way to shuffle while making cache efficient
+                                          shuffle=False,
+                                          frame_step=4,
+                                          num_clips=20,
+                                          )
     else:
         raise ValueError(
             f"Invalid modality: {params.modality}. Supported modalities are 'image' and 'video'.")
