@@ -22,6 +22,7 @@ default_transform = transforms.Compose([
     normalize_img,
 ])
 
+
 def rgb_to_yuv(img):
     M = torch.tensor([[0.299, 0.587, 0.114],
                       [-0.14713, -0.28886, 0.436],
@@ -30,6 +31,7 @@ def rgb_to_yuv(img):
     yuv = torch.matmul(img, M)
     yuv = yuv.permute(0, 3, 1, 2)
     return yuv
+
 
 def yuv_to_rgb(img):
     M = torch.tensor([[1.0, 0.0, 1.13983],
@@ -40,6 +42,7 @@ def yuv_to_rgb(img):
     rgb = rgb.permute(0, 3, 1, 2)
     return rgb
 
+
 def get_transforms(
     img_size: int,
     brightness: float = 0.2,
@@ -47,22 +50,27 @@ def get_transforms(
     saturation: float = 0.2,
     hue: float = 0.1,
 ):
+    # transformations should take care of converting of PIL and back to Tensor
     train_transform = transforms.Compose([
+        transforms.ToPILImage(),
         transforms.Resize(img_size),
         transforms.CenterCrop(img_size),
-        transforms.ColorJitter(brightness=brightness, contrast=contrast, saturation=saturation, hue=hue),
+        transforms.ColorJitter(
+            brightness=brightness, contrast=contrast, saturation=saturation, hue=hue),
         transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
     ])
     val_transform = transforms.Compose([
+        transforms.ToPILImage(),
         transforms.Resize(img_size),
         transforms.CenterCrop(img_size),
         transforms.ToTensor(),
         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
     ])
     return train_transform, val_transform
-    
+
+
 def get_transforms_segmentation(
     img_size: int,
     brightness: float = 0.2,
@@ -84,25 +92,33 @@ def get_transforms_segmentation(
             train_mask_transform: transforms.Compose: transforms for mask in training set
             val_transform: transforms.Compose: transforms for validation set
     """
+    # transformations should take care of converting of PIL and back to Tensor
     train_transform = transforms.Compose([
+        transforms.ToPILImage(),
         transforms.Resize(img_size),
         transforms.CenterCrop(img_size),
-        transforms.ColorJitter(brightness=brightness, contrast=contrast, saturation=saturation, hue=hue),
+        transforms.ColorJitter(
+            brightness=brightness, contrast=contrast, saturation=saturation, hue=hue),
         transforms.ToTensor(),
         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
-    ])  
+    ])
     train_mask_transform = transforms.Compose([
+        transforms.ToPILImage(),
         transforms.Resize(img_size),
-        transforms.CenterCrop(img_size)
-    ])  
+        transforms.CenterCrop(img_size),
+        transforms.ToTensor(),
+    ])
     val_transform = transforms.Compose([
+        transforms.ToPILImage(),
         transforms.Resize(img_size),
         transforms.CenterCrop(img_size),
         transforms.ToTensor(),
         normalize_img,
     ])
     val_mask_transform = transforms.Compose([
+        transforms.ToPILImage(),
         transforms.Resize(img_size),
-        transforms.CenterCrop(img_size)
+        transforms.CenterCrop(img_size),
+        transforms.ToTensor(),
     ])
     return train_transform, train_mask_transform, val_transform, val_mask_transform

@@ -281,7 +281,7 @@ if __name__ == "__main__":
         flatten_clips_to_frames=True,
     )
     # Iterate through the dataloader and print stats for each batch
-    for video_batch, frames_positions in video_dataloader:
+    for video_batch, masks_batch, frames_positions in video_dataloader:
         print(
             f"loaded a batch of {video_batch.shape} size , each consists of a frame")
         print(video_batch.shape)
@@ -301,7 +301,7 @@ if __name__ == "__main__":
         flatten_clips_to_frames=False,
     )
     # Iterate through the dataloader and print stats for each batch
-    for video_batch, frames_positions in video_dataloader:
+    for video_batch, masks_batch, frames_positions in video_dataloader:
         print(
             f"loaded a batch of {video_batch.shape[0]} size , each consists of a {video_batch.shape[1]} clips")
         print(video_batch.shape)

@@ -23,6 +23,8 @@ from decord import VideoReader, cpu
 from torch.utils.data import Dataset
 from tqdm import tqdm
 
+from videoseal.data.transforms import get_transforms_segmentation
+
 from .utils import LRUDict
 
 # Configure logging
@@ -43,6 +45,7 @@ class VideoDataset(Dataset):
         num_clips: int = 1,  # Number of clips to sample from each video
         # Optional transformation function to be applied to each clip
         transform: Optional[Callable] = None,
+        mask_transform: Optional[Callable] = None,
         # Optional transformation function applied on the video before clipping
         shared_transform: Optional[Callable] = None,
         # If True, sample clips randomly inside the video
@@ -65,6 +68,7 @@ class VideoDataset(Dataset):
         self.frame_step = frame_step
         self.num_clips = num_clips
         self.transform = transform
+        self.mask_transform = mask_transform
         self.shared_transform = shared_transform
         self.random_clip_sampling = random_clip_sampling
         self.allow_clip_overlap = allow_clip_overlap
@@ -143,8 +147,7 @@ class VideoDataset(Dataset):
             if self.shared_transform is not None:
                 buffer = self.shared_transform(buffer)
             buffer = split_into_clips(buffer)
-            if self.transform is not None:
-                buffer = [self.transform(clip) for clip in buffer]
+
             # Convert buffer to PyTorch tensor and permute dimensions
             # Permute is used to rearrange the dimensions of the tensor.
             # In this case, we're rearranging the dimensions from (frames, height, width, channels)
@@ -169,12 +172,35 @@ class VideoDataset(Dataset):
             # Return a single frame and its index
             frame = buffer[clip_index, frame_index]
             frame_index_in_video = frames_positions_in_clips[clip_index][frame_index]
-            return frame, frame_index_in_video
+
+            if self.transform is not None:
+                frame = self.transform(frame)
+
+            # Get MASKS
+            # TODO: Dummy mask of 1s
+            # TODO: implement mask transforms
+            mask = torch.ones_like(frame[0:1, ...])
+            if self.mask_transform is not None:
+                mask = self.mask_transform(mask)
+
+            return frame, mask, frame_index_in_video
         else:
             # Return a clip and its frame indices
             clip = buffer[clip_index]
             clip_frame_indices = frames_positions_in_clips[clip_index]
-            return clip, clip_frame_indices
+
+            if self.transform is not None:
+                clip = torch.stack([self.transform(frame) for frame in clip])
+
+            # Get MASKS
+            # TODO: Dummy mask of 1s
+            # TODO: implement mask transforms
+            mask = torch.ones_like(clip[:, 0:1, ...])
+            if self.mask_transform is not None:
+                mask = torch.stack([self.mask_transform(one_mask)
+                                   for one_mask in mask])
+
+            return clip, mask, clip_frame_indices
 
     def loadvideo_decord(self, sample):
         """ Load video content using Decord """
@@ -283,7 +309,10 @@ if __name__ == "__main__":
     # Specify the path to the folder containing the MP4 files
     video_folder_path = "./assets/videos"
 
-    # Create an instance of the VideoDataset
+    train_transform, train_mask_transform, val_transform, val_mask_transform = get_transforms_segmentation(
+        img_size=256)
+
+   # Create an instance of the VideoDataset
     dataset = VideoDataset(
         folder_paths=[video_folder_path],
         frames_per_clip=16,
@@ -292,13 +321,14 @@ if __name__ == "__main__":
         output_resolution=(250, 250),
         num_workers=50,
         flatten_clips_to_frames=False,
+        transform=train_transform
     )
 
     # Load and print stats for 3 videos for demonstration
     num_videos_to_print_stats = 10
     for i in range(min(num_videos_to_print_stats, len(dataset))):
         start_time = time.time()
-        video_data, frames_positions = dataset[i]
+        video_data, masks, frames_positions = dataset[i]
         end_time = time.time()
         print(f"Stats for video {i+1}/{num_videos_to_print_stats}:")
         print(
