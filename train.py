@@ -523,7 +523,13 @@ def train_one_epoch(
     header = 'Train - Epoch: [{}/{}]'.format(epoch, params.epochs)
     metric_logger = ulogger.MetricLogger(delimiter="  ")
 
+    # TODO: FixMe
+    max_iter_per_epoch = 10000
+
     for it, batch_items in enumerate(metric_logger.log_every(train_loader, 10, header)):
+
+        if it > max_iter_per_epoch:
+            break
 
         if len(batch_items) == 3:
             imgs, masks, frames_positions = batch_items
@@ -644,10 +650,15 @@ def eval_one_epoch(
     metric_logger = ulogger.MetricLogger(delimiter="  ")
 
     aug_metrics = {}
-    for it, (imgs, masks) in enumerate(metric_logger.log_every(val_loader, 10, header)):
+    for it, batch_items in enumerate(metric_logger.log_every(val_loader, 10, header)):
 
         if it * params.batch_size_eval >= 100:
             break
+
+        if len(batch_items) == 3:
+            imgs, masks, frames_positions = batch_items
+        elif len(batch_items) == 2:
+            imgs, masks = batch_items
 
         imgs = imgs.to(device, non_blocking=True)
         msgs = wam.get_random_msg(imgs.shape[0])  # b x k
@@ -758,4 +769,5 @@ if __name__ == '__main__':
     params = parser.parse_args()
 
     # run experiment
+    main(params)
     main(params)
