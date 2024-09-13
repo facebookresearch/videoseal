@@ -20,7 +20,9 @@ import numpy as np
 import pandas as pd
 import torch
 from decord import VideoReader, cpu
+from PIL import Image
 from torch.utils.data import Dataset
+from torchvision import transforms
 from tqdm import tqdm
 
 from videoseal.data.transforms import get_transforms_segmentation
@@ -174,14 +176,14 @@ class VideoDataset(Dataset):
             frame_index_in_video = frames_positions_in_clips[clip_index][frame_index]
 
             if self.transform is not None:
-                frame = self.transform(frame)
+                frame = self.apply_transform_safe(self.transform, frame)
 
             # Get MASKS
             # TODO: Dummy mask of 1s
             # TODO: implement mask transforms
             mask = torch.ones_like(frame[0:1, ...])
             if self.mask_transform is not None:
-                mask = self.mask_transform(mask)
+                mask = self.apply_transform_safe(self.mask_transform, mask)
 
             return frame, mask, frame_index_in_video
         else:
@@ -190,14 +192,15 @@ class VideoDataset(Dataset):
             clip_frame_indices = frames_positions_in_clips[clip_index]
 
             if self.transform is not None:
-                clip = torch.stack([self.transform(frame) for frame in clip])
+                clip = torch.stack([self.apply_transform_safe(
+                    self.transform, frame) for frame in clip])
 
             # Get MASKS
             # TODO: Dummy mask of 1s
             # TODO: implement mask transforms
             mask = torch.ones_like(clip[:, 0:1, ...])
             if self.mask_transform is not None:
-                mask = torch.stack([self.mask_transform(one_mask)
+                mask = torch.stack([self.apply_transform_safe(self.mask_transform, one_mask)
                                    for one_mask in mask])
 
             return clip, mask, clip_frame_indices
@@ -295,6 +298,35 @@ class VideoDataset(Dataset):
 
         buffer = vr.get_batch(all_indices).asnumpy()
         return buffer, clip_indices
+
+    # Before applying the transformation, we need to ensure that the input frame is in the correct format.
+    # Some transformations require PIL images, while others require tensors.
+    def apply_transform_safe(self, my_transform, frame):
+        """
+        Applies the transformation to the input frame and ensures that the output is a tensor.
+
+        Args:
+            frame: The input frame to be transformed.
+
+        Returns:
+            The transformed frame as a tensor.
+        """
+
+        # Check if transform requires PIL image
+        if any(isinstance(t, (transforms.Resize, transforms.CenterCrop, transforms.ColorJitter)) for t in self.transform.transforms):
+            # Convert frame to PIL image
+            frame = transforms.ToPILImage()(frame)  # Convert to PIL image
+
+        # Apply transformation
+        frame = my_transform(frame)
+
+        # After applying the transformation, we need to ensure that the output is a tensor.
+        # If the output is not a tensor, we convert it to a tensor using ToTensor().
+        if not isinstance(frame, torch.Tensor):
+            # Convert to tensor
+            frame = transforms.ToTensor()(frame)  # Convert to tensor
+
+        return frame
 
     def __len__(self):
         if self.flatten_clips_to_frames:
