@@ -8,7 +8,10 @@
         "modality": "video",
         "dataset": "sa-v",
         "augmentation_config": "configs/simple_augs.yaml",
-        "extractor_model": "hidden",
+        "extractor_model": [
+            "hidden",
+            "hidden_pw"
+        ],
         "embedder_model": "hidden",
         "img_size": 256,
         "img_size_extractor": 256,
@@ -25,10 +28,7 @@
         "lambda_dec": 1.0,
         "nbits": 32,
         "scaling_i": 1.0,
-        "scaling_w": [
-            0.2,
-            0.4
-        ],
+        "scaling_w": 0.4,
         "balanced": false,
         "master_port": "__SAMPLE__(10000, 20000)"
     },
@@ -44,7 +44,7 @@
     },
     "meta": {
         "group": "",
-        "name": "minimal-video",
+        "name": "0910_vseal_nopercep_hidden_pw",
         "dest-arg": "yes",
         "dest-name": "output_dir"
     }
