@@ -11,7 +11,8 @@ import torch
 import torch.nn.functional as F
 import tqdm
 from pycocotools import mask as maskUtils
-from torch.utils.data import DataLoader, Dataset, DistributedSampler, default_collate
+from torch.utils.data import (DataLoader, Dataset, DistributedSampler,
+                              default_collate)
 from torchvision import get_video_backend
 from torchvision.datasets import CocoDetection
 from torchvision.datasets.folder import default_loader, is_image_file
@@ -144,8 +145,6 @@ class CocoImageIDWrapper(CocoDetection):
                     (self.max_nb_masks, original_height, original_width), dtype=torch.bool)
             return masks
 
-# Usage remains the same
-
 
 def custom_collate(batch: list) -> tuple[torch.Tensor, torch.Tensor]:
     batch = [item for item in batch if item is not None]
@@ -218,7 +217,6 @@ def get_dataloader_segmentation(
     return dataloader
 
 
-# write here code for video dataset loader
 def get_video_dataloader(
     data_dir: str,
     transform: Optional[Callable] = None,
@@ -267,20 +265,10 @@ if __name__ == "__main__":
     # run
     # python -m videoseal.data.loader
 
-    def print_video_batch_stats(video_batch, batch_index):
-        """Prints statistics for a batch of videos."""
-        print(f"Batch {batch_index + 1}:")
-        print(f"  Number of clips in batch: {len(video_batch)}")
-        for i, (clips, indices) in enumerate(zip(*video_batch)):
-            print(f"  Clip {i + 1}:")
-            print(f"    Number of clips: {len(clips)}")
-            print(f"    Shape of first clip: {clips[0].shape}")
-            print(f"    frame indices: {indices}")
-
     # Path to the directory containing the video files
     video_folder_path = "./assets/videos/"
 
-    # Create the video dataloader
+    # Create the video dataloader to load flat frames
     video_dataloader = get_video_dataloader(
         data_dir=video_folder_path,
         frames_per_clip=16,
@@ -288,12 +276,36 @@ if __name__ == "__main__":
         num_clips=4,
         batch_size=5,
         shuffle=True,
-        num_workers=50,
-        output_resolution=(1920, 1080),
+        num_workers=0,
+        output_resolution=(250, 250),
+        flatten_clips_to_frames=True,
     )
     # Iterate through the dataloader and print stats for each batch
-    for batch_index, video_batch in enumerate(video_dataloader):
-        print_video_batch_stats(video_batch, batch_index)
-        if batch_index >= 2:  # Limit the number of batches to print for the test
-            break
+    for video_batch, masks_batch, frames_positions in video_dataloader:
+        print(
+            f"loaded a batch of {video_batch.shape} size , each consists of a frame")
+        print(video_batch.shape)
+        print(frames_positions)
+        break
+
+    # Create the video dataloader to load flat frames
+    video_dataloader = get_video_dataloader(
+        data_dir=video_folder_path,
+        frames_per_clip=16,
+        frame_step=4,
+        num_clips=4,
+        batch_size=5,
+        shuffle=True,
+        num_workers=0,
+        output_resolution=(250, 250),
+        flatten_clips_to_frames=False,
+    )
+    # Iterate through the dataloader and print stats for each batch
+    for video_batch, masks_batch, frames_positions in video_dataloader:
+        print(
+            f"loaded a batch of {video_batch.shape[0]} size , each consists of a {video_batch.shape[1]} clips")
+        print(video_batch.shape)
+        print(frames_positions)
+        break
+
     print("Video dataloader test completed.")
