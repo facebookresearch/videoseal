@@ -124,13 +124,7 @@ class VideoWam(nn.Module):
     def detect_inference(
         self,
         imgs: torch.Tensor,
-    ):
-        """
-        ...
-        
-        Args:
-            imgs: (torch.Tensor) Batched images with shape FxCxHxW
-        """
+    ) -> torch.Tensor:
         ...
 
 
