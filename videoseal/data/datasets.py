@@ -111,7 +111,7 @@ class VideoDataset(Dataset):
 
         # Initialize video buffer
         # Set the maximum size of the buffer
-        self.video_buffer = LRUDict(maxsize=100)
+        self.video_buffer = LRUDict(maxsize=10)
 
     def __getitem__(self, index):
         if self.flatten_clips_to_frames:
@@ -223,7 +223,7 @@ class VideoDataset(Dataset):
 
         try:
             vr = VideoReader(
-                fname, num_threads=self.num_workers, ctx=cpu(0))
+                fname, num_threads=self.num_workers, ctx=cpu(0), width=self.output_resolution[1], height=self.output_resolution[0])
         except Exception:
             return [], None
 

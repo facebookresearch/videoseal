@@ -367,19 +367,19 @@ def main(params):
                                                  num_workers=params.workers, shuffle=False, random_nb_object=False)
     elif params.modality == "video":
         train_loader = get_video_dataloader(params.train_dir, batch_size=params.batch_size,
-                                            num_workers=1, transform=train_transform,
+                                            num_workers=params.workers, transform=train_transform,
                                             mask_transform=train_mask_transform,
                                             output_resolution=(
                                                 params.img_size, params.img_size),
                                             flatten_clips_to_frames=True,
-                                            frames_per_clip=25,
+                                            frames_per_clip=16,
                                             frame_step=4,
                                             # TODO: Find a smart way to shuffle while making cache efficient
                                             shuffle=False,
                                             num_clips=10,
                                             )
         val_loader = get_video_dataloader(params.val_dir, batch_size=params.batch_size,
-                                          num_workers=1, transform=val_transform,
+                                          num_workers=params.workers, transform=val_transform,
                                           mask_transform=val_mask_transform,
                                           output_resolution=(
                                               params.img_size, params.img_size),
