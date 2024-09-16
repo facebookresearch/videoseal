@@ -6,11 +6,12 @@
 
 # adapted from https://github.com/facebookresearch/jepa/blob/main/src/datasets/video_dataset.py
 
-
 import glob
+# import inspect
 import logging
 import os
 import pathlib
+# import threading
 import warnings
 from logging import getLogger
 from typing import Callable, List, Optional, Union
@@ -166,6 +167,17 @@ class VideoDataset(Dataset):
 
             # Store the loaded video in the buffer
             self.video_buffer[video_file] = (buffer, frames_indices)
+        #     # print(
+        #     #     f" added {video_file} to video buffer now videobuffer == {len(self.video_buffer)}")
+
+        #     print(
+        #         f" added {video_file} to video buffer now videobuffer == {len(self.video_buffer)}",
+        #         f"Process ID: {os.getpid()}, Thread ID: {threading.current_thread().ident}",
+        #         f"Function: {inspect.stack()[1].function}, Line: {inspect.stack()[1].lineno}"
+        #     )
+        # else:
+        #     print(
+        #         f"FOUND {video_file} to video buffer now videobuffer == {len(self.video_buffer)}")
 
         # load directly from buffer here should be processed already
         buffer, frames_positions_in_clips = self.video_buffer[video_file]
@@ -201,7 +213,7 @@ class VideoDataset(Dataset):
             mask = torch.ones_like(clip[:, 0:1, ...])
             if self.mask_transform is not None:
                 mask = torch.stack([self.apply_transform_safe(self.mask_transform, one_mask)
-                                   for one_mask in mask])
+                                    for one_mask in mask])
 
             return clip, mask, clip_frame_indices
 
