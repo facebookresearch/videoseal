@@ -6,11 +6,12 @@
 
 # adapted from https://github.com/facebookresearch/jepa/blob/main/src/datasets/video_dataset.py
 
-
 import glob
+import inspect
 import logging
 import os
 import pathlib
+import threading
 import warnings
 from logging import getLogger
 from typing import Callable, List, Optional, Union
@@ -166,6 +167,17 @@ class VideoDataset(Dataset):
 
             # Store the loaded video in the buffer
             self.video_buffer[video_file] = (buffer, frames_indices)
+            # print(
+            #     f" added {video_file} to video buffer now videobuffer == {len(self.video_buffer)}")
+
+            print(
+                f" added {video_file} to video buffer now videobuffer == {len(self.video_buffer)}",
+                f"Process ID: {os.getpid()}, Thread ID: {threading.current_thread().ident}",
+                f"Function: {inspect.stack()[1].function}, Line: {inspect.stack()[1].lineno}"
+            )
+        else:
+            print(
+                f"FOUND {video_file} to video buffer now videobuffer == {len(self.video_buffer)}")
 
         # load directly from buffer here should be processed already
         buffer, frames_positions_in_clips = self.video_buffer[video_file]
@@ -201,7 +213,7 @@ class VideoDataset(Dataset):
             mask = torch.ones_like(clip[:, 0:1, ...])
             if self.mask_transform is not None:
                 mask = torch.stack([self.apply_transform_safe(self.mask_transform, one_mask)
-                                   for one_mask in mask])
+                                    for one_mask in mask])
 
             return clip, mask, clip_frame_indices
 
@@ -223,7 +235,7 @@ class VideoDataset(Dataset):
 
         try:
             vr = VideoReader(
-                fname, num_threads=self.num_workers, ctx=cpu(0))
+                fname, num_threads=self.num_workers, ctx=cpu(0), width=self.output_resolution[1], height=self.output_resolution[0])
         except Exception:
             return [], None
 
@@ -297,6 +309,10 @@ class VideoDataset(Dataset):
             all_indices.extend(list(indices))
 
         buffer = vr.get_batch(all_indices).asnumpy()
+
+        # returned video is between 0 and 255 now normalized to 0 - 1
+        buffer = buffer / 255.0
+
         return buffer, clip_indices
 
     # Before applying the transformation, we need to ensure that the input frame is in the correct format.
@@ -350,14 +366,14 @@ if __name__ == "__main__":
         frames_per_clip=16,
         frame_step=4,
         num_clips=10,
-        output_resolution=(250, 250),
+        output_resolution=(1250, 1250),
         num_workers=50,
-        flatten_clips_to_frames=False,
+        flatten_clips_to_frames=True,
         transform=train_transform
     )
 
     # Load and print stats for 3 videos for demonstration
-    num_videos_to_print_stats = 10
+    num_videos_to_print_stats = 3
     for i in range(min(num_videos_to_print_stats, len(dataset))):
         start_time = time.time()
         video_data, masks, frames_positions = dataset[i]

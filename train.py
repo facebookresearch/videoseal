@@ -307,7 +307,7 @@ def main(params):
     wam = Wam(embedder, extractor, augmenter, attenuation,
               params.scaling_w, params.scaling_i)
     wam.to(device)
-    # print(wam)
+    print(wam)
 
     # build losses
     image_detection_loss = LPIPSWithDiscriminator(
@@ -371,13 +371,25 @@ def main(params):
                                             mask_transform=train_mask_transform,
                                             output_resolution=(
                                                 params.img_size, params.img_size),
-                                            flatten_clips_to_frames=True)
+                                            flatten_clips_to_frames=True,
+                                            frames_per_clip=32,
+                                            frame_step=4,
+                                            # TODO: Find a smart way to shuffle while making cache efficient
+                                            shuffle=False,
+                                            num_clips=20,
+                                            )
         val_loader = get_video_dataloader(params.val_dir, batch_size=params.batch_size,
                                           num_workers=params.workers, transform=val_transform,
                                           mask_transform=val_mask_transform,
                                           output_resolution=(
                                               params.img_size, params.img_size),
-                                          flatten_clips_to_frames=True)
+                                          flatten_clips_to_frames=True,
+                                          frames_per_clip=32,
+                                          # TODO: Find a smart way to shuffle while making cache efficient
+                                          shuffle=False,
+                                          frame_step=4,
+                                          num_clips=20,
+                                          )
     else:
         raise ValueError(
             f"Invalid modality: {params.modality}. Supported modalities are 'image' and 'video'.")
@@ -511,7 +523,13 @@ def train_one_epoch(
     header = 'Train - Epoch: [{}/{}]'.format(epoch, params.epochs)
     metric_logger = ulogger.MetricLogger(delimiter="  ")
 
-    for it, batch_items in enumerate(metric_logger.log_every(train_loader, 10, header)):
+    # TODO: FixMe
+    max_iter_per_epoch = 10000
+
+    for it, batch_items in enumerate(metric_logger.log_every(train_loader, 1, header)):
+
+        if it > max_iter_per_epoch:
+            break
 
         if len(batch_items) == 3:
             imgs, masks, frames_positions = batch_items
@@ -530,7 +548,7 @@ def train_one_epoch(
         elif params.embedder_model.startswith("unet"):
             last_layer = wam.module.embedder.unet.outc.weight if params.distributed else wam.embedder.unet.outc.weight
         elif params.embedder_model.startswith("hidden"):
-            last_layer = wam.module.embedder.hidden_encoder.final_layer.weight if params.distributed else wam.embedder.hidden.hidden_encoder.final_layer.weight
+            last_layer = wam.module.embedder.hidden_encoder.final_layer.weight if params.distributed else wam.embedder.hidden_encoder.final_layer.weight
         else:
             last_layer = None
             # imgs.requires_grad = True
@@ -632,10 +650,15 @@ def eval_one_epoch(
     metric_logger = ulogger.MetricLogger(delimiter="  ")
 
     aug_metrics = {}
-    for it, (imgs, masks) in enumerate(metric_logger.log_every(val_loader, 10, header)):
+    for it, batch_items in enumerate(metric_logger.log_every(val_loader, 10, header)):
 
         if it * params.batch_size_eval >= 100:
             break
+
+        if len(batch_items) == 3:
+            imgs, masks, frames_positions = batch_items
+        elif len(batch_items) == 2:
+            imgs, masks = batch_items
 
         imgs = imgs.to(device, non_blocking=True)
         msgs = wam.get_random_msg(imgs.shape[0])  # b x k
@@ -746,4 +769,5 @@ if __name__ == '__main__':
     params = parser.parse_args()
 
     # run experiment
+    main(params)
     main(params)
