@@ -7,11 +7,11 @@
 # adapted from https://github.com/facebookresearch/jepa/blob/main/src/datasets/video_dataset.py
 
 import glob
-# import inspect
+import inspect
 import logging
 import os
 import pathlib
-# import threading
+import threading
 import warnings
 from logging import getLogger
 from typing import Callable, List, Optional, Union
@@ -167,17 +167,17 @@ class VideoDataset(Dataset):
 
             # Store the loaded video in the buffer
             self.video_buffer[video_file] = (buffer, frames_indices)
-        #     # print(
-        #     #     f" added {video_file} to video buffer now videobuffer == {len(self.video_buffer)}")
+            # print(
+            #     f" added {video_file} to video buffer now videobuffer == {len(self.video_buffer)}")
 
-        #     print(
-        #         f" added {video_file} to video buffer now videobuffer == {len(self.video_buffer)}",
-        #         f"Process ID: {os.getpid()}, Thread ID: {threading.current_thread().ident}",
-        #         f"Function: {inspect.stack()[1].function}, Line: {inspect.stack()[1].lineno}"
-        #     )
-        # else:
-        #     print(
-        #         f"FOUND {video_file} to video buffer now videobuffer == {len(self.video_buffer)}")
+            print(
+                f" added {video_file} to video buffer now videobuffer == {len(self.video_buffer)}",
+                f"Process ID: {os.getpid()}, Thread ID: {threading.current_thread().ident}",
+                f"Function: {inspect.stack()[1].function}, Line: {inspect.stack()[1].lineno}"
+            )
+        else:
+            print(
+                f"FOUND {video_file} to video buffer now videobuffer == {len(self.video_buffer)}")
 
         # load directly from buffer here should be processed already
         buffer, frames_positions_in_clips = self.video_buffer[video_file]
