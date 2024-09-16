@@ -548,7 +548,7 @@ def train_one_epoch(
         elif params.embedder_model.startswith("unet"):
             last_layer = wam.module.embedder.unet.outc.weight if params.distributed else wam.embedder.unet.outc.weight
         elif params.embedder_model.startswith("hidden"):
-            last_layer = wam.module.embedder.hidden_encoder.final_layer.weight if params.distributed else wam.embedder.hidden.hidden_encoder.final_layer.weight
+            last_layer = wam.module.embedder.hidden_encoder.final_layer.weight if params.distributed else wam.embedder.hidden_encoder.final_layer.weight
         else:
             last_layer = None
             # imgs.requires_grad = True
