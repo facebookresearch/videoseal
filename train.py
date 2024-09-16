@@ -372,11 +372,11 @@ def main(params):
                                             output_resolution=(
                                                 params.img_size, params.img_size),
                                             flatten_clips_to_frames=True,
-                                            frames_per_clip=16,
+                                            frames_per_clip=32,
                                             frame_step=4,
                                             # TODO: Find a smart way to shuffle while making cache efficient
                                             shuffle=False,
-                                            num_clips=10,
+                                            num_clips=20,
                                             )
         val_loader = get_video_dataloader(params.val_dir, batch_size=params.batch_size,
                                           num_workers=params.workers, transform=val_transform,
@@ -384,11 +384,11 @@ def main(params):
                                           output_resolution=(
                                               params.img_size, params.img_size),
                                           flatten_clips_to_frames=True,
-                                          frames_per_clip=16,
+                                          frames_per_clip=32,
                                           # TODO: Find a smart way to shuffle while making cache efficient
                                           shuffle=False,
                                           frame_step=4,
-                                          num_clips=10,
+                                          num_clips=20,
                                           )
     else:
         raise ValueError(
@@ -526,7 +526,7 @@ def train_one_epoch(
     # TODO: FixMe
     max_iter_per_epoch = 10000
 
-    for it, batch_items in enumerate(metric_logger.log_every(train_loader, 10, header)):
+    for it, batch_items in enumerate(metric_logger.log_every(train_loader, 1, header)):
 
         if it > max_iter_per_epoch:
             break
