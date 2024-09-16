@@ -11,11 +11,14 @@ class LRUDict(OrderedDict):
 
     def __setitem__(self, key, value):
         with self.lock:
-            if key in self:
-                del self[key]
-            elif len(self) >= self.maxsize:
-                self.popitem(last=False)
             super().__setitem__(key, value)
+
+        if len(self) >= self.maxsize:
+            # Clear 10% of the max size
+            num_to_clear = int(self.maxsize * 0.1)
+            keys_to_remove = list(self.keys())[:num_to_clear]
+            for key in keys_to_remove:
+                del self[key]
 
     def __getitem__(self, key):
         with self.lock:
