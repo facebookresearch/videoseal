@@ -1,0 +1,4 @@
+train_dir: /large_experiments/meres/sa-v/sav_train/
+val_dir: ./assets/videos/
+train_annotation_file: none
+val_annotation_file: none

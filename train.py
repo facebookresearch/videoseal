@@ -8,7 +8,7 @@ Example usage (cluster 1 gpu):
 
 Example:  decoding only, hidden like
     torchrun --nproc_per_node=2 train.py --local_rank 0 --nbits 32 --saveimg_freq 1 --lambda_i 0 --lambda_det 0 --lambda_dec 1 --lambda_d 0  --img_size 128 --img_size_extractor 128 --embedder_model hidden --extractor_model hidden
-        
+
 Args inventory:
     --scheduler CosineLRScheduler,lr_min=1e-6,t_initial=100,warmup_lr_init=1e-6,warmup_t=5
     --optimizer Lamb,lr=1e-3
@@ -49,8 +49,9 @@ from videoseal.augmentation.geometric import (Crop, HorizontalFlip, Identity,
 from videoseal.augmentation.valuemetric import (JPEG, Brightness, Contrast,
                                                 GaussianBlur, Hue,
                                                 MedianFilter, Saturation)
-from videoseal.data.loader import get_dataloader, get_dataloader_segmentation
-from videoseal.evals.metrics import (accuracy, bit_accuracy,
+from videoseal.data.loader import (get_dataloader, get_dataloader_segmentation,
+                                   get_video_dataloader)
+from videoseal.data.metrics import (accuracy, bit_accuracy,
                                     bit_accuracy_inference, iou, psnr)
 from videoseal.data.transforms import (get_transforms,
                                        get_transforms_segmentation,
@@ -65,6 +66,82 @@ device = torch.device(
     'cuda') if torch.cuda.is_available() else torch.device('cpu')
 
 
+modality_to_datasets = {
+    "image": ["coco"],
+    "video": ["sa-v"]
+}
+
+
+def get_dataset_parser(parser):
+    """
+    Adds dataset-related arguments to the parser.
+    Args:
+        parser (argparse.ArgumentParser): The parser to add arguments to.
+    """
+    group = parser.add_argument_group('Dataset parameters')
+    group.add_argument("--modality", type=str, default="image",
+                       choices=["image", "video"], help="Modality of the dataset. Options: 'image', 'video'")
+    group.add_argument("--dataset", type=str, default="coco",
+                       choices=[j for i in modality_to_datasets.values() for j in i], help="Name of the dataset. Options: 'coco', 'sa-v'. If provided, will override explicit directory paths.")
+    group.add_argument("--train_dir", type=str, default=None,
+                       help="Path to the training directory. Required if --dataset is not provided.")
+    group.add_argument("--train_annotation_file", type=str, default=None,
+                       help="Path to the training annotation file. Required for image modality if --dataset is not provided.")
+    group.add_argument("--val_dir", type=str, default=None,
+                       help="Path to the validation directory. Required if --dataset is not provided.")
+    group.add_argument("--val_annotation_file", type=str, default=None,
+                       help="Path to the validation annotation file. Required for image modality if --dataset is not provided.")
+    return parser
+
+
+def parse_dataset_params(params):
+    """
+    Parses the dataset parameters and loads the dataset configuration.
+
+    Logic:
+    1. If explicit directory paths are provided (--train_dir, --val_dir, etc.), use those.
+    2. If a dataset name is provided (--dataset), load the corresponding configuration from configs/datasets/<dataset_name>.yaml.
+    3. If neither explicit directory paths nor a dataset name is provided, raise an error.
+
+    Args:
+        params (argparse.Namespace): The parsed command-line arguments.
+
+
+    Returns:
+        omegaconf.DictConfig: The parsed and merged dataset configuration.
+    """
+    assert params.dataset in modality_to_datasets[
+        params.modality], f"Invalid dataset '{params.dataset}' for modality '{params.modality}'"
+
+    if params.train_dir is not None and params.val_dir is not None:
+        # Use explicit directory paths
+        print("Warning: Using explicitly provided train and val directories. Ignoring dataset name.")
+        params_dict = vars(params)
+    elif params.dataset is not None:
+        # Load dataset configuration
+        dataset_cfg = omegaconf.OmegaConf.load(
+            f"configs/datasets/{params.dataset}.yaml")
+        params_dict = vars(params)
+        # Convert params_dict to OmegaConf object
+        params_omega = omegaconf.OmegaConf.create(params_dict)
+        # Merge params with dataset_cfg
+        merged_cfg = omegaconf.OmegaConf.merge(params_omega, dataset_cfg)
+        return merged_cfg
+    else:
+        # Raise an error if neither explicit directory paths nor a dataset name is provided
+        raise ValueError(
+            "Either provide dataset name or explicit train and val directories")
+
+    if params_dict['modality'] == "image":
+        # Check that annotation files are provided for image modality
+        assert params_dict['train_annotation_file'] is not None and params_dict['val_annotation_file'] is not None, \
+            "Annotation files are required for image modality"
+
+    # Convert params_dict to OmegaConf object
+    params_omega = omegaconf.OmegaConf.create(params_dict)
+    return params_omega
+
+
 def get_parser():
     parser = argparse.ArgumentParser()
 
@@ -72,12 +149,9 @@ def get_parser():
         group.add_argument(*args, **kwargs)
 
     group = parser.add_argument_group('Experiments parameters')
-    aa("--train_dir", type=str, default="/datasets01/COCO/060817/train2014/")
-    aa("--train_annotation_file", type=str,
-       default="/datasets01/COCO/060817/annotations/instances_train2014.json")
-    aa("--val_dir", type=str, default="/datasets01/COCO/060817/val2014/")
-    aa("--val_annotation_file", type=str,
-       default="/datasets01/COCO/060817/annotations/instances_val2014.json")
+    # Dataset #
+    parser = get_dataset_parser(parser)
+
     aa("--output_dir", type=str, default="output/",
        help="Output directory for logs and images (Default: /output)")
 
@@ -164,6 +238,10 @@ def get_parser():
 
 
 def main(params):
+
+    # Load Dataset Params
+    params = parse_dataset_params(params)
+
     # Distributed mode
     udist.init_distributed_mode(params)
 
@@ -178,7 +256,7 @@ def main(params):
 
     # Print the arguments
     print("__git__:{}".format(utils.get_sha()))
-    print("__log__:{}".format(json.dumps(vars(params))))
+    print("__log__:{}".format(omegaconf.OmegaConf.to_yaml(params)))
 
     # Copy the config files to the output dir
     if udist.is_main_process():
@@ -229,7 +307,7 @@ def main(params):
     wam = Wam(embedder, extractor, augmenter, attenuation,
               params.scaling_w, params.scaling_i)
     wam.to(device)
-    # print(wam)
+    print(wam)
 
     # build losses
     image_detection_loss = LPIPSWithDiscriminator(
@@ -277,14 +355,44 @@ def main(params):
     # Data loaders
     train_transform, train_mask_transform, val_transform, val_mask_transform = get_transforms_segmentation(
         params.img_size)
-    train_loader = get_dataloader_segmentation(params.train_dir, params.train_annotation_file,
-                                               transform=train_transform, mask_transform=train_mask_transform,
-                                               batch_size=params.batch_size,
-                                               num_workers=params.workers, shuffle=True)
-    val_loader = get_dataloader_segmentation(params.val_dir, params.val_annotation_file,
-                                             transform=val_transform, mask_transform=val_mask_transform,
-                                             batch_size=params.batch_size_eval,
-                                             num_workers=params.workers, shuffle=False, random_nb_object=False)
+
+    if params.modality == "image":
+        train_loader = get_dataloader_segmentation(params.train_dir, params.train_annotation_file,
+                                                   transform=train_transform, mask_transform=train_mask_transform,
+                                                   batch_size=params.batch_size,
+                                                   num_workers=params.workers, shuffle=True)
+        val_loader = get_dataloader_segmentation(params.val_dir, params.val_annotation_file,
+                                                 transform=val_transform, mask_transform=val_mask_transform,
+                                                 batch_size=params.batch_size_eval,
+                                                 num_workers=params.workers, shuffle=False, random_nb_object=False)
+    elif params.modality == "video":
+        train_loader = get_video_dataloader(params.train_dir, batch_size=params.batch_size,
+                                            num_workers=params.workers, transform=train_transform,
+                                            mask_transform=train_mask_transform,
+                                            output_resolution=(
+                                                params.img_size, params.img_size),
+                                            flatten_clips_to_frames=True,
+                                            frames_per_clip=32,
+                                            frame_step=4,
+                                            # TODO: Find a smart way to shuffle while making cache efficient
+                                            shuffle=False,
+                                            num_clips=20,
+                                            )
+        val_loader = get_video_dataloader(params.val_dir, batch_size=params.batch_size,
+                                          num_workers=params.workers, transform=val_transform,
+                                          mask_transform=val_mask_transform,
+                                          output_resolution=(
+                                              params.img_size, params.img_size),
+                                          flatten_clips_to_frames=True,
+                                          frames_per_clip=32,
+                                          # TODO: Find a smart way to shuffle while making cache efficient
+                                          shuffle=False,
+                                          frame_step=4,
+                                          num_clips=20,
+                                          )
+    else:
+        raise ValueError(
+            f"Invalid modality: {params.modality}. Supported modalities are 'image' and 'video'.")
 
     # optionally resume training
     if params.resume_from is not None:
@@ -343,11 +451,11 @@ def main(params):
     dummy_img = torch.ones(3, params.img_size, params.img_size)
     validation_masks = augmenter.mask_embedder.sample_representative_masks(
         dummy_img)  # n 1 h w, full of ones or random masks depending on config
-    
+
     # evaluation only
     if params.only_eval:
         val_stats = eval_one_epoch(wam, val_loader, image_detection_loss,
-                              0, validation_augs, validation_masks, params)
+                                   0, validation_augs, validation_masks, params)
         if udist.is_main_process():
             with open(os.path.join(params.output_dir, 'log_only_eval.txt'), 'a') as f:
                 f.write(json.dumps(val_stats) + "\n")
@@ -376,7 +484,7 @@ def main(params):
         if epoch % params.eval_freq == 0:
             augs = validation_augs if epoch % params.full_eval_freq == 0 else validation_augs_subset
             val_stats = eval_one_epoch(wam, val_loader, image_detection_loss,
-                                  epoch, augs, validation_masks, params)
+                                       epoch, augs, validation_masks, params)
             # val_stats = eval_one_epoch(wam_ddp, val_loader, image_detection_loss, epoch, params)
             log_stats = {**log_stats, **
                          {f'val_{k}': v for k, v in val_stats.items()}}
@@ -415,7 +523,19 @@ def train_one_epoch(
     header = 'Train - Epoch: [{}/{}]'.format(epoch, params.epochs)
     metric_logger = ulogger.MetricLogger(delimiter="  ")
 
-    for it, (imgs, masks) in enumerate(metric_logger.log_every(train_loader, 10, header)):
+    # TODO: FixMe
+    max_iter_per_epoch = 10000
+
+    for it, batch_items in enumerate(metric_logger.log_every(train_loader, 1, header)):
+
+        if it > max_iter_per_epoch:
+            break
+
+        if len(batch_items) == 3:
+            imgs, masks, frames_positions = batch_items
+        elif len(batch_items) == 2:
+            imgs, masks = batch_items
+
         # masks are only used if segm_proba > 0
         imgs = imgs.to(device, non_blocking=True)
 
@@ -428,8 +548,8 @@ def train_one_epoch(
         elif params.embedder_model.startswith("unet"):
             last_layer = wam.module.embedder.unet.outc.weight if params.distributed else wam.embedder.unet.outc.weight
         elif params.embedder_model.startswith("hidden"):
-            last_layer = wam.module.embedder.hidden_encoder.final_layer.weight if params.distributed else wam.embedder.hidden.hidden_encoder.final_layer.weight
-        else:    
+            last_layer = wam.module.embedder.hidden_encoder.final_layer.weight if params.distributed else wam.embedder.hidden_encoder.final_layer.weight
+        else:
             last_layer = None
             # imgs.requires_grad = True
             # last_layer = imgs
@@ -448,9 +568,9 @@ def train_one_epoch(
 
         # log stats
         log_stats = {
-            **logs, 
-            'psnr': psnr(outputs["imgs_w"], imgs).mean().item(), 
-            'lr': optimizers[0].param_groups[0]['lr'], 
+            **logs,
+            'psnr': psnr(outputs["imgs_w"], imgs).mean().item(),
+            'lr': optimizers[0].param_groups[0]['lr'],
         }
         bit_preds = outputs["preds"][:, 1:]  # b k h w
         mask_preds = outputs["preds"][:, 0:1]  # b 1 h w
@@ -478,7 +598,7 @@ def train_one_epoch(
 
         # save images
         if epoch % params.saveimg_freq == 0 and it == 0 and udist.is_main_process():
-        # if epoch % params.saveimg_freq == 0 and it % 200 == 0 and udist.is_main_process():
+            # if epoch % params.saveimg_freq == 0 and it % 200 == 0 and udist.is_main_process():
             # save images and diff
             save_image(unnormalize_img(imgs),
                        os.path.join(params.output_dir, f'{epoch:03}_{it:03}_train_0_ori.png'), nrow=8)
@@ -492,9 +612,9 @@ def train_one_epoch(
             # save pred and target masks
             if params.lambda_det > 0:
                 save_image(outputs["masks"],
-                        os.path.join(params.output_dir, f'{epoch:03}_{it:03}_train_4_mask.png'), nrow=8)
+                           os.path.join(params.output_dir, f'{epoch:03}_{it:03}_train_4_mask.png'), nrow=8)
                 save_image(F.sigmoid(mask_preds / params.temperature),
-                        os.path.join(params.output_dir, f'{epoch:03}_{it:03}_train_5_pred.png'), nrow=8)
+                           os.path.join(params.output_dir, f'{epoch:03}_{it:03}_train_5_pred.png'), nrow=8)
 
     metric_logger.synchronize_between_processes()
     print("Averaged {} stats:".format('train'), metric_logger)
@@ -530,10 +650,15 @@ def eval_one_epoch(
     metric_logger = ulogger.MetricLogger(delimiter="  ")
 
     aug_metrics = {}
-    for it, (imgs, masks) in enumerate(metric_logger.log_every(val_loader, 10, header)):
+    for it, batch_items in enumerate(metric_logger.log_every(val_loader, 10, header)):
 
         if it * params.batch_size_eval >= 100:
             break
+
+        if len(batch_items) == 3:
+            imgs, masks, frames_positions = batch_items
+        elif len(batch_items) == 2:
+            imgs, masks = batch_items
 
         imgs = imgs.to(device, non_blocking=True)
         msgs = wam.get_random_msg(imgs.shape[0])  # b x k
@@ -580,7 +705,7 @@ def eval_one_epoch(
                     # extract watermark
                     preds = wam.detector(imgs_aug)
                     mask_preds = preds[:, 0:1]  # b 1 ...
-                    bit_preds = preds[:, 1:] # b k ...
+                    bit_preds = preds[:, 1:]  # b k ...
 
                     log_stats = {}
                     if params.nbits > 0:
@@ -589,7 +714,7 @@ def eval_one_epoch(
                             msgs,
                             masks_aug
                         ).nanmean().item()
-                    
+
                     if params.nbits > 0:
                         log_stats[f'bit_acc'] = bit_accuracy_
 
@@ -600,10 +725,10 @@ def eval_one_epoch(
                             f'acc': accuracy(mask_preds, masks).mean().item(),
                             f'miou': (iou0 + iou1) / 2,
                         })
-                    
+
                     current_key = f"mask={mask_id}_aug={selected_aug}"
                     log_stats = {f"{k}_{current_key}": v for k,
-                                    v in log_stats.items()}
+                                 v in log_stats.items()}
 
                     # save stats of the current augmentation
                     aug_metrics = {**aug_metrics, **log_stats}
@@ -620,9 +745,9 @@ def eval_one_epoch(
                                    os.path.join(params.output_dir, f'{epoch:03}_{it:03}_val_3_aug.png'), nrow=8)
                         if params.lambda_det > 0:
                             save_image(masks,
-                                    os.path.join(params.output_dir, f'{epoch:03}_{it:03}_val_4_mask.png'), nrow=8)
+                                       os.path.join(params.output_dir, f'{epoch:03}_{it:03}_val_4_mask.png'), nrow=8)
                             save_image(F.sigmoid(mask_preds / params.temperature),
-                                    os.path.join(params.output_dir, f'{epoch:03}_{it:03}_val_5_pred.png'), nrow=8)
+                                       os.path.join(params.output_dir, f'{epoch:03}_{it:03}_val_5_pred.png'), nrow=8)
 
         torch.cuda.synchronize()
         for name, loss in aug_metrics.items():

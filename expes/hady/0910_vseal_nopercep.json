@@ -5,8 +5,8 @@
     "commit": "video-training",
     "precmd": [],
     "params": {
-        "modality": "image",
-        "dataset": "coco",
+        "modality": "video",
+        "dataset": "sa-v",
         "augmentation_config": "configs/simple_augs.yaml",
         "extractor_model": "hidden",
         "embedder_model": "hidden",
@@ -22,13 +22,13 @@
         "lambda_i": 0.0,
         "lambda_d": 0.0,
         "lambda_det": 0.0,
-        "lambda_dec": 1.0,
+        "lambda_dec": [
+            1.0,
+            4.0
+        ],
         "nbits": 32,
         "scaling_i": 1.0,
-        "scaling_w": [
-            0.2,
-            0.4
-        ],
+        "scaling_w": 0.4,
         "balanced": false,
         "master_port": "__SAMPLE__(10000, 20000)"
     },
@@ -44,7 +44,7 @@
     },
     "meta": {
         "group": "",
-        "name": "minimal",
+        "name": "0910_vseal_nopercep_bis-video",
         "dest-arg": "yes",
         "dest-name": "output_dir"
     }
