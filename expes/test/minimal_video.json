@@ -5,8 +5,8 @@
     "commit": "video-training",
     "precmd": [],
     "params": {
-        "modality": "image",
-        "dataset": "coco",
+        "modality": "video",
+        "dataset": "sa-v",
         "augmentation_config": "configs/simple_augs.yaml",
         "extractor_model": "hidden",
         "embedder_model": "hidden",
@@ -44,7 +44,7 @@
     },
     "meta": {
         "group": "",
-        "name": "minimal",
+        "name": "minimal-video",
         "dest-arg": "yes",
         "dest-name": "output_dir"
     }
