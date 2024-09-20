@@ -20,6 +20,22 @@ Other dependencies:
 pip install -e . 
 ```
 
+For VMAF score, install latest git build from [here](https://johnvansickle.com/ffmpeg/builds), then update the PATH:
+```
+wget https://johnvansickle.com/ffmpeg/builds/ffmpeg-git-amd64-static.tar.xz
+tar -xvf ffmpeg-git-amd64-static.tar.xz 
+export PATH=$PATH:/path/to/ffmpeg-git-20220307-amd64-static
+```
+Test the installation with:
+```
+which ffmpeg
+ffmpeg -version
+ffmpeg -filters | grep vmaf
+```
+It should output the path to the ffmpeg binary, the version of ffmpeg and the vmaf filter.
+
+
+
 ### Envs
 
 - H2

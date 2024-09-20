@@ -1,7 +1,13 @@
+"""
+python -m videoseal.evals.metrics
+"""
+
 import torch
 import math
+import subprocess
+import re
 
-from .transforms import image_std
+from videoseal.data.transforms import image_std
 
 def psnr(x, y):
     """ 
@@ -193,3 +199,78 @@ def bit_accuracy_mv(
     # bit_acc = torch.mean(correct, dim=(1,2,3))  # b
     bit_acc = torch.mean(correct, dim=-1)  # b
     return bit_acc
+
+def vmaf_on_file(
+    vid_o: str,
+    vid_w: str
+) -> float:
+    """
+    Runs `ffmpeg -i vid_o.mp4 -i vid_w.mp4 -filter_complex libvmaf` and returns the score.
+    """
+    command = [
+            'ffmpeg',
+            '-i', vid_o,
+            '-i', vid_w,
+            '-filter_complex', 'libvmaf',
+            '-f', 'null', '-'
+        ]
+    # Execute the command and capture the output
+    try:
+        result = subprocess.run(command, text=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
+        for line in result.stderr.split('\n'):
+            if "VMAF score:" in line:
+                # numerical part of the VMAF score with regex
+                match = re.search(r"VMAF score: ([0-9.]+)", line)
+                if match:
+                    return float(match.group(1))
+        return None
+    except Exception as e:
+        print(f"An error occurred: {str(e)}")
+        return None
+
+def vmaf_on_tensor(
+    vid_o: torch.Tensor,
+    vid_w: torch.Tensor
+) -> float:
+    """
+    Runs `ffmpeg -i vid_o.mp4 -i vid_w.mp4 -filter_complex libvmaf` and returns the score.
+    """
+    raise NotImplementedError
+
+
+if __name__ == '__main__':
+    # Test the PSNR function
+    x = torch.rand(1, 3, 256, 256)
+    y = torch.rand(1, 3, 256, 256)
+    print("test psnr")
+    try:
+        print("OK!", psnr(x, y))
+    except Exception as e:
+        print(f"An error occurred: {str(e)}")
+
+    # Test the IoU function
+    preds = torch.rand(1, 1, 256, 256)
+    targets = torch.rand(1, 1, 256, 256)
+    print("test iou")
+    try:
+        print("OK!", iou(preds, targets))
+    except Exception as e:
+        print(f"An error occurred: {str(e)}")
+
+    # Test the accuracy function
+    preds = torch.rand(1, 1, 256, 256)
+    targets = torch.rand(1, 1, 256, 256)
+    print("test accuracy")
+    try:
+        print("OK!", accuracy(preds, targets))
+    except Exception as e:
+        print(f"An error occurred: {str(e)}")
+
+    # Test the vmaf function
+    vid_o = 'assets/videos/sav_013754.mp4'
+    vid_w = 'assets/videos/sav_013754.mp4'
+    print("test vmaf")
+    try:
+        print("OK!", vmaf_on_file(vid_o, vid_w))
+    except Exception as e:
+        print(f"An error occurred: {str(e)}")

@@ -51,7 +51,7 @@ from videoseal.augmentation.valuemetric import (JPEG, Brightness, Contrast,
                                                 MedianFilter, Saturation)
 from videoseal.data.loader import (get_dataloader, get_dataloader_segmentation,
                                    get_video_dataloader)
-from videoseal.data.metrics import (accuracy, bit_accuracy,
+from videoseal.evals.metrics import (accuracy, bit_accuracy,
                                     bit_accuracy_inference, iou, psnr)
 from videoseal.data.transforms import (get_transforms,
                                        get_transforms_segmentation,
