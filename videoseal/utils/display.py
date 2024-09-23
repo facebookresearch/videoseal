@@ -1,3 +1,6 @@
+import os
+from typing import Union
+
 import cv2
 import numpy as np
 import torch
@@ -44,24 +47,25 @@ def save_vid(vid: Tensor, out_path: str, fps: int, normalize: bool = True) -> No
         out_path, vid, fps=fps, video_codec='libx264', options={'crf': '21'})
 
 
-def get_fps(video_path: str) -> tuple:
+def get_fps(video_path: Union[str, os.PathLike]) -> tuple:
     """
-    Retrieves the frames per second (FPS) and the total frame count of a video.
+    Retrieves the FPS and frame count of a video.
 
     Args:
-    video_path (str): The path to the video file.
+    video_path (Union[str, os.PathLike]): Path to the video file.
 
     Returns:
-    tuple: A tuple containing the FPS (float) and the frame count (int) of the video.
-    """
-    # Initialize the video capture object
-    cap = cv2.VideoCapture(video_path)
+    tuple: Contains the FPS (float) and frame count (int).
 
-    # Get the FPS and frame count from the video properties
+    Raises:
+    AssertionError: If the video file does not exist.
+    """
+    assert os.path.exists(
+        video_path), f"Video file does not exist: {video_path}"
+
+    cap = cv2.VideoCapture(video_path)
     fps = cap.get(cv2.CAP_PROP_FPS)
     frame_count = cap.get(cv2.CAP_PROP_FRAME_COUNT)
-
-    # Release the video capture object
     cap.release()
 
     return fps, frame_count
