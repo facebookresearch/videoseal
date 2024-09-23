@@ -233,7 +233,7 @@ def vmaf_on_tensor(
     vid_w: torch.Tensor
 ) -> float:
     """
-    Runs `ffmpeg -i vid_o.mp4 -i vid_w.mp4 -filter_complex libvmaf` and returns the score.
+    ...
     """
     raise NotImplementedError
 
@@ -274,3 +274,4 @@ if __name__ == '__main__':
         print("OK!", vmaf_on_file(vid_o, vid_w))
     except Exception as e:
         print(f"An error occurred: {str(e)}")
+        print(f"Try checking that ffmpeg is installed and that vmaf is available.")

@@ -20,6 +20,9 @@ Other dependencies:
 pip install -e . 
 ```
 
+
+#### VMAF
+
 For VMAF score, install latest git build from [here](https://johnvansickle.com/ffmpeg/builds), then update the PATH:
 ```
 wget https://johnvansickle.com/ffmpeg/builds/ffmpeg-git-amd64-static.tar.xz
