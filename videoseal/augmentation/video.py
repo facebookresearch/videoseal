@@ -7,7 +7,7 @@ import av
 from videoseal.data.transforms import unnormalize_img, normalize_img
 
 
-def compress_decompress(frames, codec='libx264', crf=23, return_aux=False):
+def compress_decompress(frames, codec='libx264', crf=23, fps=24, return_aux=False):
     """
     Simulate video artifacts by compressing and decompressing a video using PyAV.
     
@@ -15,6 +15,7 @@ def compress_decompress(frames, codec='libx264', crf=23, return_aux=False):
         frames (torch.Tensor): Video frames as a tensor with shape (T, C, H, W).
         codec (str): Codec to use for compression.
         crf (int): Constant Rate Factor for compression quality.
+        fps (int): Frames per second of the video.
     
     Returns:
         torch.Tensor: Decompressed video frames as a tensor with shape (T, C, H, W).
@@ -31,7 +32,7 @@ def compress_decompress(frames, codec='libx264', crf=23, return_aux=False):
     container = av.open(buffer, mode='w', format='mp4')
     
     # Add a video stream to the container
-    stream = container.add_stream(codec, rate=24)
+    stream = container.add_stream(codec, rate=fps)
     stream.width = frames.shape[2]
     stream.height = frames.shape[1]
     stream.pix_fmt = 'yuv420p' if codec != 'libx264rgb' else 'rgb24'
