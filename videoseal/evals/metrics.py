@@ -5,6 +5,7 @@ python -m videoseal.evals.metrics
 import io
 import math
 import subprocess
+import tempfile
 import av
 import re
 import numpy as np
@@ -285,11 +286,19 @@ def vmaf_on_tensor(
         container1.mux(packet)
     container1.close()
 
-    # Run VMAF on the two videos
-    vmaf_score = vmaf_on_file(buffer.read(), buffer1.read())
-    return vmaf_score
+    # Seek back to the beginning of the buffers
+    buffer.seek(0)
+    buffer1.seek(0)
+    # Save the buffers to temporary files
+    with tempfile.NamedTemporaryFile(suffix='.mp4') as tmp_file_o, \
+         tempfile.NamedTemporaryFile(suffix='.mp4') as tmp_file_w:
+        tmp_file_o.write(buffer.read())
+        tmp_file_w.write(buffer1.read())
+        tmp_file_o.flush()
+        tmp_file_w.flush()
+        # Compute VMAF score using the temporary files
+        return vmaf_on_file(tmp_file_o.name, tmp_file_w.name)
     
-
 
 if __name__ == '__main__':
     # Test the PSNR function
@@ -319,20 +328,23 @@ if __name__ == '__main__':
     except Exception as e:
         print(f"An error occurred: {str(e)}")
 
-    # Test the vmaf function
+    # # Test the vmaf function
     vid_o = 'assets/videos/sav_013754.mp4'
     vid_w = 'assets/videos/sav_013754.mp4'
-    print("> test vmaf")
-    try:
-        print("OK!", vmaf_on_file(vid_o, vid_w))
-    except Exception as e:
-        print(f"An error occurred: {str(e)}")
-        print(f"Try checking that ffmpeg is installed and that vmaf is available.")
+    # print("> test vmaf")
+    # try:
+    #     print("OK!", vmaf_on_file(vid_o, vid_w))
+    # except Exception as e:
+    #     print(f"An error occurred: {str(e)}")
+    #     print(f"Try checking that ffmpeg is installed and that vmaf is available.")
 
     # Test the vmaf function on tensors
-    vid_o = torch.rand(16, 3, 256, 256)
-    vid_w = torch.rand(16, 3, 256, 256)
     print("> test vmaf on tensor")
+    from videoseal.data.loader import load_video
+    vid_o = load_video(vid_o)
+    vid_w = load_video(vid_w)
+    vid_o = normalize_img( vid_o / 255)
+    vid_w = normalize_img( vid_w / 255)
     try:
         print("OK!", vmaf_on_tensor(vid_o, vid_w))
     except Exception as e:
