@@ -2,12 +2,16 @@
 python -m videoseal.evals.metrics
 """
 
-import torch
+import io
 import math
 import subprocess
+import av
 import re
+import numpy as np
 
-from videoseal.data.transforms import image_std
+import torch
+
+from videoseal.data.transforms import image_std, unnormalize_img, normalize_img
 
 def psnr(x, y):
     """ 
@@ -202,47 +206,96 @@ def bit_accuracy_mv(
 
 def vmaf_on_file(
     vid_o: str,
-    vid_w: str
+    vid_w: str,
 ) -> float:
     """
     Runs `ffmpeg -i vid_o.mp4 -i vid_w.mp4 -filter_complex libvmaf` and returns the score.
     """
     command = [
-            'ffmpeg',
+            '/private/home/pfz/09-videoseal/vmaf-dev/ffmpeg-git-20240629-amd64-static/ffmpeg',
             '-i', vid_o,
             '-i', vid_w,
             '-filter_complex', 'libvmaf',
             '-f', 'null', '-'
         ]
     # Execute the command and capture the output
-    try:
-        result = subprocess.run(command, text=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
-        for line in result.stderr.split('\n'):
-            if "VMAF score:" in line:
-                # numerical part of the VMAF score with regex
-                match = re.search(r"VMAF score: ([0-9.]+)", line)
-                if match:
-                    return float(match.group(1))
-        return None
-    except Exception as e:
-        print(f"An error occurred: {str(e)}")
-        return None
+    result = subprocess.run(command, text=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
+    print(result.stderr)
+    print(result.stdout)
+    for line in result.stderr.split('\n'):
+        if "VMAF score:" in line:
+            # numerical part of the VMAF score with regex
+            match = re.search(r"VMAF score: ([0-9.]+)", line)
+            if match:
+                return float(match.group(1))
 
 def vmaf_on_tensor(
     vid_o: torch.Tensor,
-    vid_w: torch.Tensor
+    vid_w: torch.Tensor,
+    codec='libx264', crf=23, fps=24, 
 ) -> float:
     """
     ...
     """
-    raise NotImplementedError
+    # Normalize
+    vid_o = unnormalize_img(vid_o)
+    vid_o = vid_o.clamp(0, 1).permute(0, 2, 3, 1)  # t c h w -> t w h c
+    vid_o = (vid_o * 255).to(torch.uint8).numpy()
+    # Create an in-memory bytes buffer
+    buffer = io.BytesIO()
+    # Create a PyAV container for output in memory
+    container = av.open(buffer, mode='w', format='mp4')
+    # Add a video stream to the container
+    stream = container.add_stream(codec, rate=fps)
+    stream.width = vid_o.shape[2]
+    stream.height = vid_o.shape[1]
+    stream.pix_fmt = 'yuv420p' if codec != 'libx264rgb' else 'rgb24'
+    stream.options = {'crf': str(crf)}
+    # Write frames to the stream
+    for frame_arr in vid_o:
+        frame = av.VideoFrame.from_ndarray(frame_arr, format='rgb24')
+        for packet in stream.encode(frame):
+            container.mux(packet)
+    # Finalize the file
+    for packet in stream.encode():
+        container.mux(packet)
+    container.close()
+    
+    # Normalize
+    vid_w = unnormalize_img(vid_w)
+    vid_w = vid_w.clamp(0, 1).permute(0, 2, 3, 1)  # t c h w -> t w h c
+    vid_w = (vid_w * 255).to(torch.uint8).numpy()
+    # Create an in-memory bytes buffer
+    buffer1 = io.BytesIO()
+    # Create a PyAV container for output in memory
+    container1 = av.open(buffer1, mode='w', format='mp4')
+    # Add a video stream to the container
+    stream = container1.add_stream(codec, rate=fps)
+    stream.width = vid_w.shape[2]
+    stream.height = vid_w.shape[1]
+    stream.pix_fmt = 'yuv420p' if codec != 'libx264rgb' else 'rgb24'
+    stream.options = {'crf': str(crf)}
+    # Write frames to the stream
+    for frame_arr in vid_w:
+        frame = av.VideoFrame.from_ndarray(frame_arr, format='rgb24')
+        for packet in stream.encode(frame):
+            container1.mux(packet)
+    # Finalize the file
+    for packet in stream.encode():
+        container1.mux(packet)
+    container1.close()
+
+    # Run VMAF on the two videos
+    vmaf_score = vmaf_on_file(buffer.read(), buffer1.read())
+    return vmaf_score
+    
 
 
 if __name__ == '__main__':
     # Test the PSNR function
     x = torch.rand(1, 3, 256, 256)
     y = torch.rand(1, 3, 256, 256)
-    print("test psnr")
+    print("> test psnr")
     try:
         print("OK!", psnr(x, y))
     except Exception as e:
@@ -251,7 +304,7 @@ if __name__ == '__main__':
     # Test the IoU function
     preds = torch.rand(1, 1, 256, 256)
     targets = torch.rand(1, 1, 256, 256)
-    print("test iou")
+    print("> test iou")
     try:
         print("OK!", iou(preds, targets))
     except Exception as e:
@@ -260,7 +313,7 @@ if __name__ == '__main__':
     # Test the accuracy function
     preds = torch.rand(1, 1, 256, 256)
     targets = torch.rand(1, 1, 256, 256)
-    print("test accuracy")
+    print("> test accuracy")
     try:
         print("OK!", accuracy(preds, targets))
     except Exception as e:
@@ -269,9 +322,18 @@ if __name__ == '__main__':
     # Test the vmaf function
     vid_o = 'assets/videos/sav_013754.mp4'
     vid_w = 'assets/videos/sav_013754.mp4'
-    print("test vmaf")
+    print("> test vmaf")
     try:
         print("OK!", vmaf_on_file(vid_o, vid_w))
     except Exception as e:
         print(f"An error occurred: {str(e)}")
         print(f"Try checking that ffmpeg is installed and that vmaf is available.")
+
+    # Test the vmaf function on tensors
+    vid_o = torch.rand(16, 3, 256, 256)
+    vid_w = torch.rand(16, 3, 256, 256)
+    print("> test vmaf on tensor")
+    try:
+        print("OK!", vmaf_on_tensor(vid_o, vid_w))
+    except Exception as e:
+        print(f"An error occurred: {str(e)}")
