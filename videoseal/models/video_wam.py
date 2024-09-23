@@ -11,9 +11,10 @@ from torch.nn import functional as F
 from torchvision import transforms
 
 from videoseal.augmentation.augmenter import Augmenter
-from videoseal.modules.jnd import JND
 from videoseal.models.embedder import Embedder
 from videoseal.models.extractor import Extractor
+from videoseal.modules.jnd import JND
+
 
 class VideoWam(nn.Module):
     wm_threshold: float = 0.0
@@ -30,7 +31,6 @@ class VideoWam(nn.Module):
         img_size: int = 256,
         chunk_size: int = 8,
         step_size: int = 4,
-        device: str = device,
     ) -> None:
         """
         WAM (watermark-anything models) model that combines an embedder, a detector, and an augmenter.
@@ -56,9 +56,8 @@ class VideoWam(nn.Module):
         # video settings
         self.chunk_size = chunk_size  # encode 8 imgs at a time
         self.step_size = step_size  # propagate the wm to 4 next imgs
-        self.resize_to = transforms.Resize(img_size, antialias=True)
-        # device
-        self.device = device
+        self.resize_to = transforms.Resize(
+            (img_size, img_size), antialias=True)
 
     def get_random_msg(self, bsz: int = 1, nb_repetitions=1) -> torch.Tensor:
         return self.embedder.get_random_msg(bsz, nb_repetitions)  # b x k
@@ -68,7 +67,7 @@ class VideoWam(nn.Module):
         self,
         imgs: torch.Tensor,
         msg: torch.Tensor = None,
-    ):
+    ) -> torch.Tensor:
         """ 
         Does the forward pass of the encoder only.
         Rescale the watermark signal by a JND (just noticeable difference heatmap) that says where pixel can be changed without being noticed.
@@ -78,6 +77,9 @@ class VideoWam(nn.Module):
         Args:
             imgs: (torch.Tensor) Batched images with shape FxCxHxW
             msg: (torch.Tensor) Batched messages with shape 1xL
+
+        Returns:
+            imgs_w: (torch.Tensor) Batched watermarked images with shape FxCxHxW
         """
         if msg is None:
             msg = self.get_random_msg()
@@ -85,47 +87,80 @@ class VideoWam(nn.Module):
         # encode by chunk of 8 imgs, propagate the wm to 4 next imgs
         chunk_size = self.chunk_size  # n
         step_size = self.step_size
-        msg = msg.repeat(chunk_size, 1).to(self.device) # 1 k -> n k
+        msg = msg.repeat(chunk_size, 1).to(imgs.device)  # 1 k -> n k
 
         # initialize watermarked imgs
-        imgs_w = torch.zeros_like(imgs) # f 3 h w
+        imgs_w = torch.zeros_like(imgs)  # f 3 h w
 
         for ii in range(0, len(imgs[::step_size]), chunk_size):
             nimgs_in_ck = min(chunk_size, len(imgs[::step_size]) - ii)
             start = ii*step_size
             end = start + nimgs_in_ck * step_size
-            all_imgs_in_ck = imgs[start : end, ...].to(self.device) # f 3 h w
+            all_imgs_in_ck = imgs[start: end, ...]  # f 3 h w
 
             # choose one frame every step_size
-            imgs_in_ck = all_imgs_in_ck[::step_size] # n 3 h w
+            imgs_in_ck = all_imgs_in_ck[::step_size]  # n 3 h w
             # downsampling with fixed short edge
-            imgs_in_ck = self.resize_to(imgs_in_ck) # n 3 wm_h wm_w
+            imgs_in_ck = self.resize_to(imgs_in_ck)  # n 3 wm_h wm_w
             # deal with last chunk that may have less than chunk_size frames
-            if nimgs_in_ck < chunk_size:  
+            if nimgs_in_ck < chunk_size:
                 msg = msg[:nimgs_in_ck]
-            
+
             # get deltas for the chunk, and repeat them for each frame in the chunk
-            deltas_in_ck = self.embedder(imgs_in_ck, msg) # n 3 wm_h wm_w
-            deltas_in_ck = torch.repeat_interleave(deltas_in_ck, step_size, dim=0) # f 3 wm_h wm_w
-            deltas_in_ck = deltas_in_ck[:len(all_imgs_in_ck)] # at the end of video there might be more deltas than needed
-            
+            deltas_in_ck = self.embedder(imgs_in_ck, msg)  # n 3 wm_h wm_w
+            deltas_in_ck = torch.repeat_interleave(
+                deltas_in_ck, step_size, dim=0)  # f 3 wm_h wm_w
+            # at the end of video there might be more deltas than needed
+            deltas_in_ck = deltas_in_ck[:len(all_imgs_in_ck)]
+
             # upsampling
-            deltas_in_ck = nn.functional.interpolate(deltas_in_ck, size=imgs.shape[-2:], mode='bilinear', align_corners=True)
-            
+            deltas_in_ck = nn.functional.interpolate(
+                deltas_in_ck, size=imgs.shape[-2:], mode='bilinear', align_corners=True)
+
             # create watermarked imgs
             all_imgs_in_ck_w = self.scaling_i * all_imgs_in_ck + self.scaling_w * deltas_in_ck
             if self.attenuation is not None:
-                all_imgs_in_ck_w = self.attenuation(all_imgs_in_ck, all_imgs_in_ck_w)
-            imgs_w[start : end, ...] = all_imgs_in_ck_w.cpu() # n 3 h w
+                all_imgs_in_ck_w = self.attenuation(
+                    all_imgs_in_ck, all_imgs_in_ck_w)
+            # all_imgs_in_ck = all_imgs_in_ck.cpu()  # move to cpu to save gpu memory
+            imgs_w[start: end, ...] = all_imgs_in_ck_w  # n 3 h w
 
         return imgs_w
 
     @torch.no_grad()
     def detect_inference(
         self,
-        imgs: torch.Tensor,
+        frames: torch.Tensor,
+        aggregation: str = "avg",
     ) -> torch.Tensor:
-        ...
+        """
+        Does the forward pass of the detector only.
+        Rescale the image to 256x... pixels, and then compute the mask and the message.
+
+        Args:
+            imgs: (torch.Tensor) Batched images with shape FxCxHxW
+        """
+        frames = self.resize_to(frames)
+        chunksize = 16  # n
+        all_preds = []
+        for ii in range(0, len(frames), chunksize):
+            nframes_in_ck = min(chunksize, len(frames) - ii)
+            preds = self.detector(
+                frames[ii:ii+nframes_in_ck]
+            )
+            all_preds.append(preds)  # n k ..
+        preds = torch.cat(all_preds, dim=0)  # f k ..
+        mask_preds = preds[:, 0:1]  # binary detection bit (not used for now)
+        bit_preds = preds[:, 1:]  # b k ..
+
+        if aggregation is None:
+            decoded_msg = bit_preds
+        elif aggregation == "avg":
+            decoded_msg = bit_preds.mean(dim=0)
+        elif aggregation == "weighted_avg":
+            decoded_msg = (bit_preds * bit_preds.abs()).mean(dim=0)  # b k -> k
+        msg = (decoded_msg > 0).squeeze()
+        return msg
 
 
 if __name__ == "__main__":

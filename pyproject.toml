@@ -23,9 +23,12 @@ dependencies = [
     "pandas",
     "PyWavelets",
     "av",
+    "pyav",
     "scikit-image",
     "decord",
     "pandas",
+    "tqdm",
+    "pytorch_msssim",
 ]
 
 [project.optional-dependencies]
