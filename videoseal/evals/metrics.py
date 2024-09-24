@@ -208,12 +208,13 @@ def bit_accuracy_mv(
 def vmaf_on_file(
     vid_o: str,
     vid_w: str,
+    ffmpeg_bin: str = 'ffmpeg',
 ) -> float:
     """
     Runs `ffmpeg -i vid_o.mp4 -i vid_w.mp4 -filter_complex libvmaf` and returns the score.
     """
     command = [
-            '/private/home/pfz/09-videoseal/vmaf-dev/ffmpeg-git-20240629-amd64-static/ffmpeg',
+            ffmpeg_bin,
             '-i', vid_o,
             '-i', vid_w,
             '-filter_complex', 'libvmaf',
@@ -221,14 +222,13 @@ def vmaf_on_file(
         ]
     # Execute the command and capture the output
     result = subprocess.run(command, text=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
-    print(result.stderr)
-    print(result.stdout)
     for line in result.stderr.split('\n'):
         if "VMAF score:" in line:
             # numerical part of the VMAF score with regex
             match = re.search(r"VMAF score: ([0-9.]+)", line)
             if match:
                 return float(match.group(1))
+    return None
 
 def vmaf_on_tensor(
     vid_o: torch.Tensor,
@@ -331,12 +331,16 @@ if __name__ == '__main__':
     # # Test the vmaf function
     vid_o = 'assets/videos/sav_013754.mp4'
     vid_w = 'assets/videos/sav_013754.mp4'
-    # print("> test vmaf")
-    # try:
-    #     print("OK!", vmaf_on_file(vid_o, vid_w))
-    # except Exception as e:
-    #     print(f"An error occurred: {str(e)}")
-    #     print(f"Try checking that ffmpeg is installed and that vmaf is available.")
+    print("> test vmaf")
+    try:
+        result = vmaf_on_file(vid_o, vid_w)
+        if result is not None:
+            print("OK!", result)
+        else:
+            raise Exception("VMAF score not found in the output.")
+    except Exception as e:
+        print(f"!!! An error occurred: {str(e)}")
+        print(f"Try checking that ffmpeg is installed and that vmaf is available.")
 
     # Test the vmaf function on tensors
     print("> test vmaf on tensor")
@@ -346,6 +350,11 @@ if __name__ == '__main__':
     vid_o = normalize_img( vid_o / 255)
     vid_w = normalize_img( vid_w / 255)
     try:
-        print("OK!", vmaf_on_tensor(vid_o, vid_w))
+        result = vmaf_on_tensor(vid_o, vid_w)
+        if result is not None:
+            print("OK!", result)
+        else:
+            raise Exception("VMAF score not found in the output.")
     except Exception as e:
-        print(f"An error occurred: {str(e)}")
+        print(f"!!! An error occurred: {str(e)}")
+        print(f"Try checking that ffmpeg is installed and that vmaf is available.")
