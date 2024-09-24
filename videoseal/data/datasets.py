@@ -27,8 +27,7 @@ from torchvision import transforms
 from tqdm import tqdm
 
 from videoseal.data.transforms import get_transforms_segmentation
-
-from .utils import LRUDict
+from videoseal.utils.data import LRUDict
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
