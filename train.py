@@ -51,7 +51,7 @@ from videoseal.augmentation.valuemetric import (JPEG, Brightness, Contrast,
                                                 MedianFilter, Saturation)
 from videoseal.data.loader import (get_dataloader, get_dataloader_segmentation,
                                    get_video_dataloader)
-from videoseal.data.metrics import (accuracy, bit_accuracy,
+from videoseal.evals.metrics import (accuracy, bit_accuracy,
                                     bit_accuracy_inference, iou, psnr)
 from videoseal.data.transforms import (get_transforms,
                                        get_transforms_segmentation,
@@ -61,15 +61,10 @@ from videoseal.losses.detperceptual import LPIPSWithDiscriminator
 from videoseal.models import Wam, build_embedder, build_extractor
 from videoseal.modules.jnd import JND
 from videoseal.utils.image import create_diff_img, detect_wm_hm
+from videoseal.utils.data import parse_dataset_params, modality_to_datasets
 
 device = torch.device(
     'cuda') if torch.cuda.is_available() else torch.device('cpu')
-
-
-modality_to_datasets = {
-    "image": ["coco"],
-    "video": ["sa-v"]
-}
 
 
 def get_dataset_parser(parser):
@@ -94,54 +89,6 @@ def get_dataset_parser(parser):
     return parser
 
 
-def parse_dataset_params(params):
-    """
-    Parses the dataset parameters and loads the dataset configuration.
-
-    Logic:
-    1. If explicit directory paths are provided (--train_dir, --val_dir, etc.), use those.
-    2. If a dataset name is provided (--dataset), load the corresponding configuration from configs/datasets/<dataset_name>.yaml.
-    3. If neither explicit directory paths nor a dataset name is provided, raise an error.
-
-    Args:
-        params (argparse.Namespace): The parsed command-line arguments.
-
-
-    Returns:
-        omegaconf.DictConfig: The parsed and merged dataset configuration.
-    """
-    assert params.dataset in modality_to_datasets[
-        params.modality], f"Invalid dataset '{params.dataset}' for modality '{params.modality}'"
-
-    if params.train_dir is not None and params.val_dir is not None:
-        # Use explicit directory paths
-        print("Warning: Using explicitly provided train and val directories. Ignoring dataset name.")
-        params_dict = vars(params)
-    elif params.dataset is not None:
-        # Load dataset configuration
-        dataset_cfg = omegaconf.OmegaConf.load(
-            f"configs/datasets/{params.dataset}.yaml")
-        params_dict = vars(params)
-        # Convert params_dict to OmegaConf object
-        params_omega = omegaconf.OmegaConf.create(params_dict)
-        # Merge params with dataset_cfg
-        merged_cfg = omegaconf.OmegaConf.merge(params_omega, dataset_cfg)
-        return merged_cfg
-    else:
-        # Raise an error if neither explicit directory paths nor a dataset name is provided
-        raise ValueError(
-            "Either provide dataset name or explicit train and val directories")
-
-    if params_dict['modality'] == "image":
-        # Check that annotation files are provided for image modality
-        assert params_dict['train_annotation_file'] is not None and params_dict['val_annotation_file'] is not None, \
-            "Annotation files are required for image modality"
-
-    # Convert params_dict to OmegaConf object
-    params_omega = omegaconf.OmegaConf.create(params_dict)
-    return params_omega
-
-
 def get_parser():
     parser = argparse.ArgumentParser()
 
@@ -149,7 +96,8 @@ def get_parser():
         group.add_argument(*args, **kwargs)
 
     group = parser.add_argument_group('Experiments parameters')
-    # Dataset #
+    
+    # Dataset
     parser = get_dataset_parser(parser)
 
     aa("--output_dir", type=str, default="output/",
@@ -239,8 +187,11 @@ def get_parser():
 
 def main(params):
 
-    # Load Dataset Params
-    params = parse_dataset_params(params)
+    # Load dataset params from config files
+    parse_dataset_params(params)
+    
+    # Convert params to OmegaConf object
+    params = omegaconf.OmegaConf.create(vars(params))
 
     # Distributed mode
     udist.init_distributed_mode(params)
