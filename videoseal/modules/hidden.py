@@ -88,7 +88,7 @@ class HiddenDecoder(nn.Module):
             self.linear = nn.Linear(z_channels, num_bits+1)
 
     def forward(self, img_w):
-        x = self.layers(img_w) # b d ...
+        x = self.layers(img_w) # b d h w
         if not self.pixelwise:  # not pixelwise
             x = x.mean(dim=[-2, -1])  # b d      
         x = self.linear(x) # b l+1 ...

@@ -1,6 +1,3 @@
-"""
-python -m videoseal.evals.metrics
-"""
 
 import io
 import math
@@ -11,6 +8,7 @@ import re
 import numpy as np
 
 import torch
+from pytorch_msssim import ssim as pytorch_ssim
 
 from videoseal.data.transforms import image_std, unnormalize_img, normalize_img
 
@@ -18,16 +16,67 @@ def psnr(x, y):
     """ 
     Return PSNR 
     Args:
-        x: Image tensor with values approx. between [-1,1]
-        y: Image tensor with values approx. between [-1,1], ex: original image
+        x: Image tensor with normalized values (≈ [-1,1])
+        y: Image tensor with normalized values (≈ [-1,1]), ex: original image
     """
-    delta = x - y
-    delta = 255 * (delta * image_std.view(1, 3, 1, 1).to(x.device))
+    delta = unnormalize_img(x) - unnormalize_img(y)
+    # delta = 255 * (delta * image_std.view(1, 3, 1, 1).to(x.device))
+    delta = 255 * delta
     delta = delta.reshape(-1, x.shape[-3], x.shape[-2], x.shape[-1])  # BxCxHxW
     peak = 20 * math.log10(255.0)
     noise = torch.mean(delta**2, dim=(1,2,3))  # B
     psnr = peak - 10*torch.log10(noise)
     return psnr
+
+def ssim(x, y, data_range=1.0):
+    """
+    Return SSIM
+    Args:
+        x: Image tensor with normalized values (≈ [-1,1])
+        y: Image tensor with normalized values (≈ [-1,1]), ex: original image
+    """
+    x = unnormalize_img(x)
+    y = unnormalize_img(y)
+    return pytorch_ssim(x, y, data_range=data_range, size_average=False)
+
+# def vmaf(x, y):
+#     """
+#     Computes the VMAF of these two videos, without saving them
+#     ffmpeg -i ~/test_output.mp4 -i ~/test_video_input.mp4 -filter_complex ssim -f null - 2>&1 | grep " SSIM " && ffmpeg -i ~/test.mp4 -i ~/test_video.mp4 -filter_complex libvmaf -f null - 2>&1 | grep "VMAF score:"
+
+#     Args:
+#         x: Image tensor with normalized values (≈ [-1,1])
+#         y: Image tensor with normalized values (≈ [-1,1]), ex: original image
+#         Returns:
+#     Returns: 
+#         VMAF score
+#     """
+#     x = unnormalize_img(x)
+#     y = unnormalize_img(y)
+#     # Ensure tensors are on CPU and convert them to numpy arrays
+#     video1_array = x.cpu().numpy()
+#     video2_array = y.cpu().numpy()
+#     # Convert to uint8 format required by VMAF, scaling from [0,1] to [0,255]
+#     video1_uint8 = (video1_array * 255).astype(np.uint8)
+#     video2_uint8 = (video2_array * 255).astype(np.uint8)
+#     # Transpose to move time dimension last, as expected by VMAF
+#     video1_uint8 = np.transpose(video1_uint8, (3, 2, 1, 0))
+#     video2_uint8 = np.transpose(video2_uint8, (3, 2, 1, 0))
+#     # Save reference and distorted frames temporarily for VMAF computation
+#     # Here we avoid saving by directly passing the numpy arrays
+#     # However, note that the original VMAF tool expects file paths or specific formats,
+#     # so we adjust our approach to fit the numpy array input method supported by the python-vmaf wrapper.
+#     # Compute VMAF using the numpy arrays directly
+#     vmaf_score = run_vmaf(
+#         ref_data=video1_uint8,
+#         dist_data=video2_uint8,
+#         width=video1_uint8.shape[1],
+#         height=video1_uint8.shape[0],
+#         pixel_format='yuv420p',
+#         log_path=None,  # Disable logging to file
+#         silent=True  # Reduce verbosity
+#     )
+#     return vmaf_score
 
 def iou(preds, targets, threshold=0.0, label=1):
     """
@@ -83,11 +132,14 @@ def bit_accuracy(
             Bit accuracy will be NaN if all pixels are masked.
     """
     preds = preds > threshold  # b k ...
-    if preds.dim() == 4:
+    if preds.dim() == 4:  # bit preds are pixelwise
         bsz, nbits, h, w = preds.size()
-        mask = mask.expand_as(preds).bool()
-        preds = preds.masked_select(mask).view(bsz, nbits, -1)  # b k n
-        preds = preds.mean(dim=-1, dtype=float)  # b k
+        if mask is not None:
+            mask = mask.expand_as(preds).bool()
+            preds = preds.masked_select(mask).view(bsz, nbits, -1)  # b k n
+            preds = preds.mean(dim=-1, dtype=float)  # b k
+        else:
+            preds = preds.mean(dim=(-2, -1), dtype=float) # b k
     preds = preds > 0.5  # b k
     targets = targets > 0.5  # b k
     correct = (preds == targets).float()  # b k

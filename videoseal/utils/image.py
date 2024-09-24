@@ -3,7 +3,6 @@ import io
 import torch
 import torchvision.transforms as transforms
 from PIL import Image
-from videoseal.evals.metrics import bit_accuracy
 
 
 def jpeg_compress(image: torch.Tensor, quality: int) -> torch.Tensor:

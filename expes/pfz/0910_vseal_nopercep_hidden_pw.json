@@ -3,7 +3,7 @@
     "git": "git@github.com:fairinternal/videoseal.git",
     "preload": "MKL_THREADING_LAYER=GNU",
     "precmd": [],
-    "commit": "main",
+    "commit": "pfz-dev",
     "params": {
         "augmentation_config":  "configs/simple_augs.yaml",
         "extractor_model":      ["hidden", "hidden_pw"],
