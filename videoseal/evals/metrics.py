@@ -236,7 +236,14 @@ def vmaf_on_tensor(
     codec='libx264', crf=23, fps=24, 
 ) -> float:
     """
-    ...
+    Computes the VMAF score between two videos represented as tensors.
+
+    Args:
+        vid_o (torch.Tensor): Original video tensor with shape TxCxHxW
+        vid_w (torch.Tensor): Watermarked video tensor with shape TxCxHxW
+        codec (str): Codec to use for encoding the video
+        crf (int): Constant Rate Factor for the codec
+        fps (int): Frames per second of the video
     """
     # Normalize
     vid_o = unnormalize_img(vid_o)
