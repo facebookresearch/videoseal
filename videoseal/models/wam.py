@@ -72,6 +72,8 @@ class Wam(nn.Module):
         # generate watermarked images
         deltas_w = self.embedder(imgs, msgs)
         imgs_w = self.scaling_i * imgs + self.scaling_w * deltas_w
+        if self.attenuation is not None:
+            imgs_w = self.attenuation(imgs, imgs_w)
         # augment
         imgs_aug, masks, selected_aug = self.augmenter(imgs_w, imgs, masks)
 
@@ -98,7 +100,7 @@ class Wam(nn.Module):
         nb_times: int = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Generate watermarked images from the input images.
+        Generate watermarked images from the input images, with possibly multiple watermarks.
         """
         if random.random() < self.roll_probability:
             roll = True

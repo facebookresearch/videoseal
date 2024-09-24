@@ -1,7 +1,8 @@
 __pycache__
 output
 outputs
-# *.pth
 core
 core*
 *egg-info
+*.pth
+*.mp4
