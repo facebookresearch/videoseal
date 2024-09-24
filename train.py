@@ -187,8 +187,10 @@ def get_parser():
 
 def main(params):
 
-    # Load dataset params
+    # Load dataset params from config files
     parse_dataset_params(params)
+    
+    # Convert params to OmegaConf object
     params = omegaconf.OmegaConf.create(vars(params))
 
     # Distributed mode
