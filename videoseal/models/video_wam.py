@@ -13,12 +13,26 @@ from torchvision import transforms
 from videoseal.augmentation.augmenter import Augmenter
 from videoseal.models.embedder import Embedder
 from videoseal.models.extractor import Extractor
+from videoseal.models.wam import Wam
 from videoseal.modules.jnd import JND
 
 
-class VideoWam(nn.Module):
-    wm_threshold: float = 0.0
-    image_format: str = "RGB"
+class VideoWam(Wam):
+    """
+    A video watermarking model that extends the Wam class.
+    This model combines an embedder, a detector, and an augmenter to embed watermarks into videos.
+    It also includes optional attenuation and scaling parameters to control the strength of the watermark.
+    Attributes:
+        embedder (Embedder): The watermark embedder.
+        detector (Extractor): The watermark detector.
+        augmenter (Augmenter): The image augmenter.
+        attenuation (JND, optional): The JND model to attenuate the watermark distortion. Defaults to None.
+        scaling_w (float, optional): The scaling factor for the watermark. Defaults to 1.0.
+        scaling_i (float, optional): The scaling factor for the image. Defaults to 1.0.
+        chunk_size (int, optional): The number of frames to encode at a time. Defaults to 8.
+        step_size (int, optional): The number of frames to propagate the watermark to. Defaults to 4.
+        img_size (int, optional): The size of the images to resize to. Defaults to 256.
+    """
 
     def __init__(
         self,
@@ -33,99 +47,102 @@ class VideoWam(nn.Module):
         step_size: int = 4,
     ) -> None:
         """
-        WAM (watermark-anything models) model that combines an embedder, a detector, and an augmenter.
-        Embeds a message into an image and detects it as a mask.
-
-        Arguments:
-            embedder: The watermark embedder
-            detector: The watermark detector
-            augmenter: The image augmenter
-            attenuation: The JND model to attenuate the watermark distortion
-            scaling_w: The scaling factor for the watermark
-            scaling_i: The scaling factor for the image
+        Initializes the VideoWam model.
+        Args:
+            embedder (Embedder): The watermark embedder.
+            detector (Extractor): The watermark detector.
+            augmenter (Augmenter): The image augmenter.
+            attenuation (JND, optional): The JND model to attenuate the watermark distortion. Defaults to None.
+            scaling_w (float, optional): The scaling factor for the watermark. Defaults to 1.0.
+            scaling_i (float, optional): The scaling factor for the image. Defaults to 1.0.
+            img_size (int, optional): The size of the images to resize to. Defaults to 256.
+            chunk_size (int, optional): The number of frames to encode at a time. Defaults to 8.
+            step_size (int, optional): The number of frames to propagate the watermark to. Defaults to 4.
         """
-        super().__init__()
-        # modules
-        self.embedder = embedder
-        self.detector = detector
-        self.augmenter = augmenter
-        self.attenuation = attenuation
-        # scalings
-        self.scaling_w = scaling_w
-        self.scaling_i = scaling_i
+        super().__init__(
+            embedder=embedder,
+            detector=detector,
+            augmenter=augmenter,
+            attenuation=attenuation,
+            scaling_w=scaling_w,
+            scaling_i=scaling_i,
+        )
         # video settings
-        self.chunk_size = chunk_size  # encode 8 imgs at a time
-        self.step_size = step_size  # propagate the wm to 4 next imgs
+        self.chunk_size = chunk_size  # encode 8 frames at a time
+        self.step_size = step_size  # propagate the wm to 4 next frames
         self.resize_to = transforms.Resize(
             (img_size, img_size), antialias=True)
 
-    def get_random_msg(self, bsz: int = 1, nb_repetitions=1) -> torch.Tensor:
-        return self.embedder.get_random_msg(bsz, nb_repetitions)  # b x k
+    def forward_video(self, frames: torch.Tensor,
+                      msg: torch.Tensor = None,
+                      ):
+        raise NotImplementedError
 
     @torch.no_grad()
     def embed_inference(
         self,
-        imgs: torch.Tensor,
+        frames: torch.Tensor,
         msg: torch.Tensor = None,
     ) -> torch.Tensor:
         """ 
         Does the forward pass of the encoder only.
         Rescale the watermark signal by a JND (just noticeable difference heatmap) that says where pixel can be changed without being noticed.
         The watermark signal is computed on the image downsampled to 256x... pixels, and then upsampled to the original size.
-        The watermark signal is computed every step_size imgs and propagated to the next step_size imgs.
+        The watermark signal is computed every step_size frames and propagated to the next step_size frames.
 
         Args:
-            imgs: (torch.Tensor) Batched images with shape FxCxHxW
+            frames: (torch.Tensor) Batched images with shape FxCxHxW
             msg: (torch.Tensor) Batched messages with shape 1xL
 
         Returns:
-            imgs_w: (torch.Tensor) Batched watermarked images with shape FxCxHxW
+            frames_w: (torch.Tensor) Batched watermarked images with shape FxCxHxW
         """
         if msg is None:
             msg = self.get_random_msg()
 
-        # encode by chunk of 8 imgs, propagate the wm to 4 next imgs
+        # encode by chunk of 8 frames, propagate the wm to 4 next frames
         chunk_size = self.chunk_size  # n
         step_size = self.step_size
-        msg = msg.repeat(chunk_size, 1).to(imgs.device)  # 1 k -> n k
+        msg = msg.repeat(chunk_size, 1).to(frames.device)  # 1 k -> n k
 
-        # initialize watermarked imgs
-        imgs_w = torch.zeros_like(imgs)  # f 3 h w
+        # initialize watermarked frames
+        frames_w = torch.zeros_like(frames)  # f 3 h w
 
-        for ii in range(0, len(imgs[::step_size]), chunk_size):
-            nimgs_in_ck = min(chunk_size, len(imgs[::step_size]) - ii)
+        for ii in range(0, len(frames[::step_size]), chunk_size):
+            nframes_in_ck = min(chunk_size, len(frames[::step_size]) - ii)
             start = ii*step_size
-            end = start + nimgs_in_ck * step_size
-            all_imgs_in_ck = imgs[start: end, ...]  # f 3 h w
+            end = start + nframes_in_ck * step_size
+            all_frames_in_ck = frames[start: end, ...]  # f 3 h w
 
             # choose one frame every step_size
-            imgs_in_ck = all_imgs_in_ck[::step_size]  # n 3 h w
+            frames_in_ck = all_frames_in_ck[::step_size]  # n 3 h w
             # downsampling with fixed short edge
-            imgs_in_ck = self.resize_to(imgs_in_ck)  # n 3 wm_h wm_w
+            frames_in_ck = self.resize_to(frames_in_ck)  # n 3 wm_h wm_w
             # deal with last chunk that may have less than chunk_size frames
-            if nimgs_in_ck < chunk_size:
-                msg = msg[:nimgs_in_ck]
+            if nframes_in_ck < chunk_size:
+                msg = msg[:nframes_in_ck]
 
             # get deltas for the chunk, and repeat them for each frame in the chunk
-            deltas_in_ck = self.embedder(imgs_in_ck, msg)  # n 3 wm_h wm_w
+            deltas_in_ck = self.embedder(frames_in_ck, msg)  # n 3 wm_h wm_w
             deltas_in_ck = torch.repeat_interleave(
                 deltas_in_ck, step_size, dim=0)  # f 3 wm_h wm_w
             # at the end of video there might be more deltas than needed
-            deltas_in_ck = deltas_in_ck[:len(all_imgs_in_ck)]
+            deltas_in_ck = deltas_in_ck[:len(all_frames_in_ck)]
 
             # upsampling
             deltas_in_ck = nn.functional.interpolate(
-                deltas_in_ck, size=imgs.shape[-2:], mode='bilinear', align_corners=True)
+                deltas_in_ck, size=frames.shape[-2:], mode='bilinear', align_corners=True)
 
-            # create watermarked imgs
-            all_imgs_in_ck_w = self.scaling_i * all_imgs_in_ck + self.scaling_w * deltas_in_ck
+            # create watermarked frames
+            all_frames_in_ck_w = self.scaling_i * \
+                all_frames_in_ck + self.scaling_w * deltas_in_ck
             if self.attenuation is not None:
-                all_imgs_in_ck_w = self.attenuation(
-                    all_imgs_in_ck, all_imgs_in_ck_w)
-            # all_imgs_in_ck = all_imgs_in_ck.cpu()  # move to cpu to save gpu memory
-            imgs_w[start: end, ...] = all_imgs_in_ck_w  # n 3 h w
+                all_frames_in_ck_w = self.attenuation(
+                    all_frames_in_ck, all_frames_in_ck_w)
+            # all_frames_in_ck = all_frames_in_ck.cpu()  # move to cpu to save gpu memory
+            frames_w[start: end, ...] = all_frames_in_ck_w  # n 3 h w
 
-        return imgs_w
+        return frames_w
 
     @torch.no_grad()
     def detect_inference(
@@ -138,7 +155,7 @@ class VideoWam(nn.Module):
         Rescale the image to 256x... pixels, and then compute the mask and the message.
 
         Args:
-            imgs: (torch.Tensor) Batched images with shape FxCxHxW
+            frames: (torch.Tensor) Batched images with shape FxCxHxW
         """
         frames = self.resize_to(frames)
         chunksize = 16  # n
