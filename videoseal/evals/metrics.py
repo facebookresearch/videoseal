@@ -247,6 +247,7 @@ def vmaf_on_tensor(
     vid_o: torch.Tensor,
     vid_w: torch.Tensor,
     codec='libx264', crf=23, fps=24, 
+    ffmpeg_bin: str = 'ffmpeg',
 ) -> float:
     """
     Computes the VMAF score between two videos represented as tensors, 
@@ -318,7 +319,7 @@ def vmaf_on_tensor(
         tmp_file_o.flush()
         tmp_file_w.flush()
         # Compute VMAF score using the temporary files
-        return vmaf_on_file(tmp_file_o.name, tmp_file_w.name)
+        return vmaf_on_file(tmp_file_o.name, tmp_file_w.name, ffmpeg_bin)
     
 
 if __name__ == '__main__':
