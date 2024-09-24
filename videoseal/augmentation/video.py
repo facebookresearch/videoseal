@@ -22,6 +22,9 @@ def compress_decompress(frames, codec='libx264', crf=23, fps=24, return_aux=Fals
         torch.Tensor: Decompressed video frames as a tensor with shape (T, C, H, W).
     """
     device = frames.device
+
+    orig_frames = frames.clone()  # saving these for skip gradients
+
     frames = unnormalize_img(frames)
     frames = frames.clamp(0, 1).permute(0, 2, 3, 1)  # t c h w -> t w h c
     frames = (frames * 255).to(torch.uint8).cpu().numpy()
@@ -66,14 +69,20 @@ def compress_decompress(frames, codec='libx264', crf=23, fps=24, return_aux=Fals
         output_frames.append(img)
 
     container.close()
+    del frames  # free memory
 
     output_frames = np.stack(output_frames) / 255
     output_frames = torch.tensor(output_frames, dtype=torch.float32)
     output_frames = output_frames.permute(0, 3, 1, 2)  # t w h c -> t c h w
     output_frames = normalize_img(output_frames)
 
-    if return_aux:
-        return output_frames, file_size
-
     # move back to device for interface consistency
-    return output_frames.to(device)
+    output_frames = output_frames.to(device)
+    # apply skip gradients
+    compressed_frames = orig_frames + (output_frames - orig_frames).detach()
+    del orig_frames  # free memory
+
+    if return_aux:
+        return compressed_frames, file_size
+
+    return compressed_frames
