@@ -51,17 +51,17 @@ from videoseal.augmentation.valuemetric import (JPEG, Brightness, Contrast,
                                                 MedianFilter, Saturation)
 from videoseal.data.loader import (get_dataloader, get_dataloader_segmentation,
                                    get_video_dataloader)
-from videoseal.evals.metrics import (accuracy, bit_accuracy,
-                                    bit_accuracy_inference, iou, psnr)
 from videoseal.data.transforms import (get_transforms,
                                        get_transforms_segmentation,
                                        normalize_img, unnormalize_img,
                                        unstd_img)
+from videoseal.evals.metrics import (accuracy, bit_accuracy,
+                                     bit_accuracy_inference, iou, psnr)
 from videoseal.losses.detperceptual import LPIPSWithDiscriminator
-from videoseal.models import Wam, build_embedder, build_extractor
+from videoseal.models import VideoWam, Wam, build_embedder, build_extractor
 from videoseal.modules.jnd import JND
+from videoseal.utils.data import modality_to_datasets, parse_dataset_params
 from videoseal.utils.image import create_diff_img, detect_wm_hm
-from videoseal.utils.data import parse_dataset_params, modality_to_datasets
 
 device = torch.device(
     'cuda') if torch.cuda.is_available() else torch.device('cpu')
@@ -96,7 +96,7 @@ def get_parser():
         group.add_argument(*args, **kwargs)
 
     group = parser.add_argument_group('Experiments parameters')
-    
+
     # Dataset
     parser = get_dataset_parser(parser)
 
@@ -132,6 +132,13 @@ def get_parser():
        help="Scaling factor for the image in the embedder model")
     aa("--threshold_mask", type=float, default=0.6,
        help="Threshold for the mask prediction using heatmap only (default: 0.7)")
+    # VideoWam parameters related how to do video watermarking inference
+    aa("--videowam_frame_intermediate_size", type=int, default=256,
+       help="The size of the frame to resize to intermediately while generating the watermark then upscale, the final video/image size is kept the same.")
+    aa("--videowam_chunk_size", type=int, default=8,
+       help="The number of frames to encode at a time.")
+    aa("--videowam_step_size", type=int, default=4,
+       help="The number of frames to propagate the watermark to.")
 
     group = parser.add_argument_group('Optimizer parameters')
     aa("--optimizer", type=str, default="AdamW,lr=1e-4",
@@ -189,7 +196,7 @@ def main(params):
 
     # Load dataset params from config files
     parse_dataset_params(params)
-    
+
     # Convert params to OmegaConf object
     params = omegaconf.OmegaConf.create(vars(params))
 
@@ -255,8 +262,11 @@ def main(params):
     print(f'attenuation: {attenuation}')
 
     # build the complete model
-    wam = Wam(embedder, extractor, augmenter, attenuation,
-              params.scaling_w, params.scaling_i)
+    wam = VideoWam(embedder, extractor, augmenter, attenuation,
+                   params.scaling_w, params.scaling_i,
+                   frame_intermediate_size=params.videowam_frame_intermediate_size,
+                   chunk_size=params.videowam_chunk_size,
+                   step_size=params.videowam_step_size)
     wam.to(device)
     print(wam)
 
@@ -491,7 +501,9 @@ def train_one_epoch(
         imgs = imgs.to(device, non_blocking=True)
 
         # forward
+        # TODO deal with the usecase of batch of videos, for now we support flattened videos
         outputs = wam(imgs, masks)
+
         outputs["preds"] /= params.temperature
 
         if params.embedder_model.startswith("vae"):
