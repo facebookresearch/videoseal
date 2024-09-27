@@ -11,6 +11,7 @@ from torch.nn import functional as F
 
 from videoseal.augmentation.augmenter import Augmenter
 from videoseal.modules.jnd import JND
+
 from .embedder import Embedder
 from .extractor import Extractor
 
@@ -219,6 +220,7 @@ if __name__ == "__main__":
     from functools import partial
 
     import torch
+
     from videoseal.models.embedder import Embedder
     from videoseal.models.extractor import Extractor
     from videoseal.modules.msg_processor import MsgProcessor
