@@ -2,11 +2,11 @@
     "cmd": "python train.py",
     "git": "/private/home/hadyelsahar/work/code/videoseal/videoseal",
     "preload": "MKL_THREADING_LAYER=GNU",
-    "commit": "video-training",
+    "commit": "multi-frame-training",
     "precmd": [],
     "params": {
-        "modality": "video",
-        "dataset": "sa-v",
+        "image_dataset": "coco",
+        "video_dataset": "sa-v",
         "augmentation_config": "configs/simple_augs.yaml",
         "extractor_model": [
             "hidden",
@@ -44,7 +44,7 @@
     },
     "meta": {
         "group": "",
-        "name": "0910_vseal_nopercep_hidden_pw-video",
+        "name": "0910_vseal_nopercep_hidden_pw-hybrid",
         "dest-arg": "yes",
         "dest-name": "output_dir"
     }
