@@ -713,8 +713,7 @@ def eval_one_epoch(
         if epoch_modality is Modalities.VIDEO:
 
             # 1 message per video i.e. similar for all batch
-            msgs = torch.stack([wam.get_random_msg(1)]
-                               * imgs.shape[0])
+            msgs = wam.get_random_msg(1)
             msgs = msgs.to(imgs.device)
             # generate watermarked images
             imgs_w = wam.video_embed(imgs, msgs)
@@ -730,17 +729,18 @@ def eval_one_epoch(
             video_log_stats[f'video_bit_acc'] = (
                 msgs == bit_preds).float().mean().item()
 
-            raw_path = os.path.join(
-                params.output_dir, f'{epoch:03}_{it:03}_raw.mp4')
-            wmed_path = os.path.join(
-                params.output_dir, f'{epoch:03}_{it:03}_wmed.mp4')
-            wm_path = os.path.join(
-                params.output_dir, f'{epoch:03}_{it:03}_wm.mp4')
+            if (epoch % params.saveimg_freq == 0 or params.only_eval) and it == 0 and udist.is_main_process():
+                raw_path = os.path.join(
+                    params.output_dir, f'{epoch:03}_{it:03}_raw.mp4')
+                wmed_path = os.path.join(
+                    params.output_dir, f'{epoch:03}_{it:03}_wmed.mp4')
+                wm_path = os.path.join(
+                    params.output_dir, f'{epoch:03}_{it:03}_wm.mp4')
 
-            fps = 24 // 1
-            save_vid(imgs, raw_path, fps)
-            save_vid(imgs_w, wmed_path, fps)
-            save_vid(imgs - imgs_w, wm_path, fps)
+                fps = 24 // 1
+                save_vid(imgs, raw_path, fps)
+                save_vid(imgs_w, wmed_path, fps)
+                save_vid(imgs - imgs_w, wm_path, fps)
 
         torch.cuda.synchronize()
         metrics = {**img_log_stats, **video_log_stats}
