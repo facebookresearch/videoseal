@@ -113,7 +113,8 @@ def get_parser():
     group = parser.add_argument_group('Image and watermark parameters')
     aa("--nbits", type=int, default=32,
        help="Number of bits used to generate the message. If 0, no message is used.")
-    aa("--img_size", type=int, default=256, help="Size of the input images")
+    aa("--img_size", type=int, default=256,
+       help="Size of the input images for data preprocessing")
     aa("--img_size_extractor", type=int,
        default=256, help="Images are resized to this size before being fed to the extractor")
     aa("--attenuation", type=str, default="None", help="Attenuation model to use")
@@ -140,7 +141,7 @@ def get_parser():
        help="Discriminator optimizer. If None uses the same params (default: None)")
     aa("--scheduler", type=str, default="None", help="Scheduler (default: None)")
     aa('--epochs', default=100, type=int, help='Number of total epochs to run')
-    aa('--max_iter_per_epoch', default=10000, type=int,
+    aa('--iter_per_epoch', default=10000, type=int,
        help='Number of iterations per epoch, made for very large datasets')
     aa('--batch_size', default=16, type=int, help='Batch size')
     aa('--batch_size_eval', default=64, type=int, help='Batch size for evaluation')
@@ -502,9 +503,9 @@ def train_one_epoch(
         epoch, params.epochs, epoch_modality)
     metric_logger = ulogger.MetricLogger(delimiter="  ")
 
-    for it, batch_items in enumerate(metric_logger.log_every(train_loader, 1, header)):
+    for it, batch_items in enumerate(metric_logger.log_every(train_loader, 1, header, max_iter=params.iter_per_epoch)):
 
-        if it > params.max_iter_per_epoch:
+        if it > params.iter_per_epoch:
             break
 
         if len(batch_items) == 3:
@@ -574,25 +575,25 @@ def train_one_epoch(
         for name, loss in log_stats.items():
             metric_logger.update(**{name: loss})
 
-        # save images
-        if epoch % params.saveimg_freq == 0 and it == 0 and udist.is_main_process():
-            # if epoch % params.saveimg_freq == 0 and it % 200 == 0 and udist.is_main_process():
-            # save images and diff
-            save_image(unnormalize_img(imgs),
-                       os.path.join(params.output_dir, f'{epoch:03}_{it:03}_train_0_ori.png'), nrow=8)
-            save_image(unnormalize_img(outputs["imgs_w"]),
-                       os.path.join(params.output_dir, f'{epoch:03}_{it:03}_train_1_w.png'), nrow=8)
-            save_image(create_diff_img(imgs, outputs["imgs_w"]),
-                       # save_image(5 * unstd_img(params.scaling_w * outputs["deltas_w"]).abs(),
-                       os.path.join(params.output_dir, f'{epoch:03}_{it:03}_train_2_diff.png'), nrow=8)
-            save_image(unnormalize_img(outputs["imgs_aug"]),
-                       os.path.join(params.output_dir, f'{epoch:03}_{it:03}_train_3_aug.png'), nrow=8)
-            # save pred and target masks
-            if params.lambda_det > 0:
-                save_image(outputs["masks"],
-                           os.path.join(params.output_dir, f'{epoch:03}_{it:03}_train_4_mask.png'), nrow=8)
-                save_image(F.sigmoid(mask_preds / params.temperature),
-                           os.path.join(params.output_dir, f'{epoch:03}_{it:03}_train_5_pred.png'), nrow=8)
+        # # save images
+        # if epoch % params.saveimg_freq == 0 and it == 0 and udist.is_main_process():
+        #     # if epoch % params.saveimg_freq == 0 and it % 200 == 0 and udist.is_main_process():
+        #     # save images and diff
+        #     save_image(unnormalize_img(imgs),
+        #                os.path.join(params.output_dir, f'{epoch:03}_{it:03}_train_0_ori.png'), nrow=8)
+        #     save_image(unnormalize_img(outputs["imgs_w"]),
+        #                os.path.join(params.output_dir, f'{epoch:03}_{it:03}_train_1_w.png'), nrow=8)
+        #     save_image(create_diff_img(imgs, outputs["imgs_w"]),
+        #                # save_image(5 * unstd_img(params.scaling_w * outputs["deltas_w"]).abs(),
+        #                os.path.join(params.output_dir, f'{epoch:03}_{it:03}_train_2_diff.png'), nrow=8)
+        #     save_image(unnormalize_img(outputs["imgs_aug"]),
+        #                os.path.join(params.output_dir, f'{epoch:03}_{it:03}_train_3_aug.png'), nrow=8)
+        #     # save pred and target masks
+        #     if params.lambda_det > 0:
+        #         save_image(outputs["masks"],
+        #                    os.path.join(params.output_dir, f'{epoch:03}_{it:03}_train_4_mask.png'), nrow=8)
+        #         save_image(F.sigmoid(mask_preds / params.temperature),
+        #                    os.path.join(params.output_dir, f'{epoch:03}_{it:03}_train_5_pred.png'), nrow=8)
 
     metric_logger.synchronize_between_processes()
     print("Averaged {} stats:".format('train'), metric_logger)
@@ -628,7 +629,8 @@ def eval_one_epoch(
     if torch.is_tensor(validation_masks):
         validation_masks = list(torch.unbind(validation_masks, dim=0))
     wam.eval()
-    header = 'Val Full - Epoch: [{}/{}]'.format(epoch, params.epochs)
+    header = 'Val Full - Epoch: [{}/{}] - Modality: {}'.format(
+        epoch, params.epochs, epoch_modality)
     metric_logger = ulogger.MetricLogger(delimiter="  ")
 
     aug_metrics = {}
