@@ -588,13 +588,13 @@ def eval_one_epoch(
     validation_masks: torch.Tensor,
     params: argparse.Namespace,
 ) -> dict:
-    """ 
+    """
     Evaluate the model on the validation set, with different augmentations
 
     Args:
         wam (Wam): the model
         val_loader (torch.utils.data.DataLoader): the validation loader
-        epoch_modality (str): either `video` or `images` 
+        epoch_modality (str): either `video` or `images`
         image_detection_loss (LPIPSWithDiscriminator): the loss function
         epoch (int): the current epoch
         validation_augs (List): list of augmentations to apply
@@ -638,7 +638,7 @@ def eval_one_epoch(
                     imgs_w.shape[0], 1, 1, 1)  # b 1 h w
             imgs_masked = imgs_w * masks + imgs * (1 - masks)
 
-            for transform, strengths in validation_augs:
+            for transform, strengths in [aug for aug in validation_augs if aug.modality in (epoch_modality, Modalities.HYBRID)]:
                 # Create an instance of the transformation
                 transform_instance = transform()
 
