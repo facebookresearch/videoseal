@@ -5,8 +5,8 @@
     "commit": "multi-frame-training",
     "precmd": [],
     "params": {
-        "modality": "video",
-        "dataset": "sa-v",
+        "image_dataset": "coco",
+        "video_dataset": "sa-v",
         "augmentation_config": "configs/simple_augs.yaml",
         "embedder_model": "unet_small2",
         "img_size": 256,
