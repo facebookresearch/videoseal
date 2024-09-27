@@ -5,6 +5,12 @@ from collections import OrderedDict
 import omegaconf
 
 
+class Modalities:
+    IMAGE = 'image'
+    VIDEO = 'video'
+    HYBRID = 'hybrid'
+
+
 class LRUDict(OrderedDict):
     def __init__(self, maxsize=10):
         super().__init__()
@@ -62,11 +68,11 @@ def parse_dataset_params(params):
 
     # Set modality
     if image_dataset_cfg is not None and video_dataset_cfg is not None:
-        params.modality = "hybrid"
+        params.modality = Modalities.HYBRID
     elif image_dataset_cfg is not None:
-        params.modality = "image"
+        params.modality = Modalities.IMAGE
     else:
-        params.modality = "video"
+        params.modality = Modalities.VIDEO
 
     # Merge the dataset configurations with the args
     for cfg in [image_dataset_cfg, video_dataset_cfg]:

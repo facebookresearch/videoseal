@@ -59,7 +59,7 @@ from videoseal.evals.metrics import (accuracy, bit_accuracy,
 from videoseal.losses.detperceptual import LPIPSWithDiscriminator
 from videoseal.models import VideoWam, Wam, build_embedder, build_extractor
 from videoseal.modules.jnd import JND
-from videoseal.utils.data import parse_dataset_params
+from videoseal.utils.data import Modalities, parse_dataset_params
 from videoseal.utils.image import create_diff_img, detect_wm_hm
 
 device = torch.device(
@@ -314,7 +314,7 @@ def main(params):
         params.img_size)
 
     image_train_loader = image_val_loader = video_train_loader = video_val_loader = None
-    if params.modality in ["image", "hybrid"]:
+    if params.modality in [Modalities.IMAGE, Modalities.HYBRID]:
         image_train_loader = get_dataloader_segmentation(params.image_dataset_config.train_dir,
                                                          params.image_dataset_config.train_annotation_file,
                                                          transform=train_transform,
@@ -329,7 +329,7 @@ def main(params):
                                                        num_workers=params.workers,
                                                        shuffle=False,
                                                        random_nb_object=False)
-    if params.modality in ["video", "hybrid"]:
+    if params.modality in [Modalities.VIDEO, Modalities.HYBRID]:
         video_train_loader = get_video_dataloader(params.video_dataset_config.train_dir,
                                                   batch_size=params.batch_size,
                                                   num_workers=params.workers,
@@ -436,9 +436,9 @@ def main(params):
         log_stats = {'epoch': epoch}
 
         # Decide on the modality of this epoch either video or images
-        if params.modality == "hybrid":
-            epoch_modality = "image" if random.random(
-            ) < params.image_to_video_percentage_in_hybrid else "video"
+        if params.modality == Modalities.HYBRID:
+            epoch_modality = Modalities.IMAGE if random.random(
+            ) < params.image_to_video_percentage_in_hybrid else Modalities.VIDEO
         else:
             epoch_modality = params.modality
 
@@ -496,7 +496,7 @@ def train_one_epoch(
     epoch: int,
     params: argparse.Namespace,
 ):
-    assert epoch_modality in ["image", "video"]
+    assert epoch_modality in [Modalities.IMAGE, "video"]
     wam.train()
 
     header = 'Train - Epoch: [{}/{}] - Modality: {}'.format(
@@ -504,9 +504,6 @@ def train_one_epoch(
     metric_logger = ulogger.MetricLogger(delimiter="  ")
 
     for it, batch_items in enumerate(metric_logger.log_every(train_loader, 1, header, max_iter=params.iter_per_epoch)):
-
-        if it > params.iter_per_epoch:
-            break
 
         if len(batch_items) == 3:
             imgs, masks, frames_positions = batch_items
@@ -575,26 +572,6 @@ def train_one_epoch(
         for name, loss in log_stats.items():
             metric_logger.update(**{name: loss})
 
-        # # save images
-        # if epoch % params.saveimg_freq == 0 and it == 0 and udist.is_main_process():
-        #     # if epoch % params.saveimg_freq == 0 and it % 200 == 0 and udist.is_main_process():
-        #     # save images and diff
-        #     save_image(unnormalize_img(imgs),
-        #                os.path.join(params.output_dir, f'{epoch:03}_{it:03}_train_0_ori.png'), nrow=8)
-        #     save_image(unnormalize_img(outputs["imgs_w"]),
-        #                os.path.join(params.output_dir, f'{epoch:03}_{it:03}_train_1_w.png'), nrow=8)
-        #     save_image(create_diff_img(imgs, outputs["imgs_w"]),
-        #                # save_image(5 * unstd_img(params.scaling_w * outputs["deltas_w"]).abs(),
-        #                os.path.join(params.output_dir, f'{epoch:03}_{it:03}_train_2_diff.png'), nrow=8)
-        #     save_image(unnormalize_img(outputs["imgs_aug"]),
-        #                os.path.join(params.output_dir, f'{epoch:03}_{it:03}_train_3_aug.png'), nrow=8)
-        #     # save pred and target masks
-        #     if params.lambda_det > 0:
-        #         save_image(outputs["masks"],
-        #                    os.path.join(params.output_dir, f'{epoch:03}_{it:03}_train_4_mask.png'), nrow=8)
-        #         save_image(F.sigmoid(mask_preds / params.temperature),
-        #                    os.path.join(params.output_dir, f'{epoch:03}_{it:03}_train_5_pred.png'), nrow=8)
-
     metric_logger.synchronize_between_processes()
     print("Averaged {} stats:".format('train'), metric_logger)
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
@@ -624,7 +601,7 @@ def eval_one_epoch(
         validation_masks (torch.Tensor): the validation masks, full of ones for now
         params (argparse.Namespace): the parameters
     """
-    assert epoch_modality in ["image", "video"]
+    assert epoch_modality in [Modalities.IMAGE, Modalities.VIDEO]
 
     if torch.is_tensor(validation_masks):
         validation_masks = list(torch.unbind(validation_masks, dim=0))
@@ -635,9 +612,6 @@ def eval_one_epoch(
 
     aug_metrics = {}
     for it, batch_items in enumerate(metric_logger.log_every(val_loader, 10, header)):
-
-        if it * params.batch_size_eval >= 100:
-            break
 
         if len(batch_items) == 3:
             imgs, masks, frames_positions = batch_items
@@ -685,6 +659,10 @@ def eval_one_epoch(
                                 h, w), mode='bilinear', align_corners=False, antialias=True)
                     selected_aug = str(
                         transform.__name__).lower() + '_' + str(strength)
+
+                    if epoch_modality == Modalities.VIDEO:
+                        # run evluation
+                        pass
 
                     # extract watermark
                     preds = wam.detector(imgs_aug)
