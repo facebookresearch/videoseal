@@ -34,6 +34,7 @@ from typing import List
 import numpy as np
 import omegaconf
 import torch
+import torch.distributed as dist
 import torch.nn as nn
 import torch.nn.functional as F
 from torchvision.utils import save_image
@@ -65,6 +66,15 @@ from videoseal.utils.image import create_diff_img, detect_wm_hm
 
 device = torch.device(
     'cuda') if torch.cuda.is_available() else torch.device('cpu')
+
+
+# Set NCCL environment variables within Python
+# Ensures that NCCL waits for operations to complete
+os.environ['NCCL_BLOCKING_WAIT'] = '1'
+# Set the timeout to 1200 seconds (20 minutes)
+os.environ['NCCL_TIMEOUT'] = '1200'
+
+# Now you can import and initialize your distributed training setup
 
 
 def get_dataset_parser(parser):
@@ -144,6 +154,8 @@ def get_parser():
     aa('--epochs', default=100, type=int, help='Number of total epochs to run')
     aa('--iter_per_epoch', default=10000, type=int,
        help='Number of iterations per epoch, made for very large datasets')
+    aa('--iter_per_valid', default=None, type=int,
+       help='Number of iterations per eval, made for very large eval datasets if None eval on all dataset')
     aa('--batch_size', default=16, type=int, help='Batch size')
     aa('--batch_size_eval', default=64, type=int, help='Batch size for evaluation')
     aa('--temperature', default=1.0, type=float,
@@ -504,7 +516,7 @@ def train_one_epoch(
         epoch, params.epochs, epoch_modality)
     metric_logger = ulogger.MetricLogger(delimiter="  ")
 
-    for it, batch_items in enumerate(metric_logger.log_every(train_loader, 1, header, max_iter=params.iter_per_epoch)):
+    for it, batch_items in enumerate(metric_logger.log_every(train_loader, 10, header, max_iter=params.iter_per_epoch)):
 
         if len(batch_items) == 3:
             imgs, masks, frames_positions = batch_items
@@ -788,7 +800,7 @@ def eval_one_epoch(
     metric_logger = ulogger.MetricLogger(delimiter="  ")
 
     aug_metrics = {}
-    for it, batch_items in enumerate(metric_logger.log_every(val_loader, 10, header)):
+    for it, batch_items in enumerate(metric_logger.log_every(val_loader, 10, header, max_iter=params.iter_per_valid)):
 
         if len(batch_items) == 3:
             imgs, masks, frames_positions = batch_items
