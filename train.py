@@ -497,7 +497,7 @@ def train_one_epoch(
     epoch: int,
     params: argparse.Namespace,
 ):
-    assert epoch_modality in [Modalities.IMAGE, "video"]
+    assert epoch_modality in [Modalities.IMAGE, Modalities.VIDEO]
     wam.train()
 
     header = 'Train - Epoch: [{}/{}] - Modality: {}'.format(
@@ -579,7 +579,7 @@ def train_one_epoch(
 
 
 @torch.no_grad()
-def eval_one_epoch(
+def new_eval_one_epoch(
     wam: Wam,
     val_loader: torch.utils.data.DataLoader,
     epoch_modality: str,
@@ -611,6 +611,8 @@ def eval_one_epoch(
         epoch, params.epochs, epoch_modality)
     metric_logger = ulogger.MetricLogger(delimiter="  ")
 
+    # save stats of the current augmentation
+    metrics = {}
     for it, batch_items in enumerate(metric_logger.log_every(val_loader, 10, header)):
 
         if len(batch_items) == 3:
@@ -693,6 +695,7 @@ def eval_one_epoch(
                         img_log_stats = {f"{k}_{current_key}": v for k,
                                          v in img_log_stats.items()}
 
+                        metrics = {**metrics, **img_log_stats}
                         # save some of the images or videos
                         if (epoch % params.saveimg_freq == 0 or params.only_eval) and it == 0 and udist.is_main_process():
                             save_image(unnormalize_img(imgs),
@@ -742,9 +745,180 @@ def eval_one_epoch(
                 save_vid(imgs_w, wmed_path, fps)
                 save_vid(imgs - imgs_w, wm_path, fps)
 
+            metrics = {**metrics, **video_log_stats}
+
         torch.cuda.synchronize()
-        metrics = {**img_log_stats, **video_log_stats}
         for name, loss in metrics.items():
+            metric_logger.update(**{name: loss})
+
+    metric_logger.synchronize_between_processes()
+    print("Averaged {} stats:".format('val'), metric_logger)
+    return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
+
+
+@torch.no_grad()
+def eval_one_epoch(
+    wam: Wam,
+    val_loader: torch.utils.data.DataLoader,
+    epoch_modality: str,
+    image_detection_loss: LPIPSWithDiscriminator,
+    epoch: int,
+    validation_augs: List,
+    validation_masks: torch.Tensor,
+    params: argparse.Namespace,
+) -> dict:
+    """ 
+    Evaluate the model on the validation set, with different augmentations
+
+    Args:
+        wam (Wam): the model
+        val_loader (torch.utils.data.DataLoader): the validation loader
+        epoch_modality (str): either `video` or `images`
+        image_detection_loss (LPIPSWithDiscriminator): the loss function
+        epoch (int): the current epoch
+        validation_augs (List): list of augmentations to apply
+        validation_masks (torch.Tensor): the validation masks, full of ones for now
+        params (argparse.Namespace): the parameters
+    """
+    if torch.is_tensor(validation_masks):
+        validation_masks = list(torch.unbind(validation_masks, dim=0))
+    wam.eval()
+    header = 'Val Full - Epoch: [{}/{}] - Modality: {}'.format(
+        epoch, params.epochs, epoch_modality)
+    metric_logger = ulogger.MetricLogger(delimiter="  ")
+
+    aug_metrics = {}
+    for it, batch_items in enumerate(metric_logger.log_every(val_loader, 10, header)):
+
+        if len(batch_items) == 3:
+            imgs, masks, frames_positions = batch_items
+        elif len(batch_items) == 2:
+            imgs, masks = batch_items
+
+        imgs = imgs.to(device, non_blocking=True)
+
+        # 1 message per video (all frames) or 1 message per image (batch item)
+        msgs = wam.get_random_msg(
+            1) if epoch_modality == Modalities.VIDEO else wam.get_random_msg(imgs.shape[0])  # b x k
+
+        msgs = msgs.to(imgs.device)
+
+        # generate watermarked images
+        if epoch_modality == Modalities.IMAGE:
+            deltas_w = wam.embedder(imgs, msgs)
+            imgs_w = wam.scaling_i * imgs + wam.scaling_w * deltas_w
+
+            # attenuate
+            if wam.attenuation is not None:
+                imgs_w = wam.attenuation(imgs, imgs_w)
+        elif epoch_modality == Modalities.VIDEO:
+            imgs_w = wam.video_embed(imgs, msgs)
+
+        for mask_id, masks in enumerate(validation_masks):
+            # watermark masking
+            masks = masks.to(imgs.device, non_blocking=True)  # 1 h w
+            if len(masks.shape) < 4:
+                masks = masks.unsqueeze(0).repeat(
+                    imgs_w.shape[0], 1, 1, 1)  # b 1 h w
+            imgs_masked = imgs_w * masks + imgs * (1 - masks)
+
+            for transform, strengths in validation_augs:
+                # Create an instance of the transformation
+                transform_instance = transform()
+
+                for strength in strengths:
+                    do_resize = True  # hardcode for now, might need to change
+                    if not do_resize:
+                        imgs_aug, masks_aug = transform_instance(
+                            imgs_masked, masks, strength)
+                    else:
+                        # h, w = imgs_w.shape[-2:]
+                        h, w = params.img_size_extractor, params.img_size_extractor
+                        imgs_aug, masks_aug = transform_instance(
+                            imgs_masked, masks, strength)
+                        if imgs_aug.shape[-2:] != (h, w):
+                            imgs_aug = nn.functional.interpolate(imgs_aug, size=(
+                                h, w), mode='bilinear', align_corners=False, antialias=True)
+                            masks_aug = nn.functional.interpolate(masks_aug, size=(
+                                h, w), mode='bilinear', align_corners=False, antialias=True)
+                    selected_aug = str(
+                        transform.__name__).lower() + '_' + str(strength)
+
+                    # extract watermark
+                    if epoch_modality == Modalities.IMAGE:
+                        preds = wam.detector(imgs_aug)
+                    elif epoch_modality == Modalities.VIDEO:
+                        preds = wam.video_detect(imgs_aug)
+
+                    mask_preds = preds[:, 0:1]  # b 1 ...
+                    bit_preds = preds[:, 1:]  # b k ...
+
+                    log_stats = {}
+                    if params.nbits > 0:
+                        bit_accuracy_ = bit_accuracy(
+                            bit_preds,
+                            msgs,
+                            masks_aug
+                        ).nanmean().item()
+                        log_stats[f'bit_acc'] = bit_accuracy_
+
+                    if params.lambda_det > 0:
+                        iou0 = iou(mask_preds, masks, label=0).mean().item()
+                        iou1 = iou(mask_preds, masks, label=1).mean().item()
+                        log_stats.update({
+                            f'acc': accuracy(mask_preds, masks).mean().item(),
+                            f'miou': (iou0 + iou1) / 2,
+                        })
+
+                    # add video evaluation metrics
+                    if epoch_modality == Modalities.VIDEO:
+                        log_stats[f'psnr'] = psnr(
+                            imgs_w, imgs).mean().item()
+                        log_stats[f'ssim'] = ssim(
+                            imgs_w, imgs).mean().item()
+
+                    current_key = f"mask={mask_id}_aug={selected_aug}"
+                    log_stats = {f"{k}_{current_key}": v for k,
+                                 v in log_stats.items()}
+
+                    # save stats of the current augmentation
+                    aug_metrics = {**aug_metrics, **log_stats}
+
+                    # save some of the images
+                    if (epoch % params.saveimg_freq == 0 or params.only_eval) and it == 0 and udist.is_main_process():
+                        if epoch_modality == Modalities.IMAGE:
+                            save_image(unnormalize_img(imgs),
+                                       os.path.join(params.output_dir, f'{epoch:03}_{it:03}_val_0_ori.png'), nrow=8)
+                            save_image(unnormalize_img(imgs_w),
+                                       os.path.join(params.output_dir, f'{epoch:03}_{it:03}_val_1_w.png'), nrow=8)
+                            save_image(create_diff_img(imgs, imgs_w),
+                                       os.path.join(params.output_dir, f'{epoch:03}_{it:03}_val_2_diff.png'), nrow=8)
+                            save_image(unnormalize_img(imgs_aug),
+                                       os.path.join(params.output_dir, f'{epoch:03}_{it:03}_val_3_aug.png'), nrow=8)
+                            if params.lambda_det > 0:
+                                save_image(masks,
+                                           os.path.join(params.output_dir, f'{epoch:03}_{it:03}_val_4_mask.png'), nrow=8)
+                                save_image(F.sigmoid(mask_preds / params.temperature),
+                                           os.path.join(params.output_dir, f'{epoch:03}_{it:03}_val_5_pred.png'), nrow=8)
+                        elif epoch_modality == Modalities.VIDEO:
+                            raw_path = os.path.join(
+                                params.output_dir, f'{epoch:03}_{it:03}_raw.mp4')
+                            wmed_path = os.path.join(
+                                params.output_dir, f'{epoch:03}_{it:03}_wmed.mp4')
+                            wm_path = os.path.join(
+                                params.output_dir, f'{epoch:03}_{it:03}_wm.mp4')
+
+                            fps = 24 // 1
+                            save_vid(imgs, raw_path, fps)
+                            save_vid(imgs_w, wmed_path, fps)
+                            save_vid(imgs - imgs_w, wm_path, fps)
+
+        torch.cuda.synchronize()
+        for name, loss in aug_metrics.items():
+            # if name == 'bit_acc' and math.isnan(loss):
+            #     continue
+            # if name in ["decode_loss", "decode_scale"] and loss == -1:
+            #     continue  # Skip this update or replace with a default value
             metric_logger.update(**{name: loss})
 
     metric_logger.synchronize_between_processes()
