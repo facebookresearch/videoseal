@@ -71,8 +71,8 @@ device = torch.device(
 # Set NCCL environment variables within Python
 # Ensures that NCCL waits for operations to complete
 os.environ['NCCL_BLOCKING_WAIT'] = '1'
-# Set the timeout to 1200 seconds (20 minutes)
-os.environ['NCCL_TIMEOUT'] = '1200'
+# Set the timeout to 12000 seconds (200 minutes)
+os.environ['NCCL_TIMEOUT'] = '12000'
 
 # Now you can import and initialize your distributed training setup
 
