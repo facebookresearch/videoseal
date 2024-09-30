@@ -111,7 +111,7 @@ class VideoDataset(Dataset):
 
         # Initialize video buffer
         # Set the maximum size of the buffer
-        self.video_buffer = LRUDict(maxsize=10)
+        self.video_buffer = LRUDict(maxsize=4)
 
     def __getitem__(self, index):
         if self.flatten_clips_to_frames:
