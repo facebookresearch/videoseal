@@ -33,6 +33,7 @@ from typing import List
 
 import numpy as np
 import omegaconf
+import psutil
 import torch
 import torch.distributed as dist
 import torch.nn as nn
@@ -68,13 +69,17 @@ device = torch.device(
     'cuda') if torch.cuda.is_available() else torch.device('cpu')
 
 
-# Set NCCL environment variables within Python
-# Ensures that NCCL waits for operations to complete
-os.environ['NCCL_BLOCKING_WAIT'] = '1'
-# Set the timeout to 12000 seconds (200 minutes)
-os.environ['NCCL_TIMEOUT'] = '12000'
-
-# Now you can import and initialize your distributed training setup
+def print_system_stats():
+    """
+    Prints the number of CPUs being used and the current memory usage.
+    """
+    cpu_count = psutil.cpu_count()
+    memory = psutil.virtual_memory()
+    print(f"Number of CPUs used: {cpu_count}")
+    print(f"Total memory: {memory.total / (1024 ** 3):.2f} GB")
+    print(f"Available memory: {memory.available / (1024 ** 3):.2f} GB")
+    print(f"Used memory: {memory.used / (1024 ** 3):.2f} GB")
+    print(f"Memory usage percentage: {memory.percent}%")
 
 
 def get_dataset_parser(parser):
@@ -518,6 +523,8 @@ def train_one_epoch(
 
     for it, batch_items in enumerate(metric_logger.log_every(train_loader, 10, header, max_iter=params.iter_per_epoch)):
 
+        print_system_stats()
+
         if len(batch_items) == 3:
             imgs, masks, frames_positions = batch_items
         elif len(batch_items) == 2:
@@ -626,6 +633,8 @@ def new_eval_one_epoch(
     # save stats of the current augmentation
     metrics = {}
     for it, batch_items in enumerate(metric_logger.log_every(val_loader, 10, header)):
+
+        print_system_stats()
 
         if len(batch_items) == 3:
             imgs, masks, frames_positions = batch_items
