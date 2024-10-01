@@ -474,19 +474,19 @@ def main(params):
             with open(os.path.join(params.output_dir, 'log.txt'), 'a') as f:
                 f.write(json.dumps(log_stats) + "\n")
 
-        # print("Saving Checkpoint..")
-        # save_dict = {
-        #     'epoch': epoch + 1,
-        #     'model': wam.state_dict(),
-        #     'optimizer': optimizer.state_dict(),
-        #     'optimizer_d': optimizer_d.state_dict(),
-        #     'scheduler': scheduler.state_dict() if scheduler is not None else None,
-        # }
-        # udist.save_on_master(save_dict, os.path.join(
-        #     params.output_dir, 'checkpoint.pth'))
-        # if params.saveckpt_freq and epoch % params.saveckpt_freq == 0:
-        #     udist.save_on_master(save_dict, os.path.join(
-        #         params.output_dir, f'checkpoint{epoch:03}.pth'))
+        print("Saving Checkpoint..")
+        save_dict = {
+            'epoch': epoch + 1,
+            'model': wam.state_dict(),
+            'optimizer': optimizer.state_dict(),
+            'optimizer_d': optimizer_d.state_dict(),
+            'scheduler': scheduler.state_dict() if scheduler is not None else None,
+        }
+        udist.save_on_master(save_dict, os.path.join(
+            params.output_dir, 'checkpoint.pth'))
+        if params.saveckpt_freq and epoch % params.saveckpt_freq == 0:
+            udist.save_on_master(save_dict, os.path.join(
+                params.output_dir, f'checkpoint{epoch:03}.pth'))
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
@@ -613,8 +613,8 @@ def eval_one_epoch(
         epoch, params.epochs, epoch_modality)
     metric_logger = ulogger.MetricLogger(delimiter="  ")
 
-    aug_metrics = {}
     for it, batch_items in enumerate(metric_logger.log_every(val_loader, 10, header)):
+        aug_metrics = {}
 
         if it * params.batch_size_eval >= 100:
             break
@@ -631,6 +631,13 @@ def eval_one_epoch(
         # generate watermarked images
         deltas_w = wam.embedder(imgs, msgs)
         imgs_w = wam.scaling_i * imgs + wam.scaling_w * deltas_w
+
+        # # add video evaluation metrics
+        # if epoch_modality == Modalities.VIDEO:
+        #     aug_metrics['psnr'] = psnr(
+        #         imgs_w, imgs).mean().item()
+        #     aug_metrics['ssim'] = ssim(
+        #         imgs_w, imgs).mean().item()
 
         # attenuate
         if wam.attenuation is not None:
@@ -712,13 +719,6 @@ def eval_one_epoch(
                                        os.path.join(params.output_dir, f'{epoch:03}_{it:03}_val_4_mask.png'), nrow=8)
                             save_image(F.sigmoid(mask_preds / params.temperature),
                                        os.path.join(params.output_dir, f'{epoch:03}_{it:03}_val_5_pred.png'), nrow=8)
-
-        # add video evaluation metrics
-        if epoch_modality == Modalities.VIDEO:
-            aug_metrics['psnr'] = psnr(
-                imgs_w, imgs).mean().item()
-            aug_metrics['ssim'] = ssim(
-                imgs_w, imgs).mean().item()
 
         torch.cuda.synchronize()
         for name, loss in aug_metrics.items():
