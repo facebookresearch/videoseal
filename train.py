@@ -765,8 +765,8 @@ def eval_one_epoch(
                             save_vid(imgs_w, wmed_path, fps)
                             save_vid(imgs - imgs_w, wm_path, fps)
 
-        print("synchronizing cuda kernels.")
-        torch.cuda.synchronize()
+        # print("synchronizing cuda kernels.")
+        # torch.cuda.synchronize()
         for name, loss in aug_metrics.items():
             # if name == 'bit_acc' and math.isnan(loss):
             #     continue
