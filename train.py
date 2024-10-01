@@ -556,10 +556,6 @@ def train_one_epoch(
             "ssim": ssim(outputs["imgs_w"], imgs).mean().item(),
         }
 
-        # if epoch_modality == Modalities.VIDEO:
-        #     print("calculating ssim")
-        #     print("ssim calculated")
-
         bit_preds = outputs["preds"][:, 1:]  # b k h w
         mask_preds = outputs["preds"][:, 0:1]  # b 1 h w
 
@@ -638,12 +634,11 @@ def eval_one_epoch(
         deltas_w = wam.embedder(imgs, msgs)
         imgs_w = wam.scaling_i * imgs + wam.scaling_w * deltas_w
 
-        # # add video evaluation metrics
-        # if epoch_modality == Modalities.VIDEO:
-        #     aug_metrics['psnr'] = psnr(
-        #         imgs_w, imgs).mean().item()
-        #     aug_metrics['ssim'] = ssim(
-        #         imgs_w, imgs).mean().item()
+        # quality metrics
+        aug_metrics['psnr'] = psnr(
+            imgs_w, imgs).mean().item()
+        aug_metrics['ssim'] = ssim(
+            imgs_w, imgs).mean().item()
 
         # attenuate
         if wam.attenuation is not None:
