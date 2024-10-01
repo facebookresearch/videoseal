@@ -587,8 +587,8 @@ def train_one_epoch(
 def eval_one_epoch(
     wam: Wam,
     val_loader: torch.utils.data.DataLoader,
-    image_detection_loss: LPIPSWithDiscriminator,
     epoch_modality: str,
+    image_detection_loss: LPIPSWithDiscriminator,
     epoch: int,
     validation_augs: List,
     validation_masks: torch.Tensor,
