@@ -702,21 +702,27 @@ def eval_one_epoch(
                     # save stats of the current augmentation
                     aug_metrics = {**aug_metrics, **log_stats}
 
-                    # save some of the images
-                    if (epoch % params.saveimg_freq == 0 or params.only_eval) and it == 0 and udist.is_main_process():
-                        save_image(unnormalize_img(imgs),
-                                   os.path.join(params.output_dir, f'{epoch:03}_{it:03}_val_0_ori.png'), nrow=8)
-                        save_image(unnormalize_img(imgs_w),
-                                   os.path.join(params.output_dir, f'{epoch:03}_{it:03}_val_1_w.png'), nrow=8)
-                        save_image(create_diff_img(imgs, imgs_w),
-                                   os.path.join(params.output_dir, f'{epoch:03}_{it:03}_val_2_diff.png'), nrow=8)
-                        save_image(unnormalize_img(imgs_aug),
-                                   os.path.join(params.output_dir, f'{epoch:03}_{it:03}_val_3_aug.png'), nrow=8)
-                        if params.lambda_det > 0:
-                            save_image(masks,
-                                       os.path.join(params.output_dir, f'{epoch:03}_{it:03}_val_4_mask.png'), nrow=8)
-                            save_image(F.sigmoid(mask_preds / params.temperature),
-                                       os.path.join(params.output_dir, f'{epoch:03}_{it:03}_val_5_pred.png'), nrow=8)
+        # save some of the images
+        if (epoch % params.saveimg_freq == 0 or params.only_eval) and it == 0 and udist.is_main_process():
+            save_image(unnormalize_img(imgs),
+                       os.path.join(params.output_dir, f'{epoch:03}_{it:03}_val_0_ori.png'), nrow=8)
+            save_image(unnormalize_img(imgs_w),
+                       os.path.join(params.output_dir, f'{epoch:03}_{it:03}_val_1_w.png'), nrow=8)
+            save_image(create_diff_img(imgs, imgs_w),
+                       os.path.join(params.output_dir, f'{epoch:03}_{it:03}_val_2_diff.png'), nrow=8)
+
+            if epoch_modality == Modalities.VIDEO:
+                raw_path = os.path.join(
+                    params.output_dir, f'{epoch:03}_{it:03}_raw.mp4')
+                wmed_path = os.path.join(
+                    params.output_dir, f'{epoch:03}_{it:03}_wmed.mp4')
+                wm_path = os.path.join(
+                    params.output_dir, f'{epoch:03}_{it:03}_wm.mp4')
+
+                fps = 24 // 1
+                save_vid(imgs, raw_path, fps)
+                save_vid(imgs_w, wmed_path, fps)
+                save_vid(imgs - imgs_w, wm_path, fps)
 
         torch.cuda.synchronize()
         for name, loss in aug_metrics.items():
