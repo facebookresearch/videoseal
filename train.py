@@ -494,18 +494,19 @@ def main(params):
             with open(os.path.join(params.output_dir, 'log.txt'), 'a') as f:
                 f.write(json.dumps(log_stats) + "\n")
 
-        save_dict = {
-            'epoch': epoch + 1,
-            'model': wam.state_dict(),
-            'optimizer': optimizer.state_dict(),
-            'optimizer_d': optimizer_d.state_dict(),
-            'scheduler': scheduler.state_dict() if scheduler is not None else None,
-        }
-        udist.save_on_master(save_dict, os.path.join(
-            params.output_dir, 'checkpoint.pth'))
-        if params.saveckpt_freq and epoch % params.saveckpt_freq == 0:
-            udist.save_on_master(save_dict, os.path.join(
-                params.output_dir, f'checkpoint{epoch:03}.pth'))
+        # print("Saving Checkpoint..")
+        # save_dict = {
+        #     'epoch': epoch + 1,
+        #     'model': wam.state_dict(),
+        #     'optimizer': optimizer.state_dict(),
+        #     'optimizer_d': optimizer_d.state_dict(),
+        #     'scheduler': scheduler.state_dict() if scheduler is not None else None,
+        # }
+        # udist.save_on_master(save_dict, os.path.join(
+        #     params.output_dir, 'checkpoint.pth'))
+        # if params.saveckpt_freq and epoch % params.saveckpt_freq == 0:
+        #     udist.save_on_master(save_dict, os.path.join(
+        #         params.output_dir, f'checkpoint{epoch:03}.pth'))
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
