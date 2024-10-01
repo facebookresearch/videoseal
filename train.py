@@ -215,7 +215,9 @@ def main(params):
 
     # Print the arguments
     print("__git__:{}".format(utils.get_sha()))
-    print("__log__:{}".format(json.dumps(vars(params))))
+    print(params)
+    print("__log__:{}".format(json.dumps(
+        omegaconf.OmegaConf.to_container(params, resolve=True))))
 
     # Copy the config files to the output dir
     if udist.is_main_process():
@@ -585,7 +587,7 @@ def train_one_epoch(
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
 
 
-@torch.no_grad()
+@ torch.no_grad()
 def eval_one_epoch(
     wam: Wam,
     val_loader: torch.utils.data.DataLoader,
@@ -596,7 +598,7 @@ def eval_one_epoch(
     validation_masks: torch.Tensor,
     params: argparse.Namespace,
 ) -> dict:
-    """ 
+    """
     Evaluate the model on the validation set, with different augmentations
 
     Args:
