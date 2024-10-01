@@ -3,7 +3,7 @@
     "git": "git@github.com:fairinternal/videoseal.git",
     "preload": "MKL_THREADING_LAYER=GNU",
     "precmd": [],
-    "commit": "main",
+    "commit": "speed-bench",
     "params": {
         "img_size":         [256, 512, 1024, 2048],
         "img_size_work":    [160, 256]
