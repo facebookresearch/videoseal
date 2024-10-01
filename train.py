@@ -553,10 +553,12 @@ def train_one_epoch(
             **logs,
             'psnr': psnr(outputs["imgs_w"], imgs).mean().item(),
             'lr': optimizers[0].param_groups[0]['lr'],
+            "ssim": ssim(outputs["imgs_w"], imgs).mean().item(),
         }
 
-        if epoch_modality == Modalities.VIDEO:
-            log_stats["ssim"] = ssim(outputs["imgs_w"], imgs).mean().item()
+        # if epoch_modality == Modalities.VIDEO:
+        #     print("calculating ssim")
+        #     print("ssim calculated")
 
         bit_preds = outputs["preds"][:, 1:]  # b k h w
         mask_preds = outputs["preds"][:, 0:1]  # b 1 h w
