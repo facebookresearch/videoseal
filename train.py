@@ -69,26 +69,6 @@ device = torch.device(
     'cuda') if torch.cuda.is_available() else torch.device('cpu')
 
 
-# Set NCCL_DEBUG to INFO for more detailed logs
-os.environ['NCCL_DEBUG'] = 'INFO'
-
-# Alternatively, set NCCL_DEBUG to DETAIL for even more detailed logs
-os.environ['NCCL_DEBUG'] = 'DETAIL'
-
-
-def print_system_stats():
-    """
-    Prints the number of CPUs being used and the current memory usage.
-    """
-    cpu_count = psutil.cpu_count()
-    memory = psutil.virtual_memory()
-    print(f"Number of CPUs used: {cpu_count}")
-    print(f"Total memory: {memory.total / (1024 ** 3):.2f} GB")
-    print(f"Available memory: {memory.available / (1024 ** 3):.2f} GB")
-    print(f"Used memory: {memory.used / (1024 ** 3):.2f} GB")
-    print(f"Memory usage percentage: {memory.percent}%")
-
-
 def get_dataset_parser(parser):
     """
     Adds dataset-related arguments to the parser.
@@ -530,8 +510,6 @@ def train_one_epoch(
     metric_logger = ulogger.MetricLogger(delimiter="  ")
 
     for it, batch_items in enumerate(metric_logger.log_every(train_loader, 10, header, max_iter=params.iter_per_epoch)):
-
-        print_system_stats()
 
         if len(batch_items) == 3:
             imgs, masks, frames_positions = batch_items
