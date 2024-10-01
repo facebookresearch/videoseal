@@ -690,13 +690,6 @@ def eval_one_epoch(
                             f'miou': (iou0 + iou1) / 2,
                         })
 
-                    # add video evaluation metrics
-                    if epoch_modality == Modalities.VIDEO:
-                        log_stats[f'psnr'] = psnr(
-                            imgs_w, imgs).mean().item()
-                        log_stats[f'ssim'] = ssim(
-                            imgs_w, imgs).mean().item()
-
                     current_key = f"mask={mask_id}_aug={selected_aug}"
                     log_stats = {f"{k}_{current_key}": v for k,
                                  v in log_stats.items()}
@@ -719,6 +712,13 @@ def eval_one_epoch(
                                        os.path.join(params.output_dir, f'{epoch:03}_{it:03}_val_4_mask.png'), nrow=8)
                             save_image(F.sigmoid(mask_preds / params.temperature),
                                        os.path.join(params.output_dir, f'{epoch:03}_{it:03}_val_5_pred.png'), nrow=8)
+
+        # add video evaluation metrics
+        if epoch_modality == Modalities.VIDEO:
+            aug_metrics['psnr'] = psnr(
+                imgs_w, imgs).mean().item()
+            aug_metrics['ssim'] = ssim(
+                imgs_w, imgs).mean().item()
 
         torch.cuda.synchronize()
         for name, loss in aug_metrics.items():
