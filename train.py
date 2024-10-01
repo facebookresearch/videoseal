@@ -764,8 +764,8 @@ def eval_one_epoch(
                             save_vid(imgs_w, wmed_path, fps)
                             save_vid(imgs - imgs_w, wm_path, fps)
 
-        # print("synchronizing cuda kernels.")
-        # torch.cuda.synchronize()
+        print("synchronizing cuda kernels.")
+        torch.cuda.synchronize()
         for name, loss in aug_metrics.items():
             # if name == 'bit_acc' and math.isnan(loss):
             #     continue
@@ -773,6 +773,8 @@ def eval_one_epoch(
             #     continue  # Skip this update or replace with a default value
             metric_logger.update(**{name: loss})
 
+    print(f"done metrics calculation {metric_logger}")
+    print("synchronizing metric logger")
     metric_logger.synchronize_between_processes()
     print("Averaged {} stats:".format('val'), metric_logger)
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
