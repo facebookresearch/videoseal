@@ -215,7 +215,7 @@ def main(params):
 
     # Print the arguments
     print("__git__:{}".format(utils.get_sha()))
-    print("__log__:{}".format(omegaconf.OmegaConf.to_yaml(params)))
+    print("__log__:{}".format(json.dumps(vars(params))))
 
     # Copy the config files to the output dir
     if udist.is_main_process():
