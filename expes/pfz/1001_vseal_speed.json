@@ -1,12 +1,13 @@
 {
-    "cmd": "/private/home/pfz/miniconda3/envs/img_wm/bin/python videoseal/evals/speed.py",
+    "cmd": "/private/home/pfz/miniconda3/envs/img/bin/python videoseal/evals/speed.py",
     "git": "git@github.com:fairinternal/videoseal.git",
     "preload": "MKL_THREADING_LAYER=GNU",
     "precmd": [],
     "commit": "speed-bench",
     "params": {
         "img_size":         [256, 512, 1024, 2048],
-        "img_size_work":    [160, 256]
+        "img_size_work":    [160, 256],
+        "device":           "cpu"
     },
     "machine": {
         "partition":        "learnlab",

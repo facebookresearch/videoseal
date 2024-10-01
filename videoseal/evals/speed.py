@@ -14,6 +14,11 @@ import omegaconf
 from videoseal.models import build_embedder, build_extractor, Embedder, Extractor
 from videoseal.data.transforms import normalize_img, unnormalize_img
 
+def sync(device):
+    """ wait for the GPU to finish processing, before measuring time """
+    if device.startswith('cuda'):
+        torch.cuda.synchronize()
+
 def benchmark_model(model, img_size, data_loader, device):
     model.to(device)
     model.eval()
@@ -28,13 +33,13 @@ def benchmark_model(model, img_size, data_loader, device):
             # interpolate
             start_time = time.time()
             imgs = F.interpolate(imgs, size=(img_size, img_size), mode='bilinear', align_corners=False)
-            torch.cuda.synchronize()
+            sync(device)
             end_time = time.time()
             times_interp.append(end_time - start_time)
             # normalize
             start_time = time.time()
             imgs = normalize_img(imgs)
-            torch.cuda.synchronize()
+            sync(device)
             end_time = time.time()
             times_norm.append(end_time - start_time)
             # forward pass
@@ -46,19 +51,19 @@ def benchmark_model(model, img_size, data_loader, device):
             elif isinstance(model, Extractor):
                 start_time = time.time()
                 _ = model(imgs)
-            torch.cuda.synchronize()
+            sync(device)
             end_time = time.time()
             times.append(end_time - start_time)
             # unnormalize
             start_time = time.time()
             imgs = unnormalize_img(imgs)
-            torch.cuda.synchronize()
+            sync(device)
             end_time = time.time()
             times_norm[-1] += end_time - start_time
             # interpolate
             start_time = time.time()
             imgs = F.interpolate(imgs, size=(h_orig, w_orig), mode='bilinear', align_corners=False)
-            torch.cuda.synchronize()
+            sync(device)
             end_time = time.time()
             times_interp[-1] += end_time - start_time
             
