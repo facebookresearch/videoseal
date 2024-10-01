@@ -69,6 +69,13 @@ device = torch.device(
     'cuda') if torch.cuda.is_available() else torch.device('cpu')
 
 
+# Set NCCL_DEBUG to INFO for more detailed logs
+os.environ['NCCL_DEBUG'] = 'INFO'
+
+# Alternatively, set NCCL_DEBUG to DETAIL for even more detailed logs
+os.environ['NCCL_DEBUG'] = 'DETAIL'
+
+
 def print_system_stats():
     """
     Prints the number of CPUs being used and the current memory usage.
@@ -757,7 +764,8 @@ def eval_one_epoch(
                             save_vid(imgs_w, wmed_path, fps)
                             save_vid(imgs - imgs_w, wm_path, fps)
 
-        torch.cuda.synchronize()
+        # print("synchronizing cuda kernels.")
+        # torch.cuda.synchronize()
         for name, loss in aug_metrics.items():
             # if name == 'bit_acc' and math.isnan(loss):
             #     continue
