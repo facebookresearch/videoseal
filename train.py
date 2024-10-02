@@ -360,7 +360,7 @@ def main(params):
                                                   frame_step=4,
                                                   # TODO: Find a smart way to shuffle while making cache efficient
                                                   shuffle=False,
-                                                  num_clips=20,
+                                                  num_clips=16,
                                                   )
         video_val_loader = get_video_dataloader(params.video_dataset_config.val_dir,
                                                 batch_size=params.batch_size,
@@ -375,7 +375,7 @@ def main(params):
                                                 # TODO: Find a smart way to shuffle while making cache efficient
                                                 shuffle=False,
                                                 frame_step=4,
-                                                num_clips=20,
+                                                num_clips=16,
                                                 )
 
     # optionally resume training
