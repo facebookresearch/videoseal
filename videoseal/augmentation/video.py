@@ -41,6 +41,7 @@ class VideoCompression(nn.Module):
         frames = unnormalize_img(frames)
         frames = frames.clamp(0, 1).permute(0, 2, 3, 1)  # t c h w -> t w h c
         frames = (frames * 255).to(torch.uint8).detach().cpu().numpy()
+        return orig_frames, mask
         # Create an in-memory bytes buffer
         buffer = io.BytesIO()
         # Create a PyAV container for output in memory
@@ -84,8 +85,8 @@ class VideoCompression(nn.Module):
             (output_frames - orig_frames).detach()
         # del orig_frames  # Free memory
         if self.return_aux:
-            return orig_frames, mask, file_size
-        return orig_frames, mask
+            return compressed_frames, mask, file_size
+        return compressed_frames, mask
 
     def __repr__(self) -> str:
         return f"Compressor(codec={self.codec}, crf={self.crf}, fps={self.fps})"
