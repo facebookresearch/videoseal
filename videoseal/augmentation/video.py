@@ -62,8 +62,6 @@ class VideoCompression(nn.Module):
             container.mux(packet)
         container.close()
 
-        return orig_frames, mask
-
         if self.return_aux:
             # Get the size of the buffer
             file_size = buffer.getbuffer().nbytes
@@ -75,6 +73,9 @@ class VideoCompression(nn.Module):
             img = frame.to_ndarray(format='rgb24')
             output_frames.append(img)
         container.close()
+
+        return orig_frames, mask
+
         del frames  # Free memory
         # Postprocess the output frames
         output_frames = np.stack(output_frames) / 255
@@ -84,7 +85,7 @@ class VideoCompression(nn.Module):
 
         # Apply skip gradients
         compressed_frames = orig_frames + \
-            (output_frames - orig_frames).detach()
+            (orig_frames - output_frames).detach()
         # del orig_frames  # Free memory
         if self.return_aux:
             return compressed_frames, mask, file_size
