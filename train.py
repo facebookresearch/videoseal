@@ -523,7 +523,8 @@ def train_one_epoch(
 
         # forward
         # TODO deal with the usecase of batch of videos, for now we support flattened videos
-        outputs = wam(imgs, masks)
+        outputs = wam(imgs, masks, is_video=(
+            epoch_modality == Modalities.VIDEO))
 
         outputs["preds"] /= params.temperature
 
