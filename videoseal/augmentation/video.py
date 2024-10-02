@@ -118,9 +118,8 @@ class VideoCompressorAugmenter(VideoCompression):
 
     def forward(self, frames, mask=None) -> torch.Tensor:
         """Compress and decompress the input video frames with a randomly selected CRF value."""
-        # crf = self.get_random_crf()
-        # self.crf = crf
-        self.crf = 23
+        crf = self.get_random_crf()
+        self.crf = crf
         output, mask = super().forward(frames, mask)
         return output, mask
 
