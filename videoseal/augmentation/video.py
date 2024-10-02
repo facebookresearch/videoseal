@@ -75,20 +75,18 @@ class VideoCompression(nn.Module):
                     img = frame.to_ndarray(format='rgb24')
                     output_frames.append(img)
 
-        print("<<<<succesfull buffer at least once>>")
-        return orig_frames, mask
-
         del frames  # Free memory
         # Postprocess the output frames
         output_frames = np.stack(output_frames) / 255
         output_frames = torch.tensor(output_frames, dtype=torch.float32)
         output_frames = output_frames.permute(0, 3, 1, 2)  # t w h c -> t c h w
         output_frames = normalize_img(output_frames)
+        output_frames = output_frames.to(device)
 
         # Apply skip gradients
         compressed_frames = orig_frames + \
             (orig_frames - output_frames).detach()
-        # del orig_frames  # Free memory
+        del orig_frames  # Free memory
         if self.return_aux:
             return compressed_frames, mask, file_size
         return compressed_frames, mask

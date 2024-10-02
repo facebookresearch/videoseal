@@ -337,9 +337,15 @@ def main(params):
                                                        shuffle=False,
                                                        random_nb_object=False)
     if params.modality in [Modalities.VIDEO, Modalities.HYBRID]:
+        
+        # TODO: allow larger number of workers (params.workers)
+        # Currently set = 0 monothread causes segfaults with video compression augmentation
+        # tested : VideoDatasets performance doesn't really increase with more workers 
+        video_loader_num_workers = 0  
+
         video_train_loader = get_video_dataloader(params.video_dataset_config.train_dir,
                                                   batch_size=params.batch_size,
-                                                  num_workers=params.workers,
+                                                  num_workers=video_loader_num_workers,
                                                   transform=train_transform,
                                                   mask_transform=train_mask_transform,
                                                   output_resolution=(
@@ -354,7 +360,7 @@ def main(params):
                                                   )
         video_val_loader = get_video_dataloader(params.video_dataset_config.val_dir,
                                                 batch_size=params.batch_size,
-                                                num_workers=params.workers,
+                                                num_workers=video_loader_num_workers,
                                                 transform=val_transform,
                                                 mask_transform=val_mask_transform,
                                                 output_resolution=(
