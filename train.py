@@ -18,7 +18,8 @@ Args inventory:
     --embedder_model vae_sd --embedder_config configs/embedder_sd.yaml
     --local_rank 0  --only_eval True --scaling_w 0.4 --embedder_model vae_small --extractor_model sam_small --augmentation_config configs/all_augs.yaml --resume_from /checkpoint/pfz/2024_logs/0708_segmark_bigger_vae/_scaling_w=0.4_embedder_model=vae_small_extractor_model=sam_small/checkpoint.pth
     --local_rank 0  --only_eval True --scaling_w 2.0 --scaling_i 1.0 --nbits 16 --lambda_dec 6.0 --lambda_det 1.0 --lambda_d 0.0 --lambda_i 0.0 --perceptual_loss none --seed 0 --scheduler none --optimizer AdamW,lr=1e-5 --epochs 50 --batch_size_eval 32 --batch_size 16 --img_size 256 --attenuation jnd_1_3 --resume_from /checkpoint/pfz/2024_logs/0708_segmark_bigger_vae/_scaling_w=0.4_embedder_model=vae_small_extractor_model=sam_small/checkpoint.pth --embedder_model vae_small --extractor_model sam_small --augmentation_config configs/all_augs.yaml
-
+    --video_dataset sa-v
+    --image_dataset coco
 """
 
 import argparse
@@ -534,7 +535,8 @@ def train_one_epoch(
 
         # forward
         # TODO deal with the usecase of batch of videos, for now we support flattened videos
-        outputs = wam(imgs, masks)
+        outputs = wam(imgs, masks, is_video=(
+            epoch_modality == Modalities.VIDEO))
 
         outputs["preds"] /= params.temperature
 
