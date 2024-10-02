@@ -18,6 +18,7 @@ from .geometric import (Crop, HorizontalFlip, Identity, Perspective, Resize,
 from .masks import get_mask_embedder
 from .valuemetric import (JPEG, Brightness, Contrast, GaussianBlur, Hue,
                           MedianFilter, Saturation)
+from .video import VideoCompressorAugmenter
 
 name2aug = {
     'rotate': Rotate,
@@ -33,6 +34,7 @@ name2aug = {
     'contrast': Contrast,
     'saturation': Saturation,
     'hue': Hue,
+    'video_compression': VideoCompressorAugmenter,
     # 'bmshj2018': bmshj2018,
 }
 

@@ -8,6 +8,7 @@ augs:
   jpeg:           1
   resize:         1
   crop:           1
+  video_compression: 1
   rotate:         0
   hflip:          0
   perspective:    0
@@ -54,3 +55,5 @@ augs_params:
   hue:
     min_factor: -0.1
     max_factor: 0.1
+  video_compression:
+    crf_values: [28, 34, 40, 46]
