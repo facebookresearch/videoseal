@@ -66,13 +66,29 @@ class VideoCompression(nn.Module):
             # Get the size of the buffer
             file_size = buffer.getbuffer().nbytes
         # Read from the in-memory buffer
-        buffer.seek(0)
-        container = av.open(buffer, mode='r')
-        output_frames = []
-        for frame in container.decode(video=0):
-            img = frame.to_ndarray(format='rgb24')
-            output_frames.append(img)
-        container.close()
+
+        # buffer.seek(0)
+        # container = av.open(buffer, mode='r')
+        # output_frames = []
+        # for frame in container.decode(video=0):
+        #     img = frame.to_ndarray(format='rgb24')
+        #     output_frames.append(img)
+        # container.close()
+
+        import faulthandler
+
+        faulthandler.enable()
+
+        try:
+            buffer.seek(0)
+            container = av.open(buffer, mode='r')
+            output_frames = []
+            for frame in container.decode(video=0):
+                img = frame.to_ndarray(format='rgb24')
+                output_frames.append(img)
+            container.close()
+        except Exception as e:
+            print(f"Error occurred: {e}")
 
         return orig_frames, mask
 
