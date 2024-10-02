@@ -41,7 +41,6 @@ class VideoCompression(nn.Module):
         frames = unnormalize_img(frames)
         frames = frames.clamp(0, 1).permute(0, 2, 3, 1)  # t c h w -> t w h c
         frames = (frames * 255).to(torch.uint8).detach().cpu().numpy()
-        return orig_frames, mask
         # Create an in-memory bytes buffer
         buffer = io.BytesIO()
         # Create a PyAV container for output in memory
@@ -57,6 +56,9 @@ class VideoCompression(nn.Module):
             frame = av.VideoFrame.from_ndarray(frame_arr, format='rgb24')
             for packet in stream.encode(frame):
                 container.mux(packet)
+
+        return orig_frames, mask
+
         # Finalize the file
         for packet in stream.encode():
             container.mux(packet)
