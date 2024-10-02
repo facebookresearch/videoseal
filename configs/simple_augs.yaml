@@ -8,7 +8,7 @@ augs:
   jpeg:           1
   resize:         1
   crop:           1
-  video_compression: 1
+  video_compression: 0
   rotate:         0
   hflip:          0
   perspective:    0

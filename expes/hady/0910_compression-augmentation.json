@@ -40,7 +40,7 @@
         "partition": "devlab,learnaccel,nllb,ust",
         "cpus-per-task": "10",
         "time": 4320,
-        "mem-per-cpu": "10G"
+        "mem-per-cpu": "20G"
     },
     "meta": {
         "group": "",
