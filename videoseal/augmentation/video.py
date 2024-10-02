@@ -1,7 +1,6 @@
 
 import io
 import random
-import tempfile
 
 import av
 import numpy as np
@@ -42,10 +41,11 @@ class VideoCompression(nn.Module):
         frames = unnormalize_img(frames)
         frames = frames.clamp(0, 1).permute(0, 2, 3, 1)  # t c h w -> t w h c
         frames = (frames * 255).to(torch.uint8).detach().cpu().numpy()
-        # Create a temporary file
-        with tempfile.TemporaryFile(suffix='.mp4') as tmp_file:
-            # Create a PyAV container for output to the temporary file
-            container = av.open(tmp_file, mode='w', format='mp4')
+        # Create an in-memory bytes buffer
+        with io.BytesIO() as buffer:
+
+            # Create a PyAV container for output in memory
+            container = av.open(buffer, mode='w', format='mp4')
             # Add a video stream to the container
             stream = container.add_stream(self.codec, rate=self.fps)
             stream.width = frames.shape[2]
@@ -57,30 +57,34 @@ class VideoCompression(nn.Module):
                 frame = av.VideoFrame.from_ndarray(frame_arr, format='rgb24')
                 for packet in stream.encode(frame):
                     container.mux(packet)
+
             # Finalize the file
             for packet in stream.encode():
                 container.mux(packet)
             container.close()
-            # Seek back to the beginning of the temporary file
-            tmp_file.seek(0)
+
             if self.return_aux:
-                # Get the size of the temporary file
-                file_size = tmp_file.tell()
-                tmp_file.seek(0)  # Seek back to the beginning
-            # Read from the temporary file
-            container = av.open(tmp_file, mode='r')
-            output_frames = []
-            for frame in container.decode(video=0):
-                img = frame.to_ndarray(format='rgb24')
-                output_frames.append(img)
-            container.close()
+                # Get the size of the buffer
+                file_size = buffer.getbuffer().nbytes
+            # Read from the in-memory buffer
+            buffer.seek(0)
+
+            with av.open(buffer, mode='r') as container:
+                output_frames = []
+                for frame in container.decode(video=0):
+                    img = frame.to_ndarray(format='rgb24')
+                    output_frames.append(img)
+
+        print("<<<<succesfull buffer at least once>>")
+        return orig_frames, mask
+
         del frames  # Free memory
         # Postprocess the output frames
         output_frames = np.stack(output_frames) / 255
         output_frames = torch.tensor(output_frames, dtype=torch.float32)
         output_frames = output_frames.permute(0, 3, 1, 2)  # t w h c -> t c h w
         output_frames = normalize_img(output_frames)
-        output_frames = output_frames.to(device)
+
         # Apply skip gradients
         compressed_frames = orig_frames + \
             (orig_frames - output_frames).detach()
