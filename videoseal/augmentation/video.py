@@ -35,54 +35,93 @@ class VideoCompression(nn.Module):
             torch.Tensor: Decompressed video frames as a tensor with shape (T, C, H, W).
         """
         device = frames.device  # Get the device of the input frames
+
+        # Check if the input frames are valid
+        if not isinstance(frames, torch.Tensor):
+            raise ValueError("Input frames must be a torch.Tensor")
+        if len(frames.shape) != 4:
+            raise ValueError("Input frames must have shape (T, C, H, W)")
+
         # Save the original frames for skip gradients
         orig_frames = frames.clone()
-        # Preprocess the frames for compression
-        frames = unnormalize_img(frames)
-        frames = frames.clamp(0, 1).permute(0, 2, 3, 1)  # t c h w -> t w h c
-        frames = (frames * 255).to(torch.uint8).cpu().numpy()
-        # Create an in-memory bytes buffer
-        buffer = io.BytesIO()
-        # Create a PyAV container for output in memory
-        container = av.open(buffer, mode='w', format='mp4')
-        # Add a video stream to the container
-        stream = container.add_stream(self.codec, rate=self.fps)
-        stream.width = frames.shape[2]
-        stream.height = frames.shape[1]
-        stream.pix_fmt = 'yuv420p' if self.codec != 'libx264rgb' else 'rgb24'
-        stream.options = {'crf': str(self.crf)}  # Set the CRF value
-        # Write frames to the stream
-        for frame_arr in frames:
-            frame = av.VideoFrame.from_ndarray(frame_arr, format='rgb24')
-            for packet in stream.encode(frame):
+
+        try:
+            # Preprocess the frames for compression
+            frames = unnormalize_img(frames)
+            frames = frames.clamp(0, 1).permute(
+                0, 2, 3, 1)  # t c h w -> t w h c
+            frames = (frames * 255).to(torch.uint8).cpu().numpy()
+        except Exception as e:
+            print(f"Error preprocessing frames: {e}")
+            return orig_frames, mask
+
+        try:
+            # Create an in-memory bytes buffer
+            buffer = io.BytesIO()
+
+            # Create a PyAV container for output in memory
+            container = av.open(buffer, mode='w', format='mp4')
+
+            # Add a video stream to the container
+            stream = container.add_stream(self.codec, rate=self.fps)
+            stream.width = frames.shape[2]
+            stream.height = frames.shape[1]
+            stream.pix_fmt = 'yuv420p' if self.codec != 'libx264rgb' else 'rgb24'
+            stream.options = {'crf': str(self.crf)}  # Set the CRF value
+
+            # Write frames to the stream
+            for frame_arr in frames:
+                frame = av.VideoFrame.from_ndarray(frame_arr, format='rgb24')
+                for packet in stream.encode(frame):
+                    container.mux(packet)
+
+            # Finalize the file
+            for packet in stream.encode():
                 container.mux(packet)
-        # Finalize the file
-        for packet in stream.encode():
-            container.mux(packet)
-        container.close()
-        if self.return_aux:
-            # Get the size of the buffer
-            file_size = buffer.getbuffer().nbytes
-        # Read from the in-memory buffer
-        buffer.seek(0)
-        container = av.open(buffer, mode='r')
-        output_frames = []
-        for frame in container.decode(video=0):
-            img = frame.to_ndarray(format='rgb24')
-            output_frames.append(img)
-        container.close()
-        del frames  # Free memory
-        # Postprocess the output frames
-        output_frames = np.stack(output_frames) / 255
-        output_frames = torch.tensor(output_frames, dtype=torch.float32)
-        output_frames = output_frames.permute(0, 3, 1, 2)  # t w h c -> t c h w
-        output_frames = normalize_img(output_frames)
-        # Move back to device for interface consistency
-        output_frames = output_frames.to(device)
-        # Apply skip gradients
-        compressed_frames = orig_frames + \
-            (output_frames - orig_frames).detach()
-        del orig_frames  # Free memory
+
+            container.close()
+        except Exception as e:
+            print(f"Error encoding video: {e}")
+            return orig_frames, mask
+
+        try:
+            if self.return_aux:
+                # Get the size of the buffer
+                file_size = buffer.getbuffer().nbytes
+
+            # Read from the in-memory buffer
+            buffer.seek(0)
+            container = av.open(buffer, mode='r')
+            output_frames = []
+            for frame in container.decode(video=0):
+                img = frame.to_ndarray(format='rgb24')
+                output_frames.append(img)
+
+            container.close()
+        except Exception as e:
+            print(f"Error decoding video: {e}")
+            return orig_frames, mask
+
+        try:
+            del frames  # Free memory
+
+            # Postprocess the output frames
+            output_frames = np.stack(output_frames) / 255
+            output_frames = torch.tensor(output_frames, dtype=torch.float32)
+            output_frames = output_frames.permute(
+                0, 3, 1, 2)  # t w h c -> t c h w
+            output_frames = normalize_img(output_frames)
+
+            # Move back to device for interface consistency
+            output_frames = output_frames.to(device)
+
+            # Apply skip gradients
+            compressed_frames = orig_frames + \
+                (output_frames - orig_frames).detach()
+        except Exception as e:
+            print(f"Error postprocessing frames: {e}")
+            return orig_frames, mask
+
         if self.return_aux:
             return compressed_frames, file_size
         return compressed_frames, mask
