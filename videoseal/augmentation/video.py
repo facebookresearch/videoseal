@@ -57,12 +57,13 @@ class VideoCompression(nn.Module):
             for packet in stream.encode(frame):
                 container.mux(packet)
 
-        return orig_frames, mask
-
         # Finalize the file
         for packet in stream.encode():
             container.mux(packet)
         container.close()
+
+        return orig_frames, mask
+
         if self.return_aux:
             # Get the size of the buffer
             file_size = buffer.getbuffer().nbytes
@@ -80,8 +81,7 @@ class VideoCompression(nn.Module):
         output_frames = torch.tensor(output_frames, dtype=torch.float32)
         output_frames = output_frames.permute(0, 3, 1, 2)  # t w h c -> t c h w
         output_frames = normalize_img(output_frames)
-        # Move back to device for interface consistency
-        output_frames = output_frames.to(device)
+
         # Apply skip gradients
         compressed_frames = orig_frames + \
             (output_frames - orig_frames).detach()
