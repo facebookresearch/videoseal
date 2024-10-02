@@ -45,32 +45,32 @@ class VideoCompression(nn.Module):
         with io.BytesIO() as buffer:
 
             # Create a PyAV container for output in memory
-            container = av.open(buffer, mode='w', format='mp4')
-            # Add a video stream to the container
-            stream = container.add_stream(self.codec, rate=self.fps)
-            stream.width = frames.shape[2]
-            stream.height = frames.shape[1]
-            stream.pix_fmt = 'yuv420p' if self.codec != 'libx264rgb' else 'rgb24'
-            stream.options = {'crf': str(self.crf)}  # Set the CRF value
-            # Write frames to the stream
-            for frame_arr in frames:
-                frame = av.VideoFrame.from_ndarray(frame_arr, format='rgb24')
-                for packet in stream.encode(frame):
-                    container.mux(packet)
+            with av.open(buffer, mode='w', format='mp4') as container:
+                # Add a video stream to the container
+                stream = container.add_stream(self.codec, rate=self.fps)
+                stream.width = frames.shape[2]
+                stream.height = frames.shape[1]
+                stream.pix_fmt = 'yuv420p' if self.codec != 'libx264rgb' else 'rgb24'
+                stream.options = {'crf': str(self.crf)}  # Set the CRF value
+                # Write frames to the stream
+                for frame_arr in frames:
+                    frame = av.VideoFrame.from_ndarray(
+                        frame_arr, format='rgb24')
+                    for packet in stream.encode(frame):
+                        container.mux(packet)
 
-            # Finalize the file
-            for packet in stream.encode():
-                container.mux(packet)
-            container.close()
+                # Finalize the file
+                for packet in stream.encode():
+                    container.mux(packet)
 
             if self.return_aux:
                 # Get the size of the buffer
                 file_size = buffer.getbuffer().nbytes
             # Read from the in-memory buffer
             buffer.seek(0)
-
             with av.open(buffer, mode='r') as container:
                 output_frames = []
+                frame = ""
                 for frame in container.decode(video=0):
                     img = frame.to_ndarray(format='rgb24')
                     output_frames.append(img)
