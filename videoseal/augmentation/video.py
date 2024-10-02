@@ -114,7 +114,7 @@ class VideoCompressorAugmenter(VideoCompression):
         """Randomly select a CRF value from the list of values."""
         return random.choice(self.crf_values)
 
-    def forward(self, frames, mask=None) -> torch.Tensor:
+    def forward(self, frames, mask=None, *args, **kwargs) -> torch.Tensor:
         """Compress and decompress the input video frames with a randomly selected CRF value."""
         crf = self.get_random_crf()
         self.crf = crf

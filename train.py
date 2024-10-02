@@ -50,6 +50,7 @@ from videoseal.augmentation.geometric import (Crop, HorizontalFlip, Identity,
 from videoseal.augmentation.valuemetric import (JPEG, Brightness, Contrast,
                                                 GaussianBlur, Hue,
                                                 MedianFilter, Saturation)
+from videoseal.augmentation.video import VideoCompressorAugmenter
 from videoseal.data.loader import (get_dataloader_segmentation,
                                    get_video_dataloader)
 from videoseal.data.transforms import (get_transforms,
@@ -321,31 +322,33 @@ def main(params):
         params.img_size)
 
     image_train_loader = image_val_loader = video_train_loader = video_val_loader = None
+
+    # TODO: allow larger number of workers (params.workers)
+    # Currently set = 0 monothread causes segfaults with video compression augmentation
+    # tested : VideoDatasets performance doesn't really increase with more workers
+    num_workers = 0
+
     if params.modality in [Modalities.IMAGE, Modalities.HYBRID]:
+
         image_train_loader = get_dataloader_segmentation(params.image_dataset_config.train_dir,
                                                          params.image_dataset_config.train_annotation_file,
                                                          transform=train_transform,
                                                          mask_transform=train_mask_transform,
                                                          batch_size=params.batch_size,
-                                                         num_workers=params.workers, shuffle=True)
+                                                         num_workers=num_workers, shuffle=True)
         image_val_loader = get_dataloader_segmentation(params.image_dataset_config.val_dir,
                                                        params.image_dataset_config.val_annotation_file,
                                                        transform=val_transform,
                                                        mask_transform=val_mask_transform,
                                                        batch_size=params.batch_size_eval,
-                                                       num_workers=params.workers,
+                                                       num_workers=num_workers,
                                                        shuffle=False,
                                                        random_nb_object=False)
     if params.modality in [Modalities.VIDEO, Modalities.HYBRID]:
-        
-        # TODO: allow larger number of workers (params.workers)
-        # Currently set = 0 monothread causes segfaults with video compression augmentation
-        # tested : VideoDatasets performance doesn't really increase with more workers 
-        video_loader_num_workers = 0  
 
         video_train_loader = get_video_dataloader(params.video_dataset_config.train_dir,
                                                   batch_size=params.batch_size,
-                                                  num_workers=video_loader_num_workers,
+                                                  num_workers=num_workers,
                                                   transform=train_transform,
                                                   mask_transform=train_mask_transform,
                                                   output_resolution=(
@@ -360,7 +363,7 @@ def main(params):
                                                   )
         video_val_loader = get_video_dataloader(params.video_dataset_config.val_dir,
                                                 batch_size=params.batch_size,
-                                                num_workers=video_loader_num_workers,
+                                                num_workers=num_workers,
                                                 transform=val_transform,
                                                 mask_transform=val_mask_transform,
                                                 output_resolution=(
@@ -421,12 +424,14 @@ def main(params):
         (JPEG,              [40, 60, 80]),
         (GaussianBlur,      [3, 5, 9, 17]),
         (MedianFilter,      [3, 5, 9, 17]),
+        (VideoCompressorAugmenter, [0]),
     ]  # augs evaluated every full_eval_freq
     validation_augs_subset = [
         (Identity,          [0]),  # No parameters needed for identity
         (Brightness,        [0.5]),
         (Crop,              [0.75]),  # size ratio
         (JPEG,              [60]),
+        (VideoCompressorAugmenter, [0]),
     ]  # augs evaluated every eval_freq
     dummy_img = torch.ones(3, params.img_size, params.img_size)
     validation_masks = augmenter.mask_embedder.sample_representative_masks(
