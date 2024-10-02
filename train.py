@@ -747,4 +747,3 @@ if __name__ == '__main__':
 
     # run experiment
     main(params)
-    main(params)
