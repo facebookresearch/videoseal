@@ -4,10 +4,12 @@ from collections import OrderedDict
 
 import omegaconf
 
-modality_to_datasets = {
-    "image": ["coco"],
-    "video": ["sa-v"]
-}
+
+class Modalities:
+    IMAGE = 'image'
+    VIDEO = 'video'
+    HYBRID = 'hybrid'
+
 
 class LRUDict(OrderedDict):
     def __init__(self, maxsize=10):
@@ -40,9 +42,8 @@ def parse_dataset_params(params):
     Parses the dataset parameters and loads the dataset configuration if needed.
 
     Logic:
-    1. If explicit directory paths are provided (--train_dir, --val_dir, etc.), use those.
-    2. If a dataset name is provided (--dataset), load the corresponding configuration from configs/datasets/<dataset_name>.yaml.
-    3. If neither explicit directory paths nor a dataset name is provided, raise an error.
+    1. If a dataset name is provided (--image_dataset or --video_dataset), load the corresponding configuration from configs/datasets/<dataset_name>.yaml.
+    2. If neither dataset name is provided, raise an error.
 
     Args:
         params (argparse.Namespace): The parsed command-line arguments.
@@ -50,28 +51,40 @@ def parse_dataset_params(params):
     Returns:
         params (argparse.Namespace): The parsed command-line arguments.
     """
-    assert params.dataset in modality_to_datasets[
-        params.modality], f"Invalid dataset '{params.dataset}' for modality '{params.modality}'"
+    # Load dataset configurations
+    image_dataset_cfg = None
+    video_dataset_cfg = None
 
-    if params.train_dir is not None and params.val_dir is not None:
-        pass
-    elif params.dataset is not None:
-        # Load dataset configuration
-        dataset_cfg = omegaconf.OmegaConf.load(
-            f"configs/datasets/{params.dataset}.yaml")
-        # Merge the dataset configuration with the args
-        dataset_dict = omegaconf.OmegaConf.to_container(dataset_cfg, resolve=True)
-        # Update params with the fields from the dataset configuration
-        for key, value in dataset_dict.items():
-            setattr(params, key, value)
+    if params.image_dataset is not None:
+        image_dataset_cfg = omegaconf.OmegaConf.load(
+            f"configs/datasets/{params.image_dataset}.yaml")
+    if params.video_dataset is not None:
+        video_dataset_cfg = omegaconf.OmegaConf.load(
+            f"configs/datasets/{params.video_dataset}.yaml")
+
+    # Check if at least one dataset is provided
+    if image_dataset_cfg is None and video_dataset_cfg is None:
+        raise ValueError("Provide at least one dataset name")
+
+    # Set modality
+    if image_dataset_cfg is not None and video_dataset_cfg is not None:
+        params.modality = Modalities.HYBRID
+    elif image_dataset_cfg is not None:
+        params.modality = Modalities.IMAGE
     else:
-        # Raise an error if neither explicit directory paths nor a dataset name is provided
-        raise ValueError(
-            "Either provide dataset name or explicit train and val directories")
+        params.modality = Modalities.VIDEO
 
-    if params.modality == "image":
-        # Check that annotation files are provided for image modality
-        assert params.train_annotation_file is not None and params.val_annotation_file is not None, \
-            "Annotation files are required for image modality"
+    # Merge the dataset configurations with the args
+    for cfg in [image_dataset_cfg, video_dataset_cfg]:
+        if cfg is not None:
+            dataset_dict = omegaconf.OmegaConf.to_container(cfg, resolve=True)
+            for key, value in dataset_dict.items():
+                setattr(params, key, value)
+
+    # Store dataset configurations
+    params.image_dataset_config = omegaconf.OmegaConf.to_container(
+        image_dataset_cfg, resolve=True) if image_dataset_cfg is not None else None
+    params.video_dataset_config = omegaconf.OmegaConf.to_container(
+        video_dataset_cfg, resolve=True) if video_dataset_cfg is not None else None
 
     return params

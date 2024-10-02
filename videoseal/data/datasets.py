@@ -59,7 +59,7 @@ class VideoDataset(Dataset):
         filter_long_videos: Union[int, float] = int(10**9),
         # Optional, specific duration in seconds for each clip
         duration: Optional[float] = None,
-        output_resolution: tuple = (224, 224),  # Desired output resolution
+        output_resolution: tuple = (256, 256),  # Desired output resolution
         num_workers: int = 1,  # numbers of cpu to run the preprocessing of each batch
         # If True, flatten clips into individual frames
         flatten_clips_to_frames: bool = True,
@@ -111,7 +111,7 @@ class VideoDataset(Dataset):
 
         # Initialize video buffer
         # Set the maximum size of the buffer
-        self.video_buffer = LRUDict(maxsize=10)
+        self.video_buffer = LRUDict(maxsize=4)
 
     def __getitem__(self, index):
         if self.flatten_clips_to_frames:
@@ -157,9 +157,6 @@ class VideoDataset(Dataset):
             # torch.nn.functional.interpolate.
             buffer = torch.from_numpy(np.concatenate(
                 buffer, axis=0)).permute(0, 3, 1, 2).float()
-            # Apply torch.nn.functional.interpolate transformation
-            buffer = torch.nn.functional.interpolate(
-                buffer, size=self.output_resolution, mode='bilinear')
             # Reshape buffer back to (num_clips, frames_per_clip, channels, height, width)
             buffer = buffer.view(
                 self.num_clips, self.frames_per_clip, *buffer.shape[1:])
