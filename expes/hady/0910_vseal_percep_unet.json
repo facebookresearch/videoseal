@@ -11,7 +11,7 @@
         "embedder_model": "unet_small2",
         "img_size": 256,
         "img_size_extractor": 256,
-        "iter_per_epoch": 100,
+        "iter_per_epoch": 1000,
         "batch_size": 16,
         "batch_size_eval": 32,
         "epochs": 100,
