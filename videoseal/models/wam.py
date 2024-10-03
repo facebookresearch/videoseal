@@ -92,67 +92,6 @@ class Wam(nn.Module):
         }
         return outputs
 
-    def forward_multi(
-        self,
-        imgs: torch.Tensor,
-        masks: torch.Tensor,
-        msgs: torch.Tensor = None,
-        no_overlap: bool = False,
-        nb_times: int = None,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        Generate watermarked images from the input images, with possibly multiple watermarks.
-        """
-        if random.random() < self.roll_probability:
-            roll = True
-        else:
-            roll = False
-        mask_targets = self.augmenter.mask_embedder(
-            imgs, masks=masks, no_overlap=no_overlap, nb_times=nb_times).to(imgs.device)
-        mask_targets = mask_targets.float()
-        if len(mask_targets.shape) == 4:
-            # add channel dimension, corresponding to the number of masks per
-            mask_targets = mask_targets.unsqueeze(2)
-        combined_mask = torch.zeros_like(mask_targets[:, 0].float())
-        msgs_l = []
-        combined_imgs = imgs.clone()
-        for nb_wm in range(mask_targets.shape[1]):
-            mask = mask_targets[:, nb_wm, :, :].float()
-            combined_mask += mask
-            msgs = self.get_random_msg(imgs.shape[0])  # b x k
-            msgs = msgs.to(imgs.device)
-            msgs_l.append(msgs)
-            deltas_w = self.embedder(imgs, msgs)
-            imgs_w = self.scaling_i * imgs + self.scaling_w * deltas_w
-            if self.attenuation is not None:
-                imgs_w = self.attenuation(imgs, imgs_w)
-            if not roll:
-                combined_imgs = combined_imgs * (1 - mask) + imgs_w * mask
-            else:
-                combined_imgs = combined_imgs * torch.roll(1 - mask, shifts=-1, dims=0) + torch.roll(
-                    imgs_w, shifts=-1, dims=0) * torch.roll(mask, shifts=-1, dims=0)
-        if not roll:
-            imgs_aug, mask_targets, selected_aug = self.augmenter.post_augment(
-                combined_imgs, mask_targets.squeeze(2))
-        else:
-            imgs_aug, mask_targets, selected_aug = self.augmenter.post_augment(
-                combined_imgs, torch.roll(mask_targets.squeeze(2), shifts=-1, dims=0))
-        preds = self.detector(imgs_aug)
-        msgs_l = torch.stack(msgs_l)
-        msgs_l = msgs_l.transpose(0, 1)
-        if roll:
-            msgs_l = torch.roll(msgs_l, shifts=-1, dims=0)
-        outputs = {
-            "msgs": msgs_l,  # original messages: b k
-            "masks": mask_targets.bool(),  # augmented masks: b z h w
-            # watermarked images: b c h w
-            "imgs_w": imgs_w if not roll else torch.roll(imgs_w, shifts=-1, dims=0),
-            "imgs_aug": imgs_aug,  # augmented images: b c h w
-            "preds": preds,  # predicted masks and/or messages: b (1+nbits) h w
-            "selected_aug": selected_aug,  # selected augmentation
-        }
-        return outputs
-
     def embed(
         self,
         imgs: torch.Tensor,

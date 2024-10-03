@@ -140,7 +140,7 @@ class Augmenter(nn.Module):
                 imgs_aug, mask_targets)
             return imgs_aug, mask_targets, selected_aug
         else:
-            ### TOM CODE ###
+            # no mask
             mask_targets = torch.ones_like(imgs_w)[:, 0:1, :, :]
             imgs_aug, mask_targets, selected_aug = self.post_augment(
                 imgs_w, mask_targets)
