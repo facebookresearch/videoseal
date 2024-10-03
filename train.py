@@ -8,6 +8,9 @@ Example usage (cluster 1 gpu):
 
 Example:  decoding only, hidden like
     torchrun --nproc_per_node=2 train.py --local_rank 0 --nbits 32 --saveimg_freq 1 --lambda_i 0 --lambda_det 0 --lambda_dec 1 --lambda_d 0  --img_size 128 --img_size_extractor 128 --embedder_model hidden --extractor_model hidden
+    
+With video compression aug:
+    torchrun --nproc_per_node=2 train.py --local_rank 0  --image_dataset coco --video_dataset sa-v --augmentation_config configs/video_compression.yaml --extractor_model sam_tiny --embedder_model vae_small_bw --img_size 256 --img_size_extractor 256 --batch_size 16 --batch_size_eval 32 --epochs 100 --optimizer AdamW,lr=1e-4 --scheduler CosineLRScheduler,lr_min=1e-6,t_initial=100,warmup_lr_init=1e-6,warmup_t=5 --seed 0 --perceptual_loss mse --lambda_i 0.0 --lambda_d 0.0 --lambda_det 0.0 --lambda_dec 1.0 --nbits 32 --scaling_i 1.0 --scaling_w 0.2 --balanced  false --iter_per_epoch 5
 
 Args inventory:
     --scheduler CosineLRScheduler,lr_min=1e-6,t_initial=100,warmup_lr_init=1e-6,warmup_t=5
@@ -84,6 +87,8 @@ def get_dataset_parser(parser):
                        choices=["sa-v"], help="Name of the video dataset.")
     group.add_argument("--image_to_video_percentage_in_hybrid", type=float, default=0.5,
                        help="Percentage of images in the hybrid dataset 0.5 means for each 5 epochs of images 5 video epoch is made. Only applicable if both --image_dataset and --video_dataset are provided.")
+    group.add_argument("--video_start", type=int, default=50,
+                          help="Number of epochs before starting video training")
     return parser
 
 
@@ -326,9 +331,8 @@ def main(params):
 
     # TODO: allow larger number of workers (params.workers)
     # Currently set = 0 monothread causes segfaults with video compression augmentation
-    # tested : VideoDatasets performance doesn't really increase with more workers
-    num_workers = 0
-
+    # tested: VideoDatasets performance doesn't really increase with more workers
+    # tested: ImageDatasets performance increase with more workers
     if params.modality in [Modalities.IMAGE, Modalities.HYBRID]:
 
         image_train_loader = get_dataloader_segmentation(params.image_dataset_config.train_dir,
@@ -336,20 +340,20 @@ def main(params):
                                                          transform=train_transform,
                                                          mask_transform=train_mask_transform,
                                                          batch_size=params.batch_size,
-                                                         num_workers=num_workers, shuffle=True)
+                                                         num_workers=params.workers, shuffle=True)
         image_val_loader = get_dataloader_segmentation(params.image_dataset_config.val_dir,
                                                        params.image_dataset_config.val_annotation_file,
                                                        transform=val_transform,
                                                        mask_transform=val_mask_transform,
                                                        batch_size=params.batch_size_eval,
-                                                       num_workers=num_workers,
+                                                       num_workers=params.workers,
                                                        shuffle=False,
                                                        random_nb_object=False)
     if params.modality in [Modalities.VIDEO, Modalities.HYBRID]:
 
         video_train_loader = get_video_dataloader(params.video_dataset_config.train_dir,
                                                   batch_size=params.batch_size,
-                                                  num_workers=num_workers,
+                                                  num_workers=params.workers,
                                                   transform=train_transform,
                                                   mask_transform=train_mask_transform,
                                                   output_resolution=(
@@ -364,7 +368,7 @@ def main(params):
                                                   )
         video_val_loader = get_video_dataloader(params.video_dataset_config.val_dir,
                                                 batch_size=params.batch_size,
-                                                num_workers=num_workers,
+                                                num_workers=params.workers,
                                                 transform=val_transform,
                                                 mask_transform=val_mask_transform,
                                                 output_resolution=(
@@ -552,6 +556,8 @@ def train_one_epoch(
             # last_layer = imgs
 
         for optimizer_idx in [1, 0]:
+            if params.lambda_d == 0 and optimizer_idx == 1:
+                continue
             # index 1 for discriminator, 0 for embedder/extractor
             loss, logs = image_detection_loss(
                 imgs, outputs["imgs_w"],
@@ -568,7 +574,6 @@ def train_one_epoch(
             **logs,
             'psnr': psnr(outputs["imgs_w"], imgs).mean().item(),
             'lr': optimizers[0].param_groups[0]['lr'],
-            "ssim": ssim(outputs["imgs_w"], imgs).mean().item(),
         }
 
         bit_preds = outputs["preds"][:, 1:]  # b k h w
