@@ -116,7 +116,7 @@ def main(args):
         embedder_args = embedder_cfg[embedder_name]
         embedder = build_embedder(embedder_name, embedder_args, args.nbits)
         embedder = embedder.to(device)
-        embedder_stats = benchmark_model(embedder, args.img_size, data_loader, device)
+        embedder_stats = benchmark_model(embedder, args.img_size_work, data_loader, device)
         results.append({
             'model': embedder_name,
             'params': sum(p.numel() for p in embedder.parameters() if p.requires_grad) / 1e6,
