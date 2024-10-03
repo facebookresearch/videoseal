@@ -85,7 +85,7 @@ def get_dataset_parser(parser):
                        choices=["coco"], help="Name of the image dataset.")
     group.add_argument("--video_dataset", type=str,
                        choices=["sa-v"], help="Name of the video dataset.")
-    group.add_argument("--image_to_video_percentage_in_hybrid", type=float, default=0.5,
+    group.add_argument("--prop_img_vid", type=float, default=0.5,
                        help="Percentage of images in the hybrid dataset 0.5 means for each 5 epochs of images 5 video epoch is made. Only applicable if both --image_dataset and --video_dataset are provided.")
     group.add_argument("--video_start", type=int, default=50,
                           help="Number of epochs before starting video training")
@@ -446,7 +446,7 @@ def main(params):
     # TODO: fix me
     if params.only_eval:
         val_stats = eval_one_epoch(
-            wam, val_loader, image_detection_loss, 0, validation_augs, validation_masks, params)
+            wam, video_val_loader, image_detection_loss, 0, validation_augs, validation_masks, params)
         if udist.is_main_process():
             with open(os.path.join(params.output_dir, 'log_only_eval.txt'), 'a') as f:
                 f.write(json.dumps(val_stats) + "\n")
@@ -460,8 +460,11 @@ def main(params):
 
         # Decide on the modality of this epoch either video or images
         if params.modality == Modalities.HYBRID:
-            epoch_modality = Modalities.IMAGE if random.random(
-            ) < params.image_to_video_percentage_in_hybrid else Modalities.VIDEO
+            if epoch >= params.video_start:
+                if random.random() < params.prop_img_vid:
+                    epoch_modality = Modalities.IMAGE 
+                else: 
+                    epoch_modality = Modalities.VIDEO
         else:
             epoch_modality = params.modality
 
