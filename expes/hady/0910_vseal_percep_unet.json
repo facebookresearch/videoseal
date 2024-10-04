@@ -2,15 +2,16 @@
     "cmd": "python train.py",
     "git": "/private/home/hadyelsahar/work/code/videoseal/videoseal",
     "preload": "MKL_THREADING_LAYER=GNU",
-    "commit": "video-training",
+    "commit": "multi-frame-training",
     "precmd": [],
     "params": {
-        "modality": "video",
-        "dataset": "sa-v",
+        "image_dataset": "coco",
+        "video_dataset": "sa-v",
         "augmentation_config": "configs/simple_augs.yaml",
         "embedder_model": "unet_small2",
         "img_size": 256,
         "img_size_extractor": 256,
+        "iter_per_epoch": 1000,
         "batch_size": 16,
         "batch_size_eval": 32,
         "epochs": 100,
@@ -43,7 +44,7 @@
     },
     "meta": {
         "group": "",
-        "name": "0910_vseal_percep_unet-video",
+        "name": "0910_vseal_percep_unet-hyrid",
         "dest-arg": "yes",
         "dest-name": "output_dir"
     }

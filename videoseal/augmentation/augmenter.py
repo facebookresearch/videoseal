@@ -10,6 +10,8 @@ from PIL import Image
 from torch import nn
 from torchvision.utils import save_image
 
+from videoseal.utils.data import Modalities
+
 from ..data.transforms import default_transform, unnormalize_img
 from .geometric import (Crop, HorizontalFlip, Identity, Perspective, Resize,
                         Rotate)
@@ -59,6 +61,9 @@ class Augmenter(nn.Module):
             augs=augs,
             augs_params=augs_params
         )
+
+        # default all augmentations work with video and images
+        self.modality = Modalities.HYBRID
 
     def parse_augmentations(
         self,
