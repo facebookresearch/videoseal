@@ -2,7 +2,7 @@
     "cmd": "python train.py",
     "git": "/private/home/hadyelsahar/work/code/videoseal/videoseal",
     "preload": "MKL_THREADING_LAYER=GNU",
-    "commit": "compression-augmentation-debug-hady",
+    "commit": "compression-aug-debug-hady",
     "precmd": [],
     "params": {
         "image_dataset": "coco",
