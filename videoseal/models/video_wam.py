@@ -132,7 +132,7 @@ class VideoWam(Wam):
         imgs_w = self.video_embed(imgs, msg)
         # augment
         imgs_aug, masks, selected_aug = self.augmenter(
-            imgs_w, imgs, masks)
+            imgs_w, imgs, masks, is_video=True)
         # detect watermark
         preds = self.video_detect(imgs_aug)
 
