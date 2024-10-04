@@ -10,6 +10,7 @@ class Modalities:
     VIDEO = 'video'
     HYBRID = 'hybrid'
 
+import psutil
 
 class LRUDict(OrderedDict):
     def __init__(self, maxsize=10):
@@ -17,10 +18,16 @@ class LRUDict(OrderedDict):
         self.maxsize = maxsize
         self.lock = threading.Lock()
     def __setitem__(self, key, value):
+        print(f"Buffer capacity = {len(self)/self.maxsize} %")
+        # Get the RAM details
+        ram = psutil.virtual_memory()
+        print(f"Total RAM:   {ram.total / (1024 ** 3):.2f} GB 
+              Used RAM:     {ram.used / (1024 ** 3):.2f} GB
+              RAM Usage Percentage:     {ram.percent}%
+              ")
         with self.lock:
             super().__setitem__(key, value)
             if len(self) >= self.maxsize:
-                print(f"buffer size = {len(self)}")
                 # Clear at least 10% of the max size or at least 2 items
                 num_to_clear = max(2, int(self.maxsize * 0.1))
                 keys_to_remove = list(self.keys())[:num_to_clear]
