@@ -582,6 +582,7 @@ def train_one_epoch(
         log_stats = {
             **logs,
             'psnr': psnr(outputs["imgs_w"], imgs).mean().item(),
+            'ssim': ssim(outputs["imgs_w"], imgs).mean().item(),
             'lr': optimizers[0].param_groups[0]['lr'],
         }
 
