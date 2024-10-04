@@ -431,14 +431,12 @@ def main(params):
         (JPEG,              [40, 60, 80]),
         (GaussianBlur,      [3, 5, 9, 17]),
         (MedianFilter,      [3, 5, 9, 17]),
-        (VideoCompressorAugmenter, [0]),
     ]  # augs evaluated every full_eval_freq
     validation_augs_subset = [
         (Identity,          [0]),  # No parameters needed for identity
         (Brightness,        [0.5]),
         (Crop,              [0.75]),  # size ratio
         (JPEG,              [60]),
-        (VideoCompressorAugmenter, [0]),
     ]  # augs evaluated every eval_freq
     dummy_img = torch.ones(3, params.img_size, params.img_size)
     validation_masks = augmenter.mask_embedder.sample_representative_masks(
@@ -491,6 +489,9 @@ def main(params):
 
         if epoch % params.eval_freq == 0:
             augs = validation_augs if epoch % params.full_eval_freq == 0 else validation_augs_subset
+            if epoch_modality == Modalities.VIDEO:
+                augs.append((VideoCompressorAugmenter, [0]))
+                
             val_stats = eval_one_epoch(wam, epoch_val_loader, epoch_modality, image_detection_loss,
                                        epoch, augs, validation_masks, params)
             log_stats = {**log_stats, **
