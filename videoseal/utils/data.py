@@ -19,7 +19,7 @@ class LRUDict(OrderedDict):
     def __setitem__(self, key, value):
         with self.lock:
             super().__setitem__(key, value)
-            if len(self) > self.maxsize:
+            if len(self) >= self.maxsize:
                 print(f"buffer size = {len(self)}")
                 # Clear at least 10% of the max size or at least 2 items
                 num_to_clear = max(2, int(self.maxsize * 0.1))
