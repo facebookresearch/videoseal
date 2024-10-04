@@ -26,6 +26,7 @@
             5.0,
             10.0
         ],
+        "video_start": 0,
         "nbits": 32,
         "scaling_i": 1.0,
         "scaling_w": 0.5,

@@ -504,6 +504,7 @@ def main(params):
                 f.write(json.dumps(log_stats) + "\n")
 
         print("Saving Checkpoint..")
+        torch.cuda.synchronize()  # ensure gpus sync before save ckpt
         save_dict = {
             'epoch': epoch + 1,
             'model': wam.state_dict(),
@@ -532,6 +533,8 @@ def train_one_epoch(
     params: argparse.Namespace,
 ):
     assert epoch_modality in [Modalities.IMAGE, Modalities.VIDEO]
+    torch.cuda.synchronize()  # ensure gpus sync before starting the epoch
+
     wam.train()
 
     header = 'Train - Epoch: [{}/{}] - Modality: {}'.format(
@@ -580,11 +583,13 @@ def train_one_epoch(
             loss.backward()
             optimizers[optimizer_idx].step()
 
+        torch.cuda.synchronize()
         # log stats
         log_stats = {
             **logs,
             'psnr': psnr(outputs["imgs_w"], imgs).mean().item(),
             'lr': optimizers[0].param_groups[0]['lr'],
+            'ssim': ssim(outputs["imgs_w"], imgs).mean().item(),
         }
 
         bit_preds = outputs["preds"][:, 1:]  # b k h w
@@ -641,6 +646,7 @@ def eval_one_epoch(
     """
     if torch.is_tensor(validation_masks):
         validation_masks = list(torch.unbind(validation_masks, dim=0))
+    torch.cuda.synchronize()  # ensure gpus sync before starting the epoch
     wam.eval()
     header = 'Val Full - Epoch: [{}/{}] - Modality: {}'.format(
         epoch, params.epochs, epoch_modality)
