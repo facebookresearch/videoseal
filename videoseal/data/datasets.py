@@ -325,19 +325,19 @@ class VideoDataset(Dataset):
             The transformed frame as a tensor.
         """
 
-        # Check if transform requires PIL image
-        if any(isinstance(t, (transforms.Resize, transforms.CenterCrop, transforms.ColorJitter)) for t in self.transform.transforms):
-            # Convert frame to PIL image
-            frame = transforms.ToPILImage()(frame)  # Convert to PIL image
+        # # Check if transform requires PIL image
+        # if any(isinstance(t, (transforms.Resize, transforms.CenterCrop, transforms.ColorJitter)) for t in self.transform.transforms):
+        #     # Convert frame to PIL image
+        #     frame = transforms.ToPILImage()(frame)  # Convert to PIL image
 
         # Apply transformation
         frame = my_transform(frame)
 
         # After applying the transformation, we need to ensure that the output is a tensor.
         # If the output is not a tensor, we convert it to a tensor using ToTensor().
-        if not isinstance(frame, torch.Tensor):
-            # Convert to tensor
-            frame = transforms.ToTensor()(frame)  # Convert to tensor
+        # if not isinstance(frame, torch.Tensor):
+        #     # Convert to tensor
+        #     frame = transforms.ToTensor()(frame)  # Convert to tensor
 
         return frame
 

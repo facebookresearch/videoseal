@@ -226,7 +226,6 @@ def main(params):
 
     # Print the arguments
     print("__git__:{}".format(utils.get_sha()))
-    print(params)
     print("__log__:{}".format(json.dumps(
         omegaconf.OmegaConf.to_container(params, resolve=True))))
 

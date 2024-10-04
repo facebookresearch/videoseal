@@ -71,6 +71,7 @@ def get_transforms(
 def get_resize_transform(img_size):
     transform = transforms.Compose([
         transforms.Resize(img_size),
+        transforms.CenterCrop(img_size),
     ])
     return transform, transform, transform, transform
 
