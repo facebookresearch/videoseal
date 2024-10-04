@@ -88,7 +88,7 @@ def get_dataset_parser(parser):
     group.add_argument("--prop_img_vid", type=float, default=0.5,
                        help="Percentage of images in the hybrid dataset 0.5 means for each 5 epochs of images 5 video epoch is made. Only applicable if both --image_dataset and --video_dataset are provided.")
     group.add_argument("--video_start", type=int, default=50,
-                          help="Number of epochs before starting video training")
+                       help="Number of epochs before starting video training")
     return parser
 
 
@@ -182,11 +182,11 @@ def get_parser():
     aa('--batch_size_eval', default=64, type=int, help='Batch size for evaluation')
     aa('--workers', default=8, type=int, help='Number of data loading workers')
     aa('--frames_per_clip', default=16, type=int,
-         help='Number of frames per clip for video datasets')
+       help='Number of frames per clip for video datasets')
     aa('--frame_step', default=1, type=int,
-            help='Step between frames for video datasets')
+       help='Step between frames for video datasets')
     aa('--num_clips', default=8, type=int,
-            help='Number of clips per video for video datasets')
+       help='Number of clips per video for video datasets')
 
     group = parser.add_argument_group('Misc.')
     aa('--only_eval', type=utils.bool_inst,
@@ -468,9 +468,11 @@ def main(params):
         if params.modality == Modalities.HYBRID:
             if epoch >= params.video_start:
                 if random.random() < params.prop_img_vid:
-                    epoch_modality = Modalities.IMAGE 
-                else: 
+                    epoch_modality = Modalities.IMAGE
+                else:
                     epoch_modality = Modalities.VIDEO
+            else:
+                epoch_modality = Modalities.IMAGE
         else:
             epoch_modality = params.modality
 
