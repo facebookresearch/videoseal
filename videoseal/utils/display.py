@@ -7,7 +7,7 @@ import torchvision
 from torch import Tensor
 
 
-def save_vid(vid: Tensor, out_path: str, fps: int§) -> None:
+def save_vid(vid: Tensor, out_path: str, fps: int) -> None:
     """
     Saves a video tensor to a file.
 
