@@ -68,7 +68,7 @@ from videoseal.models import VideoWam, Wam, build_embedder, build_extractor
 from videoseal.modules.jnd import JND
 from videoseal.utils.data import Modalities, parse_dataset_params
 from videoseal.utils.display import get_fps, save_vid
-from videoseal.utils.image import create_diff_img, detect_wm_hm
+from videoseal.utils.image import create_diff_img
 
 device = torch.device(
     'cuda') if torch.cuda.is_available() else torch.device('cpu')
