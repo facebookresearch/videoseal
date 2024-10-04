@@ -16,26 +16,22 @@ class LRUDict(OrderedDict):
         super().__init__()
         self.maxsize = maxsize
         self.lock = threading.Lock()
-
     def __setitem__(self, key, value):
         with self.lock:
             super().__setitem__(key, value)
-
-        if len(self) >= self.maxsize:
-            # Clear 10% of the max size
-            num_to_clear = int(self.maxsize * 0.1)
-            keys_to_remove = list(self.keys())[:num_to_clear]
-            for key in keys_to_remove:
-                del self[key]
-
+            if len(self) > self.maxsize:
+                print(f"buffer size = {len(self)}")
+                # Clear at least 10% of the max size or at least 2 items
+                num_to_clear = max(2, int(self.maxsize * 0.1))
+                keys_to_remove = list(self.keys())[:num_to_clear]
+                for key in keys_to_remove:
+                    del self[key]
     def __getitem__(self, key):
         with self.lock:
             return super().__getitem__(key)
-
     def __delitem__(self, key):
         with self.lock:
             return super().__delitem__(key)
-
 
 def parse_dataset_params(params):
     """
