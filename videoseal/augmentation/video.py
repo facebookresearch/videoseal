@@ -1,6 +1,7 @@
 
 import io
 import random
+import time
 
 import av
 import numpy as np
@@ -34,6 +35,8 @@ class VideoCompression(nn.Module):
         Returns:
             torch.Tensor: Decompressed video frames as a tensor with shape (T, C, H, W).
         """
+        torch.cuda.synchronize()
+        start_time = time.time()
         device = frames.device  # Get the device of the input frames
         # Save the original frames for skip gradients
         orig_frames = frames.clone()
@@ -83,10 +86,13 @@ class VideoCompression(nn.Module):
         output_frames = normalize_img(output_frames)
         output_frames = output_frames.to(device)
 
+        torch.cuda.synchronize()
         # Apply skip gradients
         compressed_frames = orig_frames + \
             (orig_frames - output_frames).detach()
         del orig_frames  # Free memory
+        end_time = time.time()
+        print(f"video compression time {end_time-start_time}")
         if self.return_aux:
             return compressed_frames, mask, file_size
         return compressed_frames, mask
