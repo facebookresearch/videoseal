@@ -26,7 +26,8 @@ from torch.utils.data import Dataset
 from torchvision import transforms
 from tqdm import tqdm
 
-from videoseal.data.transforms import get_transforms_segmentation
+from videoseal.data.transforms import (get_resize_transform,
+                                       get_transforms_segmentation)
 from videoseal.utils.data import LRUDict
 
 # Configure logging
@@ -353,7 +354,7 @@ if __name__ == "__main__":
     # Specify the path to the folder containing the MP4 files
     video_folder_path = "./assets/videos"
 
-    train_transform, train_mask_transform, val_transform, val_mask_transform = get_transforms_segmentation(
+    train_transform, train_mask_transform, val_transform, val_mask_transform = get_resize_transform(
         img_size=256)
 
    # Create an instance of the VideoDataset

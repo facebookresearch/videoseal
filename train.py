@@ -57,10 +57,8 @@ from videoseal.augmentation.valuemetric import (JPEG, Brightness, Contrast,
 from videoseal.augmentation.video import VideoCompressorAugmenter
 from videoseal.data.loader import (get_dataloader_segmentation,
                                    get_video_dataloader)
-from videoseal.data.transforms import (get_transforms,
-                                       get_transforms_segmentation,
-                                       normalize_img, unnormalize_img,
-                                       unstd_img)
+from videoseal.data.transforms import (get_resize_transform, get_transforms,
+                                       get_transforms_segmentation)
 from videoseal.evals.metrics import (accuracy, bit_accuracy,
                                      bit_accuracy_inference, iou, psnr, ssim)
 from videoseal.losses.detperceptual import LPIPSWithDiscriminator
@@ -271,8 +269,7 @@ def main(params):
     # build attenuation
     if params.attenuation.lower() != "none":
         attenuation_cfg = omegaconf.OmegaConf.load(params.attenuation_config)
-        attenuation = JND(**attenuation_cfg[params.attenuation],
-                          preprocess=unnormalize_img, postprocess=normalize_img)
+        attenuation = JND(**attenuation_cfg[params.attenuation])
     else:
         attenuation = None
     print(f'attenuation: {attenuation}')
@@ -330,7 +327,7 @@ def main(params):
     print('optimizer_d: %s' % optimizer_d)
 
     # Data loaders
-    train_transform, train_mask_transform, val_transform, val_mask_transform = get_transforms_segmentation(
+    train_transform, train_mask_transform, val_transform, val_mask_transform = get_resize_transform(
         params.img_size)
 
     image_train_loader = image_val_loader = video_train_loader = video_val_loader = None
@@ -741,9 +738,9 @@ def eval_one_epoch(
 
         # save some of the images
         if (epoch % params.saveimg_freq == 0 or params.only_eval) and it == 0 and udist.is_main_process():
-            save_image(unnormalize_img(imgs),
+            save_image(imgs,
                        os.path.join(params.output_dir, f'{epoch:03}_{it:03}_val_0_ori.png'), nrow=8)
-            save_image(unnormalize_img(imgs_w),
+            save_image(imgs_w,
                        os.path.join(params.output_dir, f'{epoch:03}_{it:03}_val_1_w.png'), nrow=8)
             save_image(create_diff_img(imgs, imgs_w),
                        os.path.join(params.output_dir, f'{epoch:03}_{it:03}_val_2_diff.png'), nrow=8)

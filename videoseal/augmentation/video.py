@@ -8,8 +8,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from videoseal.data.transforms import normalize_img, unnormalize_img
-
 
 class VideoCompression(nn.Module):
     """
@@ -41,7 +39,6 @@ class VideoCompression(nn.Module):
         # Save the original frames for skip gradients
         orig_frames = frames.clone()
         # Preprocess the frames for compression
-        frames = unnormalize_img(frames)
         frames = frames.clamp(0, 1).permute(0, 2, 3, 1)  # t c h w -> t w h c
         frames = (frames * 255).to(torch.uint8).detach().cpu().numpy()
         # Create an in-memory bytes buffer
@@ -83,7 +80,6 @@ class VideoCompression(nn.Module):
         output_frames = np.stack(output_frames) / 255
         output_frames = torch.tensor(output_frames, dtype=torch.float32)
         output_frames = output_frames.permute(0, 3, 1, 2)  # t w h c -> t c h w
-        output_frames = normalize_img(output_frames)
         output_frames = output_frames.to(device)
 
         torch.cuda.synchronize()
