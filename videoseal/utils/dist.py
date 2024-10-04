@@ -115,9 +115,9 @@ def init_distributed_mode(params):
         params.master_addr = hostnames.split()[0].decode('utf-8')
         if params.master_port==-1:
             params.master_port = '19500'
-        assert 10001 <= params.master_port <= 20000 or params.world_size == 1
+        assert 10001 <= int(params.master_port) <= 20000 or params.world_size == 1
         print(PREFIX + "Master address: %s" % params.master_addr)
-        print(PREFIX + "Master port   : %i" % params.master_port)
+        print(PREFIX + "Master port   : %i" % int(params.master_port))
 
         # set environment variables for 'env://'
         os.environ['MASTER_ADDR'] = params.master_addr
