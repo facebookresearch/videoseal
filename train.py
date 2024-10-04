@@ -8,6 +8,9 @@ Example usage (cluster 1 gpu):
 
 Example:  decoding only, hidden like
     torchrun --nproc_per_node=2 train.py --local_rank 0 --nbits 32 --saveimg_freq 1 --lambda_i 0 --lambda_det 0 --lambda_dec 1 --lambda_d 0  --img_size 128 --img_size_extractor 128 --embedder_model hidden --extractor_model hidden
+    
+With video compression aug:
+    torchrun --nproc_per_node=2 train.py --local_rank 0  --image_dataset coco --video_dataset sa-v --augmentation_config configs/video_compression.yaml --extractor_model sam_tiny --embedder_model vae_small_bw --img_size 256 --img_size_extractor 256 --batch_size 16 --batch_size_eval 32 --epochs 100 --optimizer AdamW,lr=1e-4 --scheduler CosineLRScheduler,lr_min=1e-6,t_initial=100,warmup_lr_init=1e-6,warmup_t=5 --seed 0 --perceptual_loss mse --lambda_i 0.0 --lambda_d 0.0 --lambda_det 0.0 --lambda_dec 1.0 --nbits 32 --scaling_i 1.0 --scaling_w 0.2 --balanced  false --iter_per_epoch 5
 
 Args inventory:
     --scheduler CosineLRScheduler,lr_min=1e-6,t_initial=100,warmup_lr_init=1e-6,warmup_t=5
@@ -65,7 +68,7 @@ from videoseal.models import VideoWam, Wam, build_embedder, build_extractor
 from videoseal.modules.jnd import JND
 from videoseal.utils.data import Modalities, parse_dataset_params
 from videoseal.utils.display import get_fps, save_vid
-from videoseal.utils.image import create_diff_img, detect_wm_hm
+from videoseal.utils.image import create_diff_img
 
 device = torch.device(
     'cuda') if torch.cuda.is_available() else torch.device('cpu')
@@ -82,8 +85,10 @@ def get_dataset_parser(parser):
                        choices=["coco"], help="Name of the image dataset.")
     group.add_argument("--video_dataset", type=str,
                        choices=["sa-v"], help="Name of the video dataset.")
-    group.add_argument("--image_to_video_percentage_in_hybrid", type=float, default=0.5,
+    group.add_argument("--prop_img_vid", type=float, default=0.5,
                        help="Percentage of images in the hybrid dataset 0.5 means for each 5 epochs of images 5 video epoch is made. Only applicable if both --image_dataset and --video_dataset are provided.")
+    group.add_argument("--video_start", type=int, default=50,
+                          help="Number of epochs before starting video training")
     return parser
 
 
@@ -129,8 +134,6 @@ def get_parser():
        help="Scaling factor for the watermark in the embedder model")
     aa("--scaling_i", type=float, default=1.0,
        help="Scaling factor for the image in the embedder model")
-    aa("--threshold_mask", type=float, default=0.6,
-       help="Threshold for the mask prediction using heatmap only (default: 0.7)")
     # VideoWam parameters related how to do video watermarking inference
     aa("--videowam_frame_intermediate_size", type=int, default=256,
        help="The size of the frame to resize to intermediately while generating the watermark then upscale, the final video/image size is kept the same.")
@@ -150,15 +153,12 @@ def get_parser():
        help='Number of iterations per epoch, made for very large datasets')
     aa('--iter_per_valid', default=None, type=int,
        help='Number of iterations per eval, made for very large eval datasets if None eval on all dataset')
-    aa('--batch_size', default=16, type=int, help='Batch size')
-    aa('--batch_size_eval', default=64, type=int, help='Batch size for evaluation')
-    aa('--temperature', default=1.0, type=float,
-       help='Temperature for the mask loss')
-    aa('--workers', default=8, type=int, help='Number of data loading workers')
     aa('--resume_from', default=None, type=str,
        help='Path to the checkpoint to resume from')
 
     group = parser.add_argument_group('Losses parameters')
+    aa('--temperature', default=1.0, type=float,
+       help='Temperature for the mask loss')
     aa('--lambda_det', default=0.0, type=float,
        help='Weight for the watermark detection loss')
     aa('--lambda_dec', default=4.0, type=float,
@@ -176,6 +176,17 @@ def get_parser():
        help='Weight for the discriminator loss')
     aa('--disc_num_layers', default=2, type=int,
        help='Number of layers for the discriminator')
+
+    group = parser.add_argument_group('Loading parameters')
+    aa('--batch_size', default=16, type=int, help='Batch size')
+    aa('--batch_size_eval', default=64, type=int, help='Batch size for evaluation')
+    aa('--workers', default=8, type=int, help='Number of data loading workers')
+    aa('--frames_per_clip', default=16, type=int,
+         help='Number of frames per clip for video datasets')
+    aa('--frame_step', default=1, type=int,
+            help='Step between frames for video datasets')
+    aa('--num_clips', default=8, type=int,
+            help='Number of clips per video for video datasets')
 
     group = parser.add_argument_group('Misc.')
     aa('--only_eval', type=utils.bool_inst,
@@ -326,9 +337,8 @@ def main(params):
 
     # TODO: allow larger number of workers (params.workers)
     # Currently set = 0 monothread causes segfaults with video compression augmentation
-    # tested : VideoDatasets performance doesn't really increase with more workers
-    num_workers = 0
-
+    # tested: VideoDatasets performance doesn't really increase with more workers
+    # tested: ImageDatasets performance increase with more workers
     if params.modality in [Modalities.IMAGE, Modalities.HYBRID]:
 
         image_train_loader = get_dataloader_segmentation(params.image_dataset_config.train_dir,
@@ -336,46 +346,46 @@ def main(params):
                                                          transform=train_transform,
                                                          mask_transform=train_mask_transform,
                                                          batch_size=params.batch_size,
-                                                         num_workers=num_workers, shuffle=True)
+                                                         num_workers=params.workers, shuffle=True)
         image_val_loader = get_dataloader_segmentation(params.image_dataset_config.val_dir,
                                                        params.image_dataset_config.val_annotation_file,
                                                        transform=val_transform,
                                                        mask_transform=val_mask_transform,
                                                        batch_size=params.batch_size_eval,
-                                                       num_workers=num_workers,
+                                                       num_workers=params.workers,
                                                        shuffle=False,
                                                        random_nb_object=False)
     if params.modality in [Modalities.VIDEO, Modalities.HYBRID]:
 
         video_train_loader = get_video_dataloader(params.video_dataset_config.train_dir,
                                                   batch_size=params.batch_size,
-                                                  num_workers=num_workers,
+                                                  num_workers=params.workers,
                                                   transform=train_transform,
                                                   mask_transform=train_mask_transform,
                                                   output_resolution=(
                                                       params.img_size, params.img_size),
                                                   # for now we are fixing 1 video / batch
                                                   flatten_clips_to_frames=True,
-                                                  frames_per_clip=32,
-                                                  frame_step=4,
+                                                  frames_per_clip=params.frames_per_clip,
+                                                  frame_step=params.frame_step,
                                                   # TODO: Find a smart way to shuffle while making cache efficient
                                                   shuffle=False,
-                                                  num_clips=16,
+                                                  num_clips=params.num_clips,
                                                   )
         video_val_loader = get_video_dataloader(params.video_dataset_config.val_dir,
                                                 batch_size=params.batch_size,
-                                                num_workers=num_workers,
+                                                num_workers=params.workers,
                                                 transform=val_transform,
                                                 mask_transform=val_mask_transform,
                                                 output_resolution=(
                                                     params.img_size, params.img_size),
                                                 # for now we are fixing 1 video / batch
                                                 flatten_clips_to_frames=True,
-                                                frames_per_clip=32,
+                                                frames_per_clip=params.frames_per_clip,
                                                 # TODO: Find a smart way to shuffle while making cache efficient
                                                 shuffle=False,
-                                                frame_step=4,
-                                                num_clips=16,
+                                                frame_step=params.frame_step,
+                                                num_clips=params.num_clips,
                                                 )
 
     # optionally resume training
@@ -442,7 +452,7 @@ def main(params):
     # TODO: fix me
     if params.only_eval:
         val_stats = eval_one_epoch(
-            wam, val_loader, image_detection_loss, 0, validation_augs, validation_masks, params)
+            wam, video_val_loader, image_detection_loss, 0, validation_augs, validation_masks, params)
         if udist.is_main_process():
             with open(os.path.join(params.output_dir, 'log_only_eval.txt'), 'a') as f:
                 f.write(json.dumps(val_stats) + "\n")
@@ -456,8 +466,11 @@ def main(params):
 
         # Decide on the modality of this epoch either video or images
         if params.modality == Modalities.HYBRID:
-            epoch_modality = Modalities.IMAGE if random.random(
-            ) < params.image_to_video_percentage_in_hybrid else Modalities.VIDEO
+            if epoch >= params.video_start:
+                if random.random() < params.prop_img_vid:
+                    epoch_modality = Modalities.IMAGE 
+                else: 
+                    epoch_modality = Modalities.VIDEO
         else:
             epoch_modality = params.modality
 
@@ -552,6 +565,8 @@ def train_one_epoch(
             # last_layer = imgs
 
         for optimizer_idx in [1, 0]:
+            if params.lambda_d == 0 and optimizer_idx == 1:
+                continue
             # index 1 for discriminator, 0 for embedder/extractor
             loss, logs = image_detection_loss(
                 imgs, outputs["imgs_w"],
@@ -568,7 +583,6 @@ def train_one_epoch(
             **logs,
             'psnr': psnr(outputs["imgs_w"], imgs).mean().item(),
             'lr': optimizers[0].param_groups[0]['lr'],
-            "ssim": ssim(outputs["imgs_w"], imgs).mean().item(),
         }
 
         bit_preds = outputs["preds"][:, 1:]  # b k h w

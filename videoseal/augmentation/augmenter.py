@@ -59,13 +59,10 @@ class Augmenter(nn.Module):
         )
 
         # create augs
-        self.post_augs, self.post_probs = self.parse_augmentations(
+        self.augs, self.aug_probs = self.parse_augmentations(
             augs=augs,
             augs_params=augs_params
         )
-
-        # default all augmentations work with video and images
-        self.modality = Modalities.HYBRID
 
     def parse_augmentations(
         self,
@@ -99,9 +96,13 @@ class Augmenter(nn.Module):
         probs = [prob / total_prob for prob in probs]
         return augmentations, torch.tensor(probs)
 
-    def post_augment(self, image, mask, do_resize=True):
-        index = torch.multinomial(self.post_probs, 1).item()
-        selected_aug = self.post_augs[index]
+    def augment(self, image, mask, is_video, do_resize=True):
+        if ~is_video:  # replace video compression with identity
+            augs = [aug if aug.__class__.__name__ != 'VideoCompressorAugmenter' else Identity() for aug in self.augs]
+        else:
+            augs = self.augs
+        index = torch.multinomial(self.aug_probs, 1).item()
+        selected_aug = augs[index]
         if not do_resize:
             image, mask = selected_aug(image, mask)
         else:
@@ -119,6 +120,7 @@ class Augmenter(nn.Module):
         imgs_w: torch.Tensor,
         imgs: torch.Tensor,
         masks: torch.Tensor,
+        is_video=True
     ) -> torch.Tensor:
         """
         Args:
@@ -136,21 +138,21 @@ class Augmenter(nn.Module):
             # watermark masking
             imgs_aug = imgs_w * mask_targets + imgs * (1 - mask_targets)
             # image augmentations
-            imgs_aug, mask_targets, selected_aug = self.post_augment(
-                imgs_aug, mask_targets)
+            imgs_aug, mask_targets, selected_aug = self.augment(
+                imgs_aug, mask_targets, is_video)
             return imgs_aug, mask_targets, selected_aug
         else:
-            ### TOM CODE ###
+            # no mask
             mask_targets = torch.ones_like(imgs_w)[:, 0:1, :, :]
-            imgs_aug, mask_targets, selected_aug = self.post_augment(
-                imgs_w, mask_targets)
+            imgs_aug, mask_targets, selected_aug = self.augment(
+                imgs_w, mask_targets, is_video)
             # imgs_aug = imgs_w
             return imgs_aug, mask_targets, selected_aug
 
     def __repr__(self) -> str:
         # print the augmentations and their probabilities
-        augs = [aug.__class__.__name__ for aug in self.post_augs]
-        return f"Augmenter(augs={augs}, probs={self.post_probs})"
+        augs = [aug.__class__.__name__ for aug in self.augs]
+        return f"Augmenter(augs={augs}, probs={self.aug_probs})"
 
 
 if __name__ == "__main__":

@@ -96,34 +96,6 @@ def create_diff_img(img1, img2):
     return torch.abs(diff - 0.5)
 
 
-def detect_wm_hm(preds, msgs, bit_accuracy_, params):
-    """
-    Compute detected masks based on the heatmap
-
-    Parameters:
-        preds (torch.Tensor): Output of a wam model
-        msgs (torch.Tensor): The messages
-
-    Returns:
-        mask_preds_hm (torch.Tensor): The detected masks
-        mask_preds_hm_dynamic (torch.Tensor): The detected masks with dynamic threshold
-    """
-    mask_preds_hm = preds[:, 1:, :, :]
-    B, K, H, W = mask_preds_hm.shape
-    msgs_expanded = msgs.view(B, K, 1, 1).expand(B, K, H, W)
-    # Calculate bit accuracy
-    # Element-wise comparison, convert to float for averagin
-    bit_matches = ((mask_preds_hm > 0).float() == msgs_expanded).float()
-    bit_matches = bit_matches.mean(1, keepdim=True)
-    # After the sigmoid, values > 0.5 should correspond to original values > threshold_mask
-    mask_preds_hm = 100 * \
-        (bit_matches - params.threshold_mask)  # Scale and shift
-    dynamic_threshold = max(0.5, (bit_accuracy_+0.5)/2)
-    mask_preds_hm_dynamic = 2 * \
-        (bit_matches - dynamic_threshold)  # Scale and shift
-    return mask_preds_hm, mask_preds_hm_dynamic
-
-
 if __name__ == '__main__':
     # Example usage: python src/utils/image.py
     x = torch.rand(3, 256, 256)  # random image
