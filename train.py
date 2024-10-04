@@ -134,8 +134,6 @@ def get_parser():
        help="Scaling factor for the watermark in the embedder model")
     aa("--scaling_i", type=float, default=1.0,
        help="Scaling factor for the image in the embedder model")
-    aa("--threshold_mask", type=float, default=0.6,
-       help="Threshold for the mask prediction using heatmap only (default: 0.7)")
     # VideoWam parameters related how to do video watermarking inference
     aa("--videowam_frame_intermediate_size", type=int, default=256,
        help="The size of the frame to resize to intermediately while generating the watermark then upscale, the final video/image size is kept the same.")
@@ -155,15 +153,12 @@ def get_parser():
        help='Number of iterations per epoch, made for very large datasets')
     aa('--iter_per_valid', default=None, type=int,
        help='Number of iterations per eval, made for very large eval datasets if None eval on all dataset')
-    aa('--batch_size', default=16, type=int, help='Batch size')
-    aa('--batch_size_eval', default=64, type=int, help='Batch size for evaluation')
-    aa('--temperature', default=1.0, type=float,
-       help='Temperature for the mask loss')
-    aa('--workers', default=8, type=int, help='Number of data loading workers')
     aa('--resume_from', default=None, type=str,
        help='Path to the checkpoint to resume from')
 
     group = parser.add_argument_group('Losses parameters')
+    aa('--temperature', default=1.0, type=float,
+       help='Temperature for the mask loss')
     aa('--lambda_det', default=0.0, type=float,
        help='Weight for the watermark detection loss')
     aa('--lambda_dec', default=4.0, type=float,
@@ -181,6 +176,17 @@ def get_parser():
        help='Weight for the discriminator loss')
     aa('--disc_num_layers', default=2, type=int,
        help='Number of layers for the discriminator')
+
+    group = parser.add_argument_group('Loading parameters')
+    aa('--batch_size', default=16, type=int, help='Batch size')
+    aa('--batch_size_eval', default=64, type=int, help='Batch size for evaluation')
+    aa('--workers', default=8, type=int, help='Number of data loading workers')
+    aa('--frames_per_clip', default=16, type=int,
+         help='Number of frames per clip for video datasets')
+    aa('--frame_step', default=1, type=int,
+            help='Step between frames for video datasets')
+    aa('--num_clips', default=8, type=int,
+            help='Number of clips per video for video datasets')
 
     group = parser.add_argument_group('Misc.')
     aa('--only_eval', type=utils.bool_inst,
@@ -360,11 +366,11 @@ def main(params):
                                                       params.img_size, params.img_size),
                                                   # for now we are fixing 1 video / batch
                                                   flatten_clips_to_frames=True,
-                                                  frames_per_clip=32,
-                                                  frame_step=4,
+                                                  frames_per_clip=params.frames_per_clip,
+                                                  frame_step=params.frame_step,
                                                   # TODO: Find a smart way to shuffle while making cache efficient
                                                   shuffle=False,
-                                                  num_clips=16,
+                                                  num_clips=params.num_clips,
                                                   )
         video_val_loader = get_video_dataloader(params.video_dataset_config.val_dir,
                                                 batch_size=params.batch_size,
@@ -375,11 +381,11 @@ def main(params):
                                                     params.img_size, params.img_size),
                                                 # for now we are fixing 1 video / batch
                                                 flatten_clips_to_frames=True,
-                                                frames_per_clip=32,
+                                                frames_per_clip=params.frames_per_clip,
                                                 # TODO: Find a smart way to shuffle while making cache efficient
                                                 shuffle=False,
-                                                frame_step=4,
-                                                num_clips=16,
+                                                frame_step=params.frame_step,
+                                                num_clips=params.num_clips,
                                                 )
 
     # optionally resume training
