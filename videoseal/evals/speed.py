@@ -12,16 +12,37 @@ import pandas as pd
 import omegaconf
 
 from videoseal.models import build_embedder, build_extractor, Embedder, Extractor
+from videoseal.data.transforms import normalize_img, unnormalize_img
+
+def sync(device):
+    """ wait for the GPU to finish processing, before measuring time """
+    if device.startswith('cuda'):
+        torch.cuda.synchronize()
 
 def benchmark_model(model, img_size, data_loader, device):
     model.to(device)
     model.eval()
     times = []
+    times_interp = []
+    times_norm = []
     bsz = data_loader.batch_size
     with torch.no_grad():
         for imgs, _ in data_loader:
             imgs = imgs.to(device)
+            h_orig, w_orig = imgs.size(-2), imgs.size(-1)
+            # interpolate
+            start_time = time.time()
             imgs = F.interpolate(imgs, size=(img_size, img_size), mode='bilinear', align_corners=False)
+            sync(device)
+            end_time = time.time()
+            times_interp.append(end_time - start_time)
+            # normalize
+            start_time = time.time()
+            imgs = normalize_img(imgs)
+            sync(device)
+            end_time = time.time()
+            times_norm.append(end_time - start_time)
+            # forward pass
             if isinstance(model, Embedder):
                 msgs = model.get_random_msg(bsz=imgs.size(0))
                 msgs = msgs.to(device)
@@ -30,19 +51,36 @@ def benchmark_model(model, img_size, data_loader, device):
             elif isinstance(model, Extractor):
                 start_time = time.time()
                 _ = model(imgs)
-            torch.cuda.synchronize()
+            sync(device)
             end_time = time.time()
             times.append(end_time - start_time)
-    times.pop(0)  # Remove the first batch
-    time_total = sum(times)
-    time_per_batch = time_total / len(times)
-    time_per_img = time_per_batch / bsz
-    return {
-        'time_per_img': time_per_img,
-        'time_per_batch': time_per_batch,
-        'time_total': time_total,
-        'nsamples': len(times)
-    }
+            # unnormalize
+            start_time = time.time()
+            imgs = unnormalize_img(imgs)
+            sync(device)
+            end_time = time.time()
+            times_norm[-1] += end_time - start_time
+            # interpolate
+            start_time = time.time()
+            imgs = F.interpolate(imgs, size=(h_orig, w_orig), mode='bilinear', align_corners=False)
+            sync(device)
+            end_time = time.time()
+            times_interp[-1] += end_time - start_time
+            
+    results = {}
+    for label, tt in [('forward', times), ('interp', times_interp), ('norm', times_norm)]:
+        tt.pop(0)  # Remove the first batch
+        time_total = sum(tt)
+        time_per_batch = time_total / len(tt)
+        time_per_img = time_per_batch / bsz
+        curr_result = {
+            f'{label}_time_per_img': time_per_img,
+            f'{label}_time_per_batch': time_per_batch,
+            f'{label}_time_total': time_total
+        }
+        results.update(curr_result)
+    results.update({'nsamples': len(tt)})
+    return results
 
 def get_data_loader(batch_size, img_size, num_workers, nsamples):
     from torchvision.datasets import FakeData
@@ -78,7 +116,7 @@ def main(args):
         embedder_args = embedder_cfg[embedder_name]
         embedder = build_embedder(embedder_name, embedder_args, args.nbits)
         embedder = embedder.to(device)
-        embedder_stats = benchmark_model(embedder, args.img_size, data_loader, device)
+        embedder_stats = benchmark_model(embedder, args.img_size_work, data_loader, device)
         results.append({
             'model': embedder_name,
             'params': sum(p.numel() for p in embedder.parameters() if p.requires_grad) / 1e6,
@@ -88,9 +126,9 @@ def main(args):
     
     for extractor_name in args.extractor_models.split(','):
         extractor_args = extractor_cfg[extractor_name]
-        extractor = build_extractor(extractor_name, extractor_args, args.img_size_extractor, args.nbits)
+        extractor = build_extractor(extractor_name, extractor_args, args.img_size_work, args.nbits)
         extractor = extractor.to(device)
-        extractor_stats = benchmark_model(extractor, args.img_size_extractor, data_loader, device)
+        extractor_stats = benchmark_model(extractor, args.img_size_work, data_loader, device)
         results.append({
             'model': extractor_name,
             'params': sum(p.numel() for p in extractor.parameters() if p.requires_grad) / 1e6,
@@ -111,8 +149,8 @@ if __name__ == '__main__':
     parser.add_argument('--device', type=str, default='cpu')
     parser.add_argument('--batch_size', type=int, default=16)
     parser.add_argument('--nsamples', type=int, default=11)
-    parser.add_argument('--img_size', type=int, default=256)
-    parser.add_argument('--img_size_extractor', type=int, default=256)
+    parser.add_argument('--img_size', type=int, default=512)
+    parser.add_argument('--img_size_work', type=int, default=256)
     parser.add_argument('--workers', type=int, default=4)
     parser.add_argument('--embedder_config', type=str, default='configs/embedder.yaml')
     parser.add_argument('--extractor_config', type=str, default='configs/extractor.yaml')
