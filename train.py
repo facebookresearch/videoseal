@@ -736,8 +736,10 @@ def eval_one_epoch(
 
                     metric_logger.update(**aug_log_stats)
 
-    torch.cuda.empty_cache()
-    torch.cuda.synchronize()
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
+
+
 
     if udist.is_main_process():
         metric_logger.synchronize_between_processes()
