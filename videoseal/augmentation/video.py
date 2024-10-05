@@ -50,7 +50,10 @@ class VideoCompression(nn.Module):
                 stream.width = frames.shape[2]
                 stream.height = frames.shape[1]
                 stream.pix_fmt = 'yuv420p' if self.codec != 'libx264rgb' else 'rgb24'
-                stream.options = {'crf': str(self.crf)}  # Set the CRF value
+                stream.options = {
+                    'crf': str(self.crf),
+                    'threads': '1'  # Limiting to single-threaded mode
+                    }  # Set the CRF value
                 # Write frames to the stream
                 for frame_arr in frames:
                     frame = av.VideoFrame.from_ndarray(
@@ -70,7 +73,7 @@ class VideoCompression(nn.Module):
             with av.open(buffer, mode='r') as container:
                 output_frames = []
                 frame = ""
-                for frame in container.decode(video=0, options={'threads': '1'}):
+                for frame in container.decode(video=0):
                     img = frame.to_ndarray(format='rgb24')
                     output_frames.append(img)
 
