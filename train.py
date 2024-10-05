@@ -647,8 +647,7 @@ def eval_one_epoch(
     metric_logger = ulogger.MetricLogger(delimiter="  ")
 
     for it, batch_items in enumerate(metric_logger.log_every(val_loader, 10, header, max_iter=params.iter_per_valid)):
-        aug_metrics = {}
-
+        print("start val iter.")
         if len(batch_items) == 3:
             imgs, masks, frames_positions = batch_items
         elif len(batch_items) == 2:
@@ -663,10 +662,12 @@ def eval_one_epoch(
         imgs_w = wam.scaling_i * imgs + wam.scaling_w * deltas_w
 
         # quality metrics
-        aug_metrics['psnr'] = psnr(
+        metrics = {}
+        metrics['psnr'] = psnr(
             imgs_w, imgs).mean().item()
-        aug_metrics['ssim'] = ssim(
+        metrics['ssim'] = ssim(
             imgs_w, imgs).mean().item()
+        metric_logger.update(**metrics)
 
         # attenuate
         if wam.attenuation is not None:
@@ -682,6 +683,7 @@ def eval_one_epoch(
 
             for transform, strengths in validation_augs:
                 # Create an instance of the transformation
+                print(f"start augmentation {transform}.")
                 transform_instance = transform()
 
                 for strength in strengths:
@@ -707,7 +709,7 @@ def eval_one_epoch(
                     mask_preds = preds[:, 0:1]  # b 1 ...
                     bit_preds = preds[:, 1:]  # b k ...
 
-                    log_stats = {}
+                    aug_log_stats = {}
                     if params.nbits > 0:
                         bit_accuracy_ = bit_accuracy(
                             bit_preds,
@@ -716,33 +718,25 @@ def eval_one_epoch(
                         ).nanmean().item()
 
                     if params.nbits > 0:
-                        log_stats[f'bit_acc'] = bit_accuracy_
+                        aug_log_stats[f'bit_acc'] = bit_accuracy_
 
                     if params.lambda_det > 0:
                         iou0 = iou(mask_preds, masks, label=0).mean().item()
                         iou1 = iou(mask_preds, masks, label=1).mean().item()
-                        log_stats.update({
+                        aug_log_stats.update({
                             f'acc': accuracy(mask_preds, masks).mean().item(),
                             f'miou': (iou0 + iou1) / 2,
                         })
 
                     current_key = f"mask={mask_id}_aug={selected_aug}"
-                    log_stats = {f"{k}_{current_key}": v for k,
-                                 v in log_stats.items()}
+                    aug_log_stats = {f"{k}_{current_key}": v for k,
+                                 v in aug_log_stats.items()}
 
-                    # save stats of the current augmentation
-                    aug_metrics = {**aug_metrics, **log_stats}
+                    metric_logger.update(**aug_log_stats)
 
-
-        for name, loss in aug_metrics.items():
-            # if name == 'bit_acc' and math.isnan(loss):
-            #     continue
-            # if name in ["decode_loss", "decode_scale"] and loss == -1:
-            #     continue  # Skip this update or replace with a default value
-            metric_logger.update(**{name: loss})
+    print(f"TIME TO SYNC LOGGER: {metric_logger}")
     metric_logger.synchronize_between_processes()
     print("Averaged {} stats:".format('val'), metric_logger)
-
 
     # save last valid 
     # moving this after metric sync to avoid slowing down 1 process (main) vs others 

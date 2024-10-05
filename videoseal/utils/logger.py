@@ -36,7 +36,7 @@ class SmoothedValue(object):
             return
         t = torch.tensor([self.total, self.count],
                          dtype=torch.float64, device='cuda')
-        # dist.barrier()
+        dist.barrier()
         dist.all_reduce(t)  # count, total
         self.total = t[0].item()
         self.count = t[1].item()
