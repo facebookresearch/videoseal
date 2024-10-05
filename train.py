@@ -503,6 +503,8 @@ def main(params):
             with open(os.path.join(params.output_dir, 'log.txt'), 'a') as f:
                 f.write(json.dumps(log_stats) + "\n")
 
+        dist.barrier()  # Ensures all processes wait until the main node finishes validation
+
         print("Saving Checkpoint..")
         save_dict = {
             'epoch': epoch + 1,
