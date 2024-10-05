@@ -150,7 +150,7 @@ class MetricLogger(object):
                 '{meters}',
                 'time: {time}',
                 'data: {data}',
-                'max mem: {memory:.0f}'
+                # 'max mem: {memory:.0f}'
             ])
         else:
             log_msg = self.delimiter.join([
