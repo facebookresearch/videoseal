@@ -34,13 +34,15 @@ class SmoothedValue(object):
         """
         if not is_dist_avail_and_initialized():
             return
-        t = torch.tensor([self.count, self.total],
+        t = torch.tensor([self.total, self.count],
                          dtype=torch.float64, device='cuda')
-        dist.barrier()
+        # dist.barrier()
         dist.all_reduce(t)  # count, total
-        t = t.tolist()
-        self.count = int(t[0])
-        self.total = t[1]
+        self.total = t[0].item()
+        self.count = t[1].item()
+        # t = t.tolist()
+        # self.count = int(t[0])
+        # self.total = t[1]
         # print(t)
         # tensor_list = [torch.zeros_like(t) for _ in range(dist.get_world_size())]
         # dist.all_gather(tensor_list, t)  # [count_0, count_1, ...], [total_0, total_1, ...
