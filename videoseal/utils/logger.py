@@ -23,10 +23,26 @@ class SmoothedValue(object):
         self.fmt = fmt
 
     def update(self, value, n=1):
+        """
+        Update metric with new value.
+
+        Args:
+            value (float, tensor, or numpy array): value to update.
+            n (int, optional): weight for value. Defaults to 1.
+        """
+        # Ensure value is a float or numpy array for safe storage
+        if isinstance(value, torch.Tensor):
+            value = value.detach().cpu().clone().item()  # Convert tensor to float
+        elif isinstance(value, np.ndarray):
+            value = np.asscalar(value)  # Convert numpy array to float
+
+        # Check for NaN values
+        if value != value:  # NaN check
+            return
+
         self.deque.append(value)
-        if not (value != value):
-            self.total_count += n
-            self.total_sum += value * n
+        self.total_count += n
+        self.total_sum += value * n
 
     def synchronize_between_processes(self):
         """
