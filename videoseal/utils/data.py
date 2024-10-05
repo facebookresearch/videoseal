@@ -16,29 +16,33 @@ class LRUDict(OrderedDict):
     def __init__(self, maxsize=10):
         super().__init__()
         self.maxsize = maxsize
-        self.lock = threading.Lock()
+        self.lock = threading.RLock()  # Use a reentrant lock to avoid deadlocks
+
     def __setitem__(self, key, value):
-        print(f"Buffer capacity = {len(self)/self.maxsize} %")
-        # Get the RAM details
-        ram = psutil.virtual_memory()
-        print(f"Total RAM:   {ram.total / (1024 ** 3):.2f} GB 
-              Used RAM:     {ram.used / (1024 ** 3):.2f} GB
-              RAM Usage Percentage:     {ram.percent}%
-              ")
         with self.lock:
+            # Insert the item in the dictionary
             super().__setitem__(key, value)
-            if len(self) >= self.maxsize:
-                # Clear at least 10% of the max size or at least 2 items
-                num_to_clear = max(2, int(self.maxsize * 0.1))
-                keys_to_remove = list(self.keys())[:num_to_clear]
-                for key in keys_to_remove:
-                    del self[key]
-    def __getitem__(self, key):
+
+            # If the dictionary exceeds max size, remove the least recently used items
+            if len(self) > self.maxsize:
+                self._cleanup()
+
+    def __getitem__(self, key, cleaningup=False):
         with self.lock:
-            return super().__getitem__(key)
+            value = super().__getitem__(key)
+            # Move the accessed item to the end to mark it as recently used
+            return value
+
     def __delitem__(self, key):
         with self.lock:
-            return super().__delitem__(key)
+            super().__delitem__(key)
+
+    def _cleanup(self):
+        # Remove the least recently used items until we're back under the limit
+        num_to_clear = max(1, int(0.1 * self.maxsize))  # Clear 10% or at least 1
+        for _ in range(num_to_clear):
+            self.popitem(last=False)  # Remove from the start (LRU)
+
 
 def parse_dataset_params(params):
     """
