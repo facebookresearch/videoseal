@@ -659,7 +659,7 @@ def eval_one_epoch(
         elif len(batch_items) == 2:
             imgs, masks = batch_items
 
-        imgs = imgs.to(device, non_blocking=True)
+        imgs = imgs.to(device)
 
         msgs = wam.get_random_msg(imgs.shape[0])  # b x k
 
@@ -742,7 +742,6 @@ def eval_one_epoch(
 
                     metric_logger.update(**aug_log_stats)
 
-    print("[synchronizing Metrics]"*300)
     print("---"*100)
     # no need to synchronize since valid_one_step it only runs with main process
     # metric_logger.synchronize_between_processes()
