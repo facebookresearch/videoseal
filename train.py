@@ -493,7 +493,7 @@ def main(params):
             if epoch_modality == Modalities.VIDEO:
                 augs.append((VideoCompressorAugmenter, [0]))
 
-            val_stats = eval_one_epoch(wam, epoch_val_loader, epoch_modality, image_detection_loss,
+            val_stats = eval_one_epoch(wam_ddp, epoch_val_loader, epoch_modality, image_detection_loss,
                                        epoch, augs, validation_masks, params)
             log_stats = {**log_stats, **
                          {f'val_{k}': v for k, v in val_stats.items()}}
@@ -613,6 +613,7 @@ def train_one_epoch(
 
     metric_logger.synchronize_between_processes()
     print("Averaged {} stats:".format('train'), metric_logger)
+
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
 
 
