@@ -689,19 +689,20 @@ def eval_one_epoch(
                 transform_instance = transform()
 
                 for strength in strengths:
-                    # do_resize = False  # hardcode for now, might need to change
-                    # if not do_resize:
-                    imgs_aug, masks_aug = transform_instance(imgs_masked, masks, strength)
-                    # else:
-                    #     # h, w = imgs_w.shape[-2:]
-                    #     h, w = params.img_size_extractor, params.img_size_extractor
-                    #     imgs_aug, masks_aug = transform_instance(
-                    #         imgs_masked, masks, strength)
-                    #     if imgs_aug.shape[-2:] != (h, w):
-                    #         imgs_aug = nn.functional.interpolate(imgs_aug, size=(
-                    #             h, w), mode='bilinear', align_corners=False, antialias=True)
-                    #         masks_aug = nn.functional.interpolate(masks_aug, size=(
-                    #             h, w), mode='bilinear', align_corners=False, antialias=True)
+                    do_resize = True  # hardcode for now, might need to change
+                    if not do_resize:
+                        imgs_aug, masks_aug = transform_instance(
+                            imgs_masked, masks, strength)
+                    else:
+                        # h, w = imgs_w.shape[-2:]
+                        h, w = params.img_size_extractor, params.img_size_extractor
+                        imgs_aug, masks_aug = transform_instance(
+                            imgs_masked, masks, strength)
+                        if imgs_aug.shape[-2:] != (h, w):
+                            imgs_aug = nn.functional.interpolate(imgs_aug, size=(
+                                h, w), mode='bilinear', align_corners=False, antialias=True)
+                            masks_aug = nn.functional.interpolate(masks_aug, size=(
+                                h, w), mode='bilinear', align_corners=False, antialias=True)
                     selected_aug = str(
                         transform.__name__).lower() + '_' + str(strength)
 
@@ -750,7 +751,8 @@ def eval_one_epoch(
     metric_logger.synchronize_between_processes()
     print("Averaged {} stats:".format('val'), metric_logger)
 
-    # save last valid batch
+
+    # save last valid 
     if (epoch % params.saveimg_freq == 0 or params.only_eval) and udist.is_main_process():
         save_image(imgs,
                    os.path.join(params.output_dir, f'{epoch:03}__val_0_ori.png'), nrow=8)
