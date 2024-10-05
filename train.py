@@ -529,7 +529,6 @@ def train_one_epoch(
     params: argparse.Namespace,
 ):
     assert epoch_modality in [Modalities.IMAGE, Modalities.VIDEO]
-    torch.cuda.synchronize()  # ensure gpus sync before starting the epoch
 
     wam.train()
 
@@ -579,7 +578,6 @@ def train_one_epoch(
             loss.backward()
             optimizers[optimizer_idx].step()
 
-        torch.cuda.synchronize()
         # log stats
         log_stats = {
             **logs,
@@ -608,11 +606,10 @@ def train_one_epoch(
                 f'acc': accuracy(mask_preds, outputs["masks"]).mean().item(),
                 f'miou': (iou0 + iou1) / 2,
             })
-        torch.cuda.synchronize()
+
         for name, loss in log_stats.items():
             metric_logger.update(**{name: loss})
 
-    torch.distributed.barrier()
     metric_logger.synchronize_between_processes()
     print("Averaged {} stats:".format('train'), metric_logger)
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
@@ -643,8 +640,7 @@ def eval_one_epoch(
     """
     if torch.is_tensor(validation_masks):
         validation_masks = list(torch.unbind(validation_masks, dim=0))
-    torch.cuda.synchronize()  # Ensures that all operations on a specific GPU (or all GPUs) have been completed before the code continues.
-    torch.distributed.barrier() # Ensures that all processes in a distributed training setup reach the same point in the code before proceeding. 
+
     wam.eval()
     header = 'Val Full - Epoch: [{}/{}] - Modality: {}'.format(
         epoch, params.epochs, epoch_modality)
@@ -737,8 +733,7 @@ def eval_one_epoch(
                     # save stats of the current augmentation
                     aug_metrics = {**aug_metrics, **log_stats}
 
-        torch.cuda.synchronize()
-        torch.distributed.barrier()
+
         for name, loss in aug_metrics.items():
             # if name == 'bit_acc' and math.isnan(loss):
             #     continue
@@ -746,8 +741,6 @@ def eval_one_epoch(
             #     continue  # Skip this update or replace with a default value
             metric_logger.update(**{name: loss})
     
-    torch.distributed.barrier()
-    torch.cuda.synchronize()
     metric_logger.synchronize_between_processes()
     print("Averaged {} stats:".format('val'), metric_logger)
 
