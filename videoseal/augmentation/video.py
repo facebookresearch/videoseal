@@ -88,7 +88,7 @@ class VideoCompression(nn.Module):
             (orig_frames - output_frames).detach()
         del orig_frames  # Free memory
         end_time = time.time()
-        print(f"video compression time {end_time-start_time}")
+         # print(f"video compression time {end_time-start_time}")
         if self.return_aux:
             return compressed_frames, mask, file_size
         return compressed_frames, mask
