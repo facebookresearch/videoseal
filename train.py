@@ -736,9 +736,10 @@ def eval_one_epoch(
 
                     metric_logger.update(**aug_log_stats)
 
-    metric_logger.synchronize_between_processes()
-    print("Averaged {} stats:".format('val'), metric_logger)
-    
+    if udist.is_main_process():
+        metric_logger.synchronize_between_processes()
+        print("Averaged {} stats:".format('val'), metric_logger)
+        
     # imgs, imgs_w = imgs.cpu(), imgs_w.cpu()
     # def save_images(epoch, params, imgs, imgs_w, epoch_modality, it):
     #     # Your image saving code here
@@ -761,7 +762,7 @@ def eval_one_epoch(
     #         save_vid(imgs - imgs_w, wm_path, fps)
     
     # if (epoch % params.saveimg_freq == 0 or params.only_eval) and udist.is_main_process():
-    #     threading.Thread(target=save_images, args=(epoch, params, imgs, imgs_w, epoch_modality, it)).start()
+    # #     threading.Thread(target=save_images, args=(epoch, params, imgs, imgs_w, epoch_modality, it)).start()
     
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
 
