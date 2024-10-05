@@ -561,7 +561,7 @@ def train_one_epoch(
             imgs, masks = batch_items
 
         # masks are only used if segm_proba > 0
-        imgs = imgs.to(device, non_blocking=True)
+        imgs = imgs.to(device)
 
         # forward
         # TODO deal with the usecase of batch of videos, for now we support flattened videos
@@ -594,6 +594,8 @@ def train_one_epoch(
             optimizers[optimizer_idx].zero_grad()
             loss.backward()
             optimizers[optimizer_idx].step()
+            torch.distributed.barrier()
+            torch.cuda.synchronize()  # Ensure completion of CUDA operations
 
         # log stats
         log_stats = {
@@ -624,8 +626,8 @@ def train_one_epoch(
                 f'miou': (iou0 + iou1) / 2,
             })
 
-        for name, loss in log_stats.items():
-            metric_logger.update(**{name: loss})
+        for name, value in log_stats.items():
+            metric_logger.update(**{name: value})
 
     metric_logger.synchronize_between_processes()
     print("Averaged {} stats:".format('train'), metric_logger)
@@ -694,7 +696,7 @@ def eval_one_epoch(
 
         for mask_id, masks in enumerate(validation_masks):
             # watermark masking
-            masks = masks.to(imgs.device, non_blocking=True)  # 1 h w
+            masks = masks.to(imgs.device)  # 1 h w
             if len(masks.shape) < 4:
                 masks = masks.unsqueeze(0).repeat(
                     imgs_w.shape[0], 1, 1, 1)  # b 1 h w
