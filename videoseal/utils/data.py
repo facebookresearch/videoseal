@@ -10,7 +10,6 @@ class Modalities:
     VIDEO = 'video'
     HYBRID = 'hybrid'
 
-import psutil
 
 class LRUDict(OrderedDict):
     def __init__(self, maxsize=10):
@@ -27,7 +26,7 @@ class LRUDict(OrderedDict):
             if len(self) > self.maxsize:
                 self._cleanup()
 
-    def __getitem__(self, key, cleaningup=False):
+    def __getitem__(self, key):
         with self.lock:
             value = super().__getitem__(key)
             # Move the accessed item to the end to mark it as recently used
@@ -39,7 +38,8 @@ class LRUDict(OrderedDict):
 
     def _cleanup(self):
         # Remove the least recently used items until we're back under the limit
-        num_to_clear = max(1, int(0.1 * self.maxsize))  # Clear 10% or at least 1
+        # Clear 10% or at least 1
+        num_to_clear = max(1, int(0.1 * self.maxsize))
         for _ in range(num_to_clear):
             self.popitem(last=False)  # Remove from the start (LRU)
 
