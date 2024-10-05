@@ -8,7 +8,7 @@ Example usage (cluster 1 gpu):
 
 Example:  decoding only, hidden like
     torchrun --nproc_per_node=2 train.py --local_rank 0 --nbits 32 --saveimg_freq 1 --lambda_i 0 --lambda_det 0 --lambda_dec 1 --lambda_d 0  --img_size 128 --img_size_extractor 128 --embedder_model hidden --extractor_model hidden
-    
+
 With video compression aug:
     torchrun --nproc_per_node=2 train.py --local_rank 0  --image_dataset coco --video_dataset sa-v --augmentation_config configs/video_compression.yaml --extractor_model sam_tiny --embedder_model vae_small_bw --img_size 256 --img_size_extractor 256 --batch_size 16 --batch_size_eval 32 --epochs 100 --optimizer AdamW,lr=1e-4 --scheduler CosineLRScheduler,lr_min=1e-6,t_initial=100,warmup_lr_init=1e-6,warmup_t=5 --seed 0 --perceptual_loss mse --lambda_i 0.0 --lambda_d 0.0 --lambda_det 0.0 --lambda_dec 1.0 --nbits 32 --scaling_i 1.0 --scaling_w 0.2 --balanced  false --iter_per_epoch 5
 
@@ -444,13 +444,25 @@ def main(params):
         dummy_img)  # n 1 h w, full of ones or random masks depending on config
 
     # evaluation only
-    # TODO: fix me
-    if params.only_eval:
-        val_stats = eval_one_epoch(
-            wam, video_val_loader, image_detection_loss, 0, validation_augs, validation_masks, params)
-        if udist.is_main_process():
-            with open(os.path.join(params.output_dir, 'log_only_eval.txt'), 'a') as f:
-                f.write(json.dumps(val_stats) + "\n")
+    # TODO: test me
+    if params.only_eval and udist.is_main_process():
+        # get data loaders
+        val_loaders = ((Modalities.IMAGE, image_val_loader),
+                       (Modalities.VIDEO, video_val_loader))
+
+        augs = validation_augs
+
+        for val_loader, modality in val_loaders:
+            if val_loader is not None:
+
+                if modality == Modalities.VIDEO:
+                    augs.append((VideoCompressorAugmenter, [0]))
+
+                print(f"running eval on {modality} dataset.")
+                val_stats = eval_one_epoch(wam, val_loader, modality, image_detection_loss,
+                                           0, augs, validation_masks, params)
+                with open(os.path.join(params.output_dir, f'log_only_{modality}_eval.txt'), 'a') as f:
+                    f.write(json.dumps(val_stats) + "\n")
         return
 
     # start training
@@ -653,7 +665,6 @@ def eval_one_epoch(
     metric_logger = ulogger.MetricLogger(delimiter="  ")
 
     for it, batch_items in enumerate(metric_logger.log_every(val_loader, 10, header, max_iter=params.iter_per_valid)):
-        print("start val iter.")
         if len(batch_items) == 3:
             imgs, masks, frames_positions = batch_items
         elif len(batch_items) == 2:
@@ -691,7 +702,6 @@ def eval_one_epoch(
 
             for transform, strengths in validation_augs:
                 # Create an instance of the transformation
-                print(f"start augmentation {transform}.")
                 transform_instance = transform()
 
                 for strength in strengths:

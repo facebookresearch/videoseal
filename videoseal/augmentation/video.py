@@ -33,7 +33,6 @@ class VideoCompression(nn.Module):
         Returns:
             torch.Tensor: Decompressed video frames as a tensor with shape (T, C, H, W).
         """
-        start_time = time.time()
         device = frames.device  # Get the device of the input frames
         # Save the original frames for skip gradients
         orig_frames = frames.clone()
@@ -53,7 +52,7 @@ class VideoCompression(nn.Module):
                 stream.options = {
                     'crf': str(self.crf),
                     'threads': '1'  # Limiting to single-threaded mode
-                    }  # Set the CRF value
+                }  # Set the CRF value
                 # Write frames to the stream
                 for frame_arr in frames:
                     frame = av.VideoFrame.from_ndarray(
@@ -88,8 +87,7 @@ class VideoCompression(nn.Module):
         compressed_frames = orig_frames + \
             (orig_frames - output_frames).detach()
         del orig_frames  # Free memory
-        end_time = time.time()
-        print(f"video compression time {end_time-start_time}")
+
         if self.return_aux:
             return compressed_frames, mask, file_size
         return compressed_frames, mask
