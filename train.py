@@ -24,6 +24,7 @@ Args inventory:
     --video_dataset sa-v
     --image_dataset coco
 """
+import threading
 
 import argparse
 import datetime
@@ -40,6 +41,7 @@ import omegaconf
 import psutil
 import torch
 import torch.distributed as dist
+import torch.distributed
 import torch.nn as nn
 import torch.nn.functional as F
 from torchvision.utils import save_image
@@ -734,33 +736,34 @@ def eval_one_epoch(
 
                     metric_logger.update(**aug_log_stats)
 
-    print(f"TIME TO SYNC LOGGER: {metric_logger}")
-    metric_logger.synchronize_between_processes()
+    # print(f"TIME TO SYNC LOGGER: {metric_logger}")
+    # metric_logger.synchronize_between_processes()
     print("Averaged {} stats:".format('val'), metric_logger)
+    # imgs, imgs_w = imgs.cpu(), imgs_w.cpu()
 
-    # save last valid 
-    # moving this after metric sync to avoid slowing down 1 process (main) vs others 
-    if (epoch % params.saveimg_freq == 0 or params.only_eval) and udist.is_main_process():
-        save_image(imgs,
-                   os.path.join(params.output_dir, f'{epoch:03}__val_0_ori.png'), nrow=8)
-        save_image(imgs_w,
-                   os.path.join(params.output_dir, f'{epoch:03}_val_1_w.png'), nrow=8)
-        save_image(create_diff_img(imgs, imgs_w),
-                   os.path.join(params.output_dir, f'{epoch:03}_val_2_diff.png'), nrow=8)
-
-        if epoch_modality == Modalities.VIDEO:
-            raw_path = os.path.join(
-                params.output_dir, f'{epoch:03}_{it:03}_val_0_raw.mp4')
-            wmed_path = os.path.join(
-                params.output_dir, f'{epoch:03}_{it:03}_val_1__wmed.mp4')
-            wm_path = os.path.join(
-                params.output_dir, f'{epoch:03}_{it:03}_val_2_wm.mp4')
-
-            fps = 24 // 1
-            save_vid(imgs, raw_path, fps)
-            save_vid(imgs_w, wmed_path, fps)
-            save_vid(imgs - imgs_w, wm_path, fps)
-
+    # def save_images(epoch, params, imgs, imgs_w, epoch_modality, it):
+    #     # Your image saving code here
+    #     save_image(imgs,
+    #             os.path.join(params.output_dir, f'{epoch:03}__val_0_ori.png'), nrow=8)
+    #     save_image(imgs_w,
+    #             os.path.join(params.output_dir, f'{epoch:03}_val_1_w.png'), nrow=8)
+    #     save_image(create_diff_img(imgs, imgs_w),
+    #             os.path.join(params.output_dir, f'{epoch:03}_val_2_diff.png'), nrow=8)
+    #     if epoch_modality == Modalities.VIDEO:
+    #         raw_path = os.path.join(
+    #             params.output_dir, f'{epoch:03}_{it:03}_val_0_raw.mp4')
+    #         wmed_path = os.path.join(
+    #             params.output_dir, f'{epoch:03}_{it:03}_val_1__wmed.mp4')
+    #         wm_path = os.path.join(
+    #             params.output_dir, f'{epoch:03}_{it:03}_val_2_wm.mp4')
+    #         fps = 24 // 1
+    #         save_vid(imgs, raw_path, fps)
+    #         save_vid(imgs_w, wmed_path, fps)
+    #         save_vid(imgs - imgs_w, wm_path, fps)
+    
+    # if (epoch % params.saveimg_freq == 0 or params.only_eval) and udist.is_main_process():
+    #     threading.Thread(target=save_images, args=(epoch, params, imgs, imgs_w, epoch_modality, it)).start()
+    
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
 
 
