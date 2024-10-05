@@ -1,12 +1,12 @@
 
+from .dist import get_rank, is_dist_avail_and_initialized
 import datetime
 import time
 from collections import defaultdict, deque
 
 import torch
 import torch.distributed as dist
-
-from .dist import get_rank, is_dist_avail_and_initialized
+fropm numpy import np
 
 
 class SmoothedValue(object):
