@@ -70,7 +70,7 @@ class VideoCompression(nn.Module):
             with av.open(buffer, mode='r') as container:
                 output_frames = []
                 frame = ""
-                for frame in container.decode(video=0):
+                for frame in container.decode(video=0, options={'threads': '1'}):
                     img = frame.to_ndarray(format='rgb24')
                     output_frames.append(img)
 
@@ -86,7 +86,7 @@ class VideoCompression(nn.Module):
             (orig_frames - output_frames).detach()
         del orig_frames  # Free memory
         end_time = time.time()
-         # print(f"video compression time {end_time-start_time}")
+        print(f"video compression time {end_time-start_time}")
         if self.return_aux:
             return compressed_frames, mask, file_size
         return compressed_frames, mask
