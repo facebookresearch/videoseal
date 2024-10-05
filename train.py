@@ -470,8 +470,8 @@ def main(params):
         else:
             epoch_modality = params.modality
 
-        epoch_train_loader = video_train_loader if epoch_modality == "video" else image_train_loader
-        epoch_val_loader = video_val_loader if epoch_modality == "video" else image_val_loader
+        epoch_train_loader = video_train_loader if epoch_modality == Modalities.VIDEO else image_train_loader
+        epoch_val_loader = video_val_loader if epoch_modality == Modalities.VIDEO else image_val_loader
 
         if scheduler is not None:
             scheduler.step(epoch)
@@ -501,7 +501,6 @@ def main(params):
                 f.write(json.dumps(log_stats) + "\n")
 
         print("Saving Checkpoint..")
-        torch.cuda.synchronize()  # ensure gpus sync before save ckpt
         save_dict = {
             'epoch': epoch + 1,
             'model': wam.state_dict(),
@@ -613,6 +612,7 @@ def train_one_epoch(
         for name, loss in log_stats.items():
             metric_logger.update(**{name: loss})
 
+    torch.distributed.barrier()
     metric_logger.synchronize_between_processes()
     print("Averaged {} stats:".format('train'), metric_logger)
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
@@ -643,7 +643,8 @@ def eval_one_epoch(
     """
     if torch.is_tensor(validation_masks):
         validation_masks = list(torch.unbind(validation_masks, dim=0))
-    torch.cuda.synchronize()  # ensure gpus sync before starting the epoch
+    torch.cuda.synchronize()  # Ensures that all operations on a specific GPU (or all GPUs) have been completed before the code continues.
+    torch.distributed.barrier() # Ensures that all processes in a distributed training setup reach the same point in the code before proceeding. 
     wam.eval()
     header = 'Val Full - Epoch: [{}/{}] - Modality: {}'.format(
         epoch, params.epochs, epoch_modality)
@@ -759,13 +760,16 @@ def eval_one_epoch(
                 save_vid(imgs - imgs_w, wm_path, fps)
 
         torch.cuda.synchronize()
+        torch.distributed.barrier()
         for name, loss in aug_metrics.items():
             # if name == 'bit_acc' and math.isnan(loss):
             #     continue
             # if name in ["decode_loss", "decode_scale"] and loss == -1:
             #     continue  # Skip this update or replace with a default value
             metric_logger.update(**{name: loss})
-
+    
+    torch.distributed.barrier()
+    torch.cuda.synchronize()
     metric_logger.synchronize_between_processes()
     print("Averaged {} stats:".format('val'), metric_logger)
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
