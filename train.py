@@ -736,11 +736,10 @@ def eval_one_epoch(
 
                     metric_logger.update(**aug_log_stats)
 
-    # print(f"TIME TO SYNC LOGGER: {metric_logger}")
-    # metric_logger.synchronize_between_processes()
+    metric_logger.synchronize_between_processes()
     print("Averaged {} stats:".format('val'), metric_logger)
+    
     # imgs, imgs_w = imgs.cpu(), imgs_w.cpu()
-
     # def save_images(epoch, params, imgs, imgs_w, epoch_modality, it):
     #     # Your image saving code here
     #     save_image(imgs,
