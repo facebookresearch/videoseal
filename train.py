@@ -689,20 +689,19 @@ def eval_one_epoch(
                 transform_instance = transform()
 
                 for strength in strengths:
-                    do_resize = True  # hardcode for now, might need to change
-                    if not do_resize:
-                        imgs_aug, masks_aug = transform_instance(
-                            imgs_masked, masks, strength)
-                    else:
-                        # h, w = imgs_w.shape[-2:]
-                        h, w = params.img_size_extractor, params.img_size_extractor
-                        imgs_aug, masks_aug = transform_instance(
-                            imgs_masked, masks, strength)
-                        if imgs_aug.shape[-2:] != (h, w):
-                            imgs_aug = nn.functional.interpolate(imgs_aug, size=(
-                                h, w), mode='bilinear', align_corners=False, antialias=True)
-                            masks_aug = nn.functional.interpolate(masks_aug, size=(
-                                h, w), mode='bilinear', align_corners=False, antialias=True)
+                    # do_resize = False  # hardcode for now, might need to change
+                    # if not do_resize:
+                    imgs_aug, masks_aug = transform_instance(imgs_masked, masks, strength)
+                    # else:
+                    #     # h, w = imgs_w.shape[-2:]
+                    #     h, w = params.img_size_extractor, params.img_size_extractor
+                    #     imgs_aug, masks_aug = transform_instance(
+                    #         imgs_masked, masks, strength)
+                    #     if imgs_aug.shape[-2:] != (h, w):
+                    #         imgs_aug = nn.functional.interpolate(imgs_aug, size=(
+                    #             h, w), mode='bilinear', align_corners=False, antialias=True)
+                    #         masks_aug = nn.functional.interpolate(masks_aug, size=(
+                    #             h, w), mode='bilinear', align_corners=False, antialias=True)
                     selected_aug = str(
                         transform.__name__).lower() + '_' + str(strength)
 
@@ -737,28 +736,6 @@ def eval_one_epoch(
                     # save stats of the current augmentation
                     aug_metrics = {**aug_metrics, **log_stats}
 
-        # save some of the images
-        if (epoch % params.saveimg_freq == 0 or params.only_eval) and it == 0 and udist.is_main_process():
-            save_image(imgs,
-                       os.path.join(params.output_dir, f'{epoch:03}_{it:03}_val_0_ori.png'), nrow=8)
-            save_image(imgs_w,
-                       os.path.join(params.output_dir, f'{epoch:03}_{it:03}_val_1_w.png'), nrow=8)
-            save_image(create_diff_img(imgs, imgs_w),
-                       os.path.join(params.output_dir, f'{epoch:03}_{it:03}_val_2_diff.png'), nrow=8)
-
-            if epoch_modality == Modalities.VIDEO:
-                raw_path = os.path.join(
-                    params.output_dir, f'{epoch:03}_{it:03}_raw.mp4')
-                wmed_path = os.path.join(
-                    params.output_dir, f'{epoch:03}_{it:03}_wmed.mp4')
-                wm_path = os.path.join(
-                    params.output_dir, f'{epoch:03}_{it:03}_wm.mp4')
-
-                fps = 24 // 1
-                save_vid(imgs, raw_path, fps)
-                save_vid(imgs_w, wmed_path, fps)
-                save_vid(imgs - imgs_w, wm_path, fps)
-
         torch.cuda.synchronize()
         torch.distributed.barrier()
         for name, loss in aug_metrics.items():
@@ -772,6 +749,29 @@ def eval_one_epoch(
     torch.cuda.synchronize()
     metric_logger.synchronize_between_processes()
     print("Averaged {} stats:".format('val'), metric_logger)
+
+    # save last valid batch
+    if (epoch % params.saveimg_freq == 0 or params.only_eval) and udist.is_main_process():
+        save_image(imgs,
+                   os.path.join(params.output_dir, f'{epoch:03}__val_0_ori.png'), nrow=8)
+        save_image(imgs_w,
+                   os.path.join(params.output_dir, f'{epoch:03}_val_1_w.png'), nrow=8)
+        save_image(create_diff_img(imgs, imgs_w),
+                   os.path.join(params.output_dir, f'{epoch:03}_val_2_diff.png'), nrow=8)
+
+        if epoch_modality == Modalities.VIDEO:
+            raw_path = os.path.join(
+                params.output_dir, f'{epoch:03}_{it:03}_val_0_raw.mp4')
+            wmed_path = os.path.join(
+                params.output_dir, f'{epoch:03}_{it:03}_val_1__wmed.mp4')
+            wm_path = os.path.join(
+                params.output_dir, f'{epoch:03}_{it:03}_val_2_wm.mp4')
+
+            fps = 24 // 1
+            save_vid(imgs, raw_path, fps)
+            save_vid(imgs_w, wmed_path, fps)
+            save_vid(imgs - imgs_w, wm_path, fps)
+
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
 
 
