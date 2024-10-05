@@ -488,16 +488,18 @@ def main(params):
         log_stats = {**log_stats, **
                      {f'train_{k}': v for k, v in train_stats.items()}}
 
-        if epoch % params.eval_freq == 0:
+        # validation only runs in main process
+        # to avoid nccl erros also we cannot send wam_ddp
+        if epoch % params.eval_freq == 0 and udist.is_main_process():
             augs = validation_augs if epoch % params.full_eval_freq == 0 else validation_augs_subset
             if epoch_modality == Modalities.VIDEO:
                 augs.append((VideoCompressorAugmenter, [0]))
 
-            val_stats = eval_one_epoch(wam_ddp, epoch_val_loader, epoch_modality, image_detection_loss,
+            val_stats = eval_one_epoch(wam, epoch_val_loader, epoch_modality, image_detection_loss,
                                        epoch, augs, validation_masks, params)
             log_stats = {**log_stats, **
                          {f'val_{k}': v for k, v in val_stats.items()}}
-        if udist.is_main_process():
+
             with open(os.path.join(params.output_dir, 'log.txt'), 'a') as f:
                 f.write(json.dumps(log_stats) + "\n")
 
@@ -656,7 +658,9 @@ def eval_one_epoch(
             imgs, masks = batch_items
 
         imgs = imgs.to(device, non_blocking=True)
+
         msgs = wam.get_random_msg(imgs.shape[0])  # b x k
+
         msgs = msgs.to(imgs.device)
 
         # generate watermarked images
