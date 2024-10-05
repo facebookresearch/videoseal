@@ -649,7 +649,7 @@ def eval_one_epoch(
         epoch, params.epochs, epoch_modality)
     metric_logger = ulogger.MetricLogger(delimiter="  ")
 
-    for it, batch_items in enumerate(metric_logger.log_every(val_loader, 10, header)):
+    for it, batch_items in enumerate(metric_logger.log_every(val_loader, 10, header, max_iter=params.iter_per_valid)):
         aug_metrics = {}
 
         if len(batch_items) == 3:
