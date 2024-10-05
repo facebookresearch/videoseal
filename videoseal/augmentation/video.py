@@ -33,7 +33,6 @@ class VideoCompression(nn.Module):
         Returns:
             torch.Tensor: Decompressed video frames as a tensor with shape (T, C, H, W).
         """
-        torch.cuda.synchronize()
         start_time = time.time()
         device = frames.device  # Get the device of the input frames
         # Save the original frames for skip gradients
@@ -82,7 +81,6 @@ class VideoCompression(nn.Module):
         output_frames = output_frames.permute(0, 3, 1, 2)  # t w h c -> t c h w
         output_frames = output_frames.to(device)
 
-        torch.cuda.synchronize()
         # Apply skip gradients
         compressed_frames = orig_frames + \
             (orig_frames - output_frames).detach()

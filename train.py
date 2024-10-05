@@ -740,12 +740,12 @@ def eval_one_epoch(
             # if name in ["decode_loss", "decode_scale"] and loss == -1:
             #     continue  # Skip this update or replace with a default value
             metric_logger.update(**{name: loss})
-    
     metric_logger.synchronize_between_processes()
     print("Averaged {} stats:".format('val'), metric_logger)
 
 
     # save last valid 
+    # moving this after metric sync to avoid slowing down 1 process (main) vs others 
     if (epoch % params.saveimg_freq == 0 or params.only_eval) and udist.is_main_process():
         save_image(imgs,
                    os.path.join(params.output_dir, f'{epoch:03}__val_0_ori.png'), nrow=8)
