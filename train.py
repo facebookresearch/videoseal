@@ -24,8 +24,6 @@ Args inventory:
     --video_dataset sa-v
     --image_dataset coco
 """
-import threading
-
 import argparse
 import datetime
 import json
@@ -33,6 +31,7 @@ import math
 import os
 import random
 import sys
+import threading
 import time
 from typing import List
 
@@ -40,8 +39,8 @@ import numpy as np
 import omegaconf
 import psutil
 import torch
-import torch.distributed as dist
 import torch.distributed
+import torch.distributed as dist
 import torch.nn as nn
 import torch.nn.functional as F
 from torchvision.utils import save_image
@@ -493,7 +492,7 @@ def main(params):
             augs = validation_augs if epoch % params.full_eval_freq == 0 else validation_augs_subset
             if epoch_modality == Modalities.VIDEO:
                 augs.append((VideoCompressorAugmenter, [0]))
-                
+
             val_stats = eval_one_epoch(wam, epoch_val_loader, epoch_modality, image_detection_loss,
                                        epoch, augs, validation_masks, params)
             log_stats = {**log_stats, **
@@ -732,19 +731,15 @@ def eval_one_epoch(
 
                     current_key = f"mask={mask_id}_aug={selected_aug}"
                     aug_log_stats = {f"{k}_{current_key}": v for k,
-                                 v in aug_log_stats.items()}
+                                     v in aug_log_stats.items()}
 
                     metric_logger.update(**aug_log_stats)
-                    metric_logger.synchronize_between_processes()
 
-
-
-    if udist.is_main_process():
-        metric_logger.synchronize_between_processes()
-        print("Averaged {} stats:".format('val'), metric_logger)
-        return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
-    else:
-        return None
+    print("[synchronizing Metrics]"*300)
+    print("---"*100)
+    metric_logger.synchronize_between_processes()
+    print("Averaged {} stats:".format('val'), metric_logger)
+    return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
 
     # imgs, imgs_w = imgs.cpu(), imgs_w.cpu()
     # def save_images(epoch, params, imgs, imgs_w, epoch_modality, it):
@@ -766,10 +761,9 @@ def eval_one_epoch(
     #         save_vid(imgs, raw_path, fps)
     #         save_vid(imgs_w, wmed_path, fps)
     #         save_vid(imgs - imgs_w, wm_path, fps)
-    
+
     # if (epoch % params.saveimg_freq == 0 or params.only_eval) and udist.is_main_process():
     # #     threading.Thread(target=save_images, args=(epoch, params, imgs, imgs_w, epoch_modality, it)).start()
-    
 
 
 if __name__ == '__main__':

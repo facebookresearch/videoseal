@@ -6,7 +6,7 @@ from collections import defaultdict, deque
 import torch
 import torch.distributed as dist
 
-from .dist import is_dist_avail_and_initialized
+from .dist import get_rank, is_dist_avail_and_initialized
 
 
 class SmoothedValue(object):
@@ -18,40 +18,46 @@ class SmoothedValue(object):
         if fmt is None:
             fmt = "{median:.6f} ({global_avg:.6f})"
         self.deque = deque(maxlen=window_size)
-        self.total = 0.0
-        self.count = 0
+        self.total_sum = 0.0
+        self.total_count = 0
         self.fmt = fmt
 
     def update(self, value, n=1):
         self.deque.append(value)
         if not (value != value):
-            self.count += n
-            self.total += value * n
+            self.total_count += n
+            self.total_sum += value * n
 
     def synchronize_between_processes(self):
         """
-        Warning: does not synchronize the deque!
+        Synchronize the global average across all processes using torch.distributed.
+        This will ensure all processes have the same view of the metric.
         """
         if not is_dist_avail_and_initialized():
             return
-        t = torch.tensor([self.total, self.count],
-                         dtype=torch.float64, device='cuda')
-        dist.barrier()
-        dist.all_reduce(t)  # count, total
-        self.total = t[0].item()
-        self.count = t[1].item()
-        # t = t.tolist()
-        # self.count = int(t[0])
-        # self.total = t[1]
-        # print(t)
-        # tensor_list = [torch.zeros_like(t) for _ in range(dist.get_world_size())]
-        # dist.all_gather(tensor_list, t)  # [count_0, count_1, ...], [total_0, total_1, ...
-        # print(tensor_list)
-        # self.count = 0
-        # self.total = 0
-        # for tensor in tensor_list:
-        #     self.count += tensor[0].item()
-        #     self.total += tensor[1].item()
+
+        # Create tensors for synchronization
+        total_sum_tensor = torch.tensor(
+            self.total_sum, dtype=torch.float64, device='cuda')
+        total_count_tensor = torch.tensor(
+            self.total_count, dtype=torch.float64, device='cuda')
+
+        # Reduce across all processes
+        dist.reduce(total_sum_tensor, dst=0, op=dist.ReduceOp.SUM)
+        dist.reduce(total_count_tensor, dst=0, op=dist.ReduceOp.SUM)
+
+        # On the main process (rank 0), normalize the global sum by the global count
+        if dist.get_rank() == 0:
+            self.total_sum = total_sum_tensor.item()
+            self.total_count = total_count_tensor.item()
+
+        # Broadcast the result back to all processes to ensure consistency
+        dist.broadcast(total_sum_tensor, src=0)
+        dist.broadcast(total_count_tensor, src=0)
+
+        # Set the total_sum and total_count for all processes
+        self.total_sum = total_sum_tensor.item()
+        self.total_count = total_count_tensor.item()
 
     @property
     def median(self):
@@ -65,7 +71,7 @@ class SmoothedValue(object):
 
     @property
     def global_avg(self):
-        return self.total / self.count if self.count > 0 else 0
+        return self.total_sum / self.total_count if self.total_count > 0 else 0
 
     @property
     def max(self):
@@ -172,7 +178,8 @@ class MetricLogger(object):
                         it, max_iterations, eta=eta_string,
                         meters=str(self),
                         time=str(iter_time), data=str(data_time),
-                        memory=torch.cuda.max_memory_allocated() / MB))
+                    ))
+                    # memory=torch.cuda.max_memory_allocated() / MB))
                 else:
                     print(log_msg.format(
                         it, len(iterable), eta=eta_string,
