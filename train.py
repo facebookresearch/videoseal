@@ -488,8 +488,8 @@ def main(params):
         log_stats = {**log_stats, **
                      {f'train_{k}': v for k, v in train_stats.items()}}
 
-        # validation only runs in main process
-        # to avoid nccl erros also we cannot send wam_ddp
+        # validation only runs in main process to avoid nccl erros.
+        # valid on wam_ddp is not supported since some func. is not broadcasted
         if epoch % params.eval_freq == 0 and udist.is_main_process():
             augs = validation_augs if epoch % params.full_eval_freq == 0 else validation_augs_subset
             if epoch_modality == Modalities.VIDEO:
@@ -744,7 +744,9 @@ def eval_one_epoch(
 
     print("[synchronizing Metrics]"*300)
     print("---"*100)
-    metric_logger.synchronize_between_processes()
+    # no need to synchronize since valid_one_step it only runs with main process
+    # metric_logger.synchronize_between_processes()
+
     print("Averaged {} stats:".format('val'), metric_logger)
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
 
