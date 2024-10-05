@@ -164,7 +164,7 @@ class MetricLogger(object):
                 header,
                 '[{0' + space_fmt + '}/{1}]',
                 'eta: {eta}',
-                '{meters}',
+                # '{meters}',
                 'time: {time}',
                 'data: {data}',
                 # 'max mem: {memory:.0f}'
@@ -174,7 +174,7 @@ class MetricLogger(object):
                 header,
                 '[{0' + space_fmt + '}/{1}]',
                 'eta: {eta}',
-                '{meters}',
+                # '{meters}',
                 'time: {time}',
                 'data: {data}'
             ])
@@ -193,14 +193,14 @@ class MetricLogger(object):
                 if torch.cuda.is_available():
                     print(log_msg.format(
                         it, max_iterations, eta=eta_string,
-                        meters=str(self),
+                        # meters=str(self),
                         time=str(iter_time), data=str(data_time),
                     ))
                     # memory=torch.cuda.max_memory_allocated() / MB))
                 else:
                     print(log_msg.format(
                         it, len(iterable), eta=eta_string,
-                        meters=str(self),
+                        # meters=str(self),
                         time=str(iter_time), data=str(data_time)))
             end = time.time()
         total_time = time.time() - start_time
