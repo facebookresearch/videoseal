@@ -456,7 +456,7 @@ def main(params):
             if val_loader is not None:
 
                 if modality == Modalities.VIDEO:
-                    augs.append((VideoCompressorAugmenter, [28]))
+                    augs.append((VideoCompressorAugmenter, [28, 32, 36]))
 
                 print(f"running eval on {modality} dataset.")
                 val_stats = eval_one_epoch(wam, val_loader, modality, image_detection_loss,
