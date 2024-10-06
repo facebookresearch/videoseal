@@ -450,7 +450,7 @@ def main(params):
         val_loaders = ((Modalities.IMAGE, image_val_loader),
                        (Modalities.VIDEO, video_val_loader))
 
-        augs = validation_augs
+        augs = validation_augs.copy()
 
         for val_loader, modality in val_loaders:
             if val_loader is not None:
@@ -503,7 +503,7 @@ def main(params):
         # validation only runs in main process to avoid nccl erros.
         # valid on wam_ddp is not supported since some func. is not broadcasted
         if epoch % params.eval_freq == 0 and udist.is_main_process():
-            augs = validation_augs if epoch % params.full_eval_freq == 0 else validation_augs_subset
+            augs = validation_augs.copy() if epoch % params.full_eval_freq == 0 else validation_augs_subset.copy()
             if epoch_modality == Modalities.VIDEO:
                 augs.append((VideoCompressorAugmenter, [0]))
 
