@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from lpips import LPIPS
-from videoseal.data.transforms import imnet_to_lpips
+from videoseal.data.transforms import unnormalize_img
 from videoseal.modules.discriminator import NLayerDiscriminator
 
 from .dists import DISTS
@@ -115,8 +115,8 @@ class LPIPSWithDiscriminator(nn.Module):
             # perceptual loss
             if self.percep_weight > 0:
                 losses["percep"] = self.perceptual_loss(
-                    imgs=imnet_to_lpips(inputs.contiguous()),
-                    imgs_w=imnet_to_lpips(reconstructions.contiguous()),
+                    imgs=unnormalize_img(inputs.contiguous()),
+                    imgs_w=unnormalize_img(reconstructions.contiguous()),
                 ).mean()
                 weights["percep"] = self.percep_weight
             # discriminator loss

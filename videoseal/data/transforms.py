@@ -2,21 +2,8 @@
 import torch
 from torchvision import transforms
 
-# pixel_mean: List[float] = [123.675, 116.28, 103.53],
-# pixel_std: List[float] = [58.395, 57.12, 57.375],
-
-image_mean = torch.tensor([0.485, 0.456, 0.406])
-image_std = torch.tensor([0.229, 0.224, 0.225])
-
-normalize_img = transforms.Normalize(image_mean, image_std)
-unnormalize_img = transforms.Normalize(-image_mean / image_std, 1 / image_std)
-unstd_img = transforms.Normalize(0, 1 / image_std)
-std_img = transforms.Normalize(0, image_std)
-imnet_to_lpips = transforms.Compose([
-    unnormalize_img,
-    # transforms.Lambda(lambda x: x * 2 - 1),
-])
-
+normalize_img = transforms.Lambda(lambda x: x * 2 - 1),
+unnormalize_img = transforms.Lambda(lambda x: (x + 1) / 2)
 default_transform = transforms.Compose([
     transforms.ToTensor(),
     normalize_img,
@@ -57,13 +44,13 @@ def get_transforms(
             brightness=brightness, contrast=contrast, saturation=saturation, hue=hue),
         transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
-        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+        normalize_img,
     ])
     val_transform = transforms.Compose([
         transforms.Resize(img_size),
         transforms.CenterCrop(img_size),
         transforms.ToTensor(),
-        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+        normalize_img,
     ])
     return train_transform, val_transform
 
@@ -72,6 +59,7 @@ def get_resize_transform(img_size):
     transform = transforms.Compose([
         transforms.Resize(img_size),
         transforms.CenterCrop(img_size),
+        normalize_img
     ])
     return transform, transform, transform, transform
 
@@ -103,7 +91,7 @@ def get_transforms_segmentation(
         transforms.ColorJitter(
             brightness=brightness, contrast=contrast, saturation=saturation, hue=hue),
         transforms.ToTensor(),
-        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+        normalize_img,
     ])
     train_mask_transform = transforms.Compose([
         transforms.Resize(img_size),
