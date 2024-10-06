@@ -758,20 +758,20 @@ def eval_one_epoch(
     save_image(imgs,
                os.path.join(params.output_dir, f'{epoch:03}_{epoch_modality}_val_0_ori.png'), nrow=8)
     save_image(imgs_w,
-               os.path.join(params.output_dir, f'{epoch:03}_{epoch_modality}_val_1_w.png'), nrow=8)
+               os.path.join(params.output_dir, f'{epoch:03}_{epoch_modality}_val_1_wm.png'), nrow=8)
     save_image(create_diff_img(imgs, imgs_w),
                os.path.join(params.output_dir, f'{epoch:03}_{epoch_modality}_val_2_diff.png'), nrow=8)
     if epoch_modality == Modalities.VIDEO:
-        raw_path = os.path.join(
-            params.output_dir, f'{epoch:03}_{it:03}_{epoch_modality}_val_0_raw.mp4')
-        wmed_path = os.path.join(
-            params.output_dir, f'{epoch:03}_{it:03}_{epoch_modality}_val_1__wmed.mp4')
+        ori_path = os.path.join(
+            params.output_dir, f'{epoch:03}_{it:03}_{epoch_modality}_val_0_ori.mp4')
         wm_path = os.path.join(
-            params.output_dir, f'{epoch:03}_{it:03}_{epoch_modality}_val_2_wm.mp4')
+            params.output_dir, f'{epoch:03}_{it:03}_{epoch_modality}_val_1_wm.mp4')
+        diff_path = os.path.join(
+            params.output_dir, f'{epoch:03}_{it:03}_{epoch_modality}_val_2_diff.mp4')
         fps = 24 // 1
-        save_vid(imgs, raw_path, fps)
-        save_vid(imgs_w, wmed_path, fps)
-        save_vid(imgs - imgs_w, wm_path, fps)
+        save_vid(imgs, ori_path, fps)
+        save_vid(imgs_w, wm_path, fps)
+        save_vid(imgs - imgs_w, diff_path, fps)
 
     print("Averaged {} stats:".format('val'), metric_logger)
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
