@@ -456,7 +456,7 @@ def main(params):
             if val_loader is not None:
 
                 if modality == Modalities.VIDEO:
-                    augs.append((VideoCompressorAugmenter, [0]))
+                    augs.append((VideoCompressorAugmenter, [28]))
 
                 print(f"running eval on {modality} dataset.")
                 val_stats = eval_one_epoch(wam, val_loader, modality, image_detection_loss,
@@ -503,10 +503,14 @@ def main(params):
         # validation only runs in main process to avoid nccl erros.
         # valid on wam_ddp is not supported since some func. is not broadcasted
         if epoch % params.eval_freq == 0 and udist.is_main_process():
-            augs = validation_augs.copy() if epoch % params.full_eval_freq == 0 else validation_augs_subset.copy()
-            if epoch_modality == Modalities.VIDEO:
-                augs.append((VideoCompressorAugmenter, [0]))
-
+            if epoch % params.full_eval_freq == 0:
+                augs = validation_augs.copy() 
+                if epoch_modality == Modalities.VIDEO:
+                    augs.append((VideoCompressorAugmenter, [28, 32, 36]))
+            else: 
+                augs = validation_augs_subset.copy()
+                if epoch_modality == Modalities.VIDEO:
+                    augs.append((VideoCompressorAugmenter, [32]))
             val_stats = eval_one_epoch(wam, epoch_val_loader, epoch_modality, image_detection_loss,
                                        epoch, augs, validation_masks, params)
             log_stats = {**log_stats, **
