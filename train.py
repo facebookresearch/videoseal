@@ -8,7 +8,7 @@ Example usage (cluster 1 gpu):
 
 Example:  decoding only, hidden like
     torchrun --nproc_per_node=2 train.py --local_rank 0 --nbits 32 --saveimg_freq 1 --lambda_i 0 --lambda_det 0 --lambda_dec 1 --lambda_d 0  --img_size 128 --img_size_extractor 128 --embedder_model hidden --extractor_model hidden
-    
+
 With video compression aug:
     torchrun --nproc_per_node=2 train.py --local_rank 0  --image_dataset coco --video_dataset sa-v --augmentation_config configs/video_compression.yaml --extractor_model sam_tiny --embedder_model vae_small_bw --img_size 256 --img_size_extractor 256 --batch_size 16 --batch_size_eval 32 --epochs 100 --optimizer AdamW,lr=1e-4 --scheduler CosineLRScheduler,lr_min=1e-6,t_initial=100,warmup_lr_init=1e-6,warmup_t=5 --seed 0 --perceptual_loss mse --lambda_i 0.0 --lambda_d 0.0 --lambda_det 0.0 --lambda_dec 1.0 --nbits 32 --scaling_i 1.0 --scaling_w 0.2 --balanced  false --iter_per_epoch 5
 
@@ -24,7 +24,6 @@ Args inventory:
     --video_dataset sa-v
     --image_dataset coco
 """
-
 import argparse
 import datetime
 import json
@@ -32,6 +31,7 @@ import math
 import os
 import random
 import sys
+import threading
 import time
 from typing import List
 
@@ -39,6 +39,7 @@ import numpy as np
 import omegaconf
 import psutil
 import torch
+import torch.distributed
 import torch.distributed as dist
 import torch.nn as nn
 import torch.nn.functional as F
@@ -57,10 +58,8 @@ from videoseal.augmentation.valuemetric import (JPEG, Brightness, Contrast,
 from videoseal.augmentation.video import VideoCompressorAugmenter
 from videoseal.data.loader import (get_dataloader_segmentation,
                                    get_video_dataloader)
-from videoseal.data.transforms import (get_transforms,
-                                       get_transforms_segmentation,
-                                       normalize_img, unnormalize_img,
-                                       unstd_img)
+from videoseal.data.transforms import (get_resize_transform, get_transforms,
+                                       get_transforms_segmentation)
 from videoseal.evals.metrics import (accuracy, bit_accuracy,
                                      bit_accuracy_inference, iou, psnr, ssim)
 from videoseal.losses.detperceptual import LPIPSWithDiscriminator
@@ -88,7 +87,7 @@ def get_dataset_parser(parser):
     group.add_argument("--prop_img_vid", type=float, default=0.5,
                        help="Percentage of images in the hybrid dataset 0.5 means for each 5 epochs of images 5 video epoch is made. Only applicable if both --image_dataset and --video_dataset are provided.")
     group.add_argument("--video_start", type=int, default=50,
-                          help="Number of epochs before starting video training")
+                       help="Number of epochs before starting video training")
     return parser
 
 
@@ -182,11 +181,11 @@ def get_parser():
     aa('--batch_size_eval', default=64, type=int, help='Batch size for evaluation')
     aa('--workers', default=8, type=int, help='Number of data loading workers')
     aa('--frames_per_clip', default=16, type=int,
-         help='Number of frames per clip for video datasets')
+       help='Number of frames per clip for video datasets')
     aa('--frame_step', default=1, type=int,
-            help='Step between frames for video datasets')
+       help='Step between frames for video datasets')
     aa('--num_clips', default=8, type=int,
-            help='Number of clips per video for video datasets')
+       help='Number of clips per video for video datasets')
 
     group = parser.add_argument_group('Misc.')
     aa('--only_eval', type=utils.bool_inst,
@@ -228,7 +227,6 @@ def main(params):
 
     # Print the arguments
     print("__git__:{}".format(utils.get_sha()))
-    print(params)
     print("__log__:{}".format(json.dumps(
         omegaconf.OmegaConf.to_container(params, resolve=True))))
 
@@ -271,8 +269,7 @@ def main(params):
     # build attenuation
     if params.attenuation.lower() != "none":
         attenuation_cfg = omegaconf.OmegaConf.load(params.attenuation_config)
-        attenuation = JND(**attenuation_cfg[params.attenuation],
-                          preprocess=unnormalize_img, postprocess=normalize_img)
+        attenuation = JND(**attenuation_cfg[params.attenuation])
     else:
         attenuation = None
     print(f'attenuation: {attenuation}')
@@ -330,7 +327,7 @@ def main(params):
     print('optimizer_d: %s' % optimizer_d)
 
     # Data loaders
-    train_transform, train_mask_transform, val_transform, val_mask_transform = get_transforms_segmentation(
+    train_transform, train_mask_transform, val_transform, val_mask_transform = get_resize_transform(
         params.img_size)
 
     image_train_loader = image_val_loader = video_train_loader = video_val_loader = None
@@ -435,27 +432,37 @@ def main(params):
         (JPEG,              [40, 60, 80]),
         (GaussianBlur,      [3, 5, 9, 17]),
         (MedianFilter,      [3, 5, 9, 17]),
-        (VideoCompressorAugmenter, [0]),
     ]  # augs evaluated every full_eval_freq
     validation_augs_subset = [
         (Identity,          [0]),  # No parameters needed for identity
         (Brightness,        [0.5]),
         (Crop,              [0.75]),  # size ratio
         (JPEG,              [60]),
-        (VideoCompressorAugmenter, [0]),
     ]  # augs evaluated every eval_freq
     dummy_img = torch.ones(3, params.img_size, params.img_size)
     validation_masks = augmenter.mask_embedder.sample_representative_masks(
         dummy_img)  # n 1 h w, full of ones or random masks depending on config
 
     # evaluation only
-    # TODO: fix me
-    if params.only_eval:
-        val_stats = eval_one_epoch(
-            wam, video_val_loader, image_detection_loss, 0, validation_augs, validation_masks, params)
-        if udist.is_main_process():
-            with open(os.path.join(params.output_dir, 'log_only_eval.txt'), 'a') as f:
-                f.write(json.dumps(val_stats) + "\n")
+    # TODO: test me
+    if params.only_eval and udist.is_main_process():
+        # get data loaders
+        val_loaders = ((Modalities.IMAGE, image_val_loader),
+                       (Modalities.VIDEO, video_val_loader))
+
+        augs = validation_augs
+
+        for val_loader, modality in val_loaders:
+            if val_loader is not None:
+
+                if modality == Modalities.VIDEO:
+                    augs.append((VideoCompressorAugmenter, [0]))
+
+                print(f"running eval on {modality} dataset.")
+                val_stats = eval_one_epoch(wam, val_loader, modality, image_detection_loss,
+                                           0, augs, validation_masks, params)
+                with open(os.path.join(params.output_dir, f'log_only_{modality}_eval.txt'), 'a') as f:
+                    f.write(json.dumps(val_stats) + "\n")
         return
 
     # start training
@@ -468,14 +475,16 @@ def main(params):
         if params.modality == Modalities.HYBRID:
             if epoch >= params.video_start:
                 if random.random() < params.prop_img_vid:
-                    epoch_modality = Modalities.IMAGE 
-                else: 
+                    epoch_modality = Modalities.IMAGE
+                else:
                     epoch_modality = Modalities.VIDEO
+            else:
+                epoch_modality = Modalities.IMAGE
         else:
             epoch_modality = params.modality
 
-        epoch_train_loader = video_train_loader if epoch_modality == "video" else image_train_loader
-        epoch_val_loader = video_val_loader if epoch_modality == "video" else image_val_loader
+        epoch_train_loader = video_train_loader if epoch_modality == Modalities.VIDEO else image_train_loader
+        epoch_val_loader = video_val_loader if epoch_modality == Modalities.VIDEO else image_val_loader
 
         if scheduler is not None:
             scheduler.step(epoch)
@@ -491,15 +500,22 @@ def main(params):
         log_stats = {**log_stats, **
                      {f'train_{k}': v for k, v in train_stats.items()}}
 
-        if epoch % params.eval_freq == 0:
+        # validation only runs in main process to avoid nccl erros.
+        # valid on wam_ddp is not supported since some func. is not broadcasted
+        if epoch % params.eval_freq == 0 and udist.is_main_process():
             augs = validation_augs if epoch % params.full_eval_freq == 0 else validation_augs_subset
+            if epoch_modality == Modalities.VIDEO:
+                augs.append((VideoCompressorAugmenter, [0]))
+
             val_stats = eval_one_epoch(wam, epoch_val_loader, epoch_modality, image_detection_loss,
                                        epoch, augs, validation_masks, params)
             log_stats = {**log_stats, **
                          {f'val_{k}': v for k, v in val_stats.items()}}
-        if udist.is_main_process():
+
             with open(os.path.join(params.output_dir, 'log.txt'), 'a') as f:
                 f.write(json.dumps(log_stats) + "\n")
+
+        dist.barrier()  # Ensures all processes wait until the main node finishes validation
 
         print("Saving Checkpoint..")
         save_dict = {
@@ -530,6 +546,7 @@ def train_one_epoch(
     params: argparse.Namespace,
 ):
     assert epoch_modality in [Modalities.IMAGE, Modalities.VIDEO]
+
     wam.train()
 
     header = 'Train - Epoch: [{}/{}] - Modality: {}'.format(
@@ -544,7 +561,7 @@ def train_one_epoch(
             imgs, masks = batch_items
 
         # masks are only used if segm_proba > 0
-        imgs = imgs.to(device, non_blocking=True)
+        imgs = imgs.to(device)
 
         # forward
         # TODO deal with the usecase of batch of videos, for now we support flattened videos
@@ -577,6 +594,8 @@ def train_one_epoch(
             optimizers[optimizer_idx].zero_grad()
             loss.backward()
             optimizers[optimizer_idx].step()
+            torch.distributed.barrier()
+            torch.cuda.synchronize()  # Ensure completion of CUDA operations
 
         # log stats
         log_stats = {
@@ -584,6 +603,7 @@ def train_one_epoch(
             'psnr': psnr(outputs["imgs_w"], imgs).mean().item(),
             'ssim': ssim(outputs["imgs_w"], imgs).mean().item(),
             'lr': optimizers[0].param_groups[0]['lr'],
+            'ssim': ssim(outputs["imgs_w"], imgs).mean().item(),
         }
 
         bit_preds = outputs["preds"][:, 1:]  # b k h w
@@ -606,12 +626,13 @@ def train_one_epoch(
                 f'acc': accuracy(mask_preds, outputs["masks"]).mean().item(),
                 f'miou': (iou0 + iou1) / 2,
             })
-        torch.cuda.synchronize()
-        for name, loss in log_stats.items():
-            metric_logger.update(**{name: loss})
+
+        for name, value in log_stats.items():
+            metric_logger.update(**{name: value})
 
     metric_logger.synchronize_between_processes()
     print("Averaged {} stats:".format('train'), metric_logger)
+
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
 
 
@@ -640,21 +661,22 @@ def eval_one_epoch(
     """
     if torch.is_tensor(validation_masks):
         validation_masks = list(torch.unbind(validation_masks, dim=0))
+
     wam.eval()
     header = 'Val Full - Epoch: [{}/{}] - Modality: {}'.format(
         epoch, params.epochs, epoch_modality)
     metric_logger = ulogger.MetricLogger(delimiter="  ")
 
-    for it, batch_items in enumerate(metric_logger.log_every(val_loader, 10, header)):
-        aug_metrics = {}
-
+    for it, batch_items in enumerate(metric_logger.log_every(val_loader, 10, header, max_iter=params.iter_per_valid)):
         if len(batch_items) == 3:
             imgs, masks, frames_positions = batch_items
         elif len(batch_items) == 2:
             imgs, masks = batch_items
 
-        imgs = imgs.to(device, non_blocking=True)
+        imgs = imgs.to(device)
+
         msgs = wam.get_random_msg(imgs.shape[0])  # b x k
+
         msgs = msgs.to(imgs.device)
 
         # generate watermarked images
@@ -662,10 +684,12 @@ def eval_one_epoch(
         imgs_w = wam.scaling_i * imgs + wam.scaling_w * deltas_w
 
         # quality metrics
-        aug_metrics['psnr'] = psnr(
+        metrics = {}
+        metrics['psnr'] = psnr(
             imgs_w, imgs).mean().item()
-        aug_metrics['ssim'] = ssim(
+        metrics['ssim'] = ssim(
             imgs_w, imgs).mean().item()
+        metric_logger.update(**metrics)
 
         # attenuate
         if wam.attenuation is not None:
@@ -673,7 +697,7 @@ def eval_one_epoch(
 
         for mask_id, masks in enumerate(validation_masks):
             # watermark masking
-            masks = masks.to(imgs.device, non_blocking=True)  # 1 h w
+            masks = masks.to(imgs.device)  # 1 h w
             if len(masks.shape) < 4:
                 masks = masks.unsqueeze(0).repeat(
                     imgs_w.shape[0], 1, 1, 1)  # b 1 h w
@@ -706,7 +730,7 @@ def eval_one_epoch(
                     mask_preds = preds[:, 0:1]  # b 1 ...
                     bit_preds = preds[:, 1:]  # b k ...
 
-                    log_stats = {}
+                    aug_log_stats = {}
                     if params.nbits > 0:
                         bit_accuracy_ = bit_accuracy(
                             bit_preds,
@@ -715,54 +739,40 @@ def eval_one_epoch(
                         ).nanmean().item()
 
                     if params.nbits > 0:
-                        log_stats[f'bit_acc'] = bit_accuracy_
+                        aug_log_stats[f'bit_acc'] = bit_accuracy_
 
                     if params.lambda_det > 0:
                         iou0 = iou(mask_preds, masks, label=0).mean().item()
                         iou1 = iou(mask_preds, masks, label=1).mean().item()
-                        log_stats.update({
+                        aug_log_stats.update({
                             f'acc': accuracy(mask_preds, masks).mean().item(),
                             f'miou': (iou0 + iou1) / 2,
                         })
 
                     current_key = f"mask={mask_id}_aug={selected_aug}"
-                    log_stats = {f"{k}_{current_key}": v for k,
-                                 v in log_stats.items()}
+                    aug_log_stats = {f"{k}_{current_key}": v for k,
+                                     v in aug_log_stats.items()}
 
-                    # save stats of the current augmentation
-                    aug_metrics = {**aug_metrics, **log_stats}
+                    metric_logger.update(**aug_log_stats)
 
-        # save some of the images
-        if (epoch % params.saveimg_freq == 0 or params.only_eval) and it == 0 and udist.is_main_process():
-            save_image(unnormalize_img(imgs),
-                       os.path.join(params.output_dir, f'{epoch:03}_{it:03}_val_0_ori.png'), nrow=8)
-            save_image(unnormalize_img(imgs_w),
-                       os.path.join(params.output_dir, f'{epoch:03}_{it:03}_val_1_w.png'), nrow=8)
-            save_image(create_diff_img(imgs, imgs_w),
-                       os.path.join(params.output_dir, f'{epoch:03}_{it:03}_val_2_diff.png'), nrow=8)
+    save_image(imgs,
+               os.path.join(params.output_dir, f'{epoch:03}_{epoch_modality}_val_0_ori.png'), nrow=8)
+    save_image(imgs_w,
+               os.path.join(params.output_dir, f'{epoch:03}_{epoch_modality}_val_1_w.png'), nrow=8)
+    save_image(create_diff_img(imgs, imgs_w),
+               os.path.join(params.output_dir, f'{epoch:03}_{epoch_modality}_val_2_diff.png'), nrow=8)
+    if epoch_modality == Modalities.VIDEO:
+        raw_path = os.path.join(
+            params.output_dir, f'{epoch:03}_{it:03}_{epoch_modality}_val_0_raw.mp4')
+        wmed_path = os.path.join(
+            params.output_dir, f'{epoch:03}_{it:03}_{epoch_modality}_val_1__wmed.mp4')
+        wm_path = os.path.join(
+            params.output_dir, f'{epoch:03}_{it:03}_{epoch_modality}_val_2_wm.mp4')
+        fps = 24 // 1
+        save_vid(imgs, raw_path, fps)
+        save_vid(imgs_w, wmed_path, fps)
+        save_vid(imgs - imgs_w, wm_path, fps)
 
-            if epoch_modality == Modalities.VIDEO:
-                raw_path = os.path.join(
-                    params.output_dir, f'{epoch:03}_{it:03}_raw.mp4')
-                wmed_path = os.path.join(
-                    params.output_dir, f'{epoch:03}_{it:03}_wmed.mp4')
-                wm_path = os.path.join(
-                    params.output_dir, f'{epoch:03}_{it:03}_wm.mp4')
-
-                fps = 24 // 1
-                save_vid(imgs, raw_path, fps)
-                save_vid(imgs_w, wmed_path, fps)
-                save_vid(imgs - imgs_w, wm_path, fps)
-
-        torch.cuda.synchronize()
-        for name, loss in aug_metrics.items():
-            # if name == 'bit_acc' and math.isnan(loss):
-            #     continue
-            # if name in ["decode_loss", "decode_scale"] and loss == -1:
-            #     continue  # Skip this update or replace with a default value
-            metric_logger.update(**{name: loss})
-
-    metric_logger.synchronize_between_processes()
     print("Averaged {} stats:".format('val'), metric_logger)
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
 

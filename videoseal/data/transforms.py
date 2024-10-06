@@ -68,6 +68,14 @@ def get_transforms(
     return train_transform, val_transform
 
 
+def get_resize_transform(img_size):
+    transform = transforms.Compose([
+        transforms.Resize(img_size),
+        transforms.CenterCrop(img_size),
+    ])
+    return transform, transform, transform, transform
+
+
 def get_transforms_segmentation(
     img_size: int,
     brightness: float = 0.2,

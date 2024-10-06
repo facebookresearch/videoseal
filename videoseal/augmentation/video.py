@@ -1,13 +1,12 @@
 
 import io
 import random
+import time
 
 import av
 import numpy as np
 import torch
 import torch.nn as nn
-
-from videoseal.data.transforms import normalize_img, unnormalize_img
 
 
 class VideoCompression(nn.Module):
@@ -38,7 +37,6 @@ class VideoCompression(nn.Module):
         # Save the original frames for skip gradients
         orig_frames = frames.clone()
         # Preprocess the frames for compression
-        frames = unnormalize_img(frames)
         frames = frames.clamp(0, 1).permute(0, 2, 3, 1)  # t c h w -> t w h c
         frames = (frames * 255).to(torch.uint8).detach().cpu().numpy()
         # Create an in-memory bytes buffer
@@ -51,7 +49,10 @@ class VideoCompression(nn.Module):
                 stream.width = frames.shape[2]
                 stream.height = frames.shape[1]
                 stream.pix_fmt = 'yuv420p' if self.codec != 'libx264rgb' else 'rgb24'
-                stream.options = {'crf': str(self.crf)}  # Set the CRF value
+                stream.options = {
+                    'crf': str(self.crf),
+                    'threads': '1'  # Limiting to single-threaded mode
+                }  # Set the CRF value
                 # Write frames to the stream
                 for frame_arr in frames:
                     frame = av.VideoFrame.from_ndarray(
@@ -80,13 +81,13 @@ class VideoCompression(nn.Module):
         output_frames = np.stack(output_frames) / 255
         output_frames = torch.tensor(output_frames, dtype=torch.float32)
         output_frames = output_frames.permute(0, 3, 1, 2)  # t w h c -> t c h w
-        output_frames = normalize_img(output_frames)
         output_frames = output_frames.to(device)
 
         # Apply skip gradients
         compressed_frames = orig_frames + \
             (orig_frames - output_frames).detach()
         del orig_frames  # Free memory
+
         if self.return_aux:
             return compressed_frames, mask, file_size
         return compressed_frames, mask

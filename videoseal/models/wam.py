@@ -76,7 +76,7 @@ class Wam(nn.Module):
         if self.attenuation is not None:
             imgs_w = self.attenuation(imgs, imgs_w)
         # augment
-        imgs_aug, masks, selected_aug = self.augmenter(imgs_w, imgs, masks)
+        imgs_aug, masks, selected_aug = self.augmenter(imgs_w, imgs, masks, is_video=False)
 
         # detect watermark
         preds = self.detector(imgs_aug)

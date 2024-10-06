@@ -97,7 +97,8 @@ class Augmenter(nn.Module):
         return augmentations, torch.tensor(probs)
 
     def augment(self, image, mask, is_video, do_resize=True):
-        if ~is_video:  # replace video compression with identity
+        
+        if not is_video:  # replace video compression with identity
             augs = [aug if aug.__class__.__name__ != 'VideoCompressorAugmenter' else Identity() for aug in self.augs]
         else:
             augs = self.augs
