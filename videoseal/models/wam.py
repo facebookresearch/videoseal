@@ -109,7 +109,9 @@ class Wam(nn.Module):
         # generate watermarked images
         deltas_w = self.embedder(imgs, msgs)
         imgs_w = self.scaling_i * imgs + self.scaling_w * deltas_w
-
+        if self.attenuation is not None:
+            imgs_w = self.attenuation(imgs, imgs_w)
+        
         outputs = {
             "msgs": msgs,  # original messages: b k
             "deltas_w": deltas_w,  # predicted watermarks: b c h w
@@ -132,26 +134,6 @@ class Wam(nn.Module):
             "preds": preds,  # predicted masks and/or messages: b (1+nbits) h w
         }
         return outputs
-
-    def postprocess_masks(
-        self,
-    ) -> torch.Tensor:
-        """
-        Remove padding and upscale masks to the original image size.
-        """
-        return ...
-
-    def preprocess(self, x: torch.Tensor) -> torch.Tensor:
-        """Normalize pixel values and pad to a square input."""
-        # Normalize colors
-        x = (x - self.pixel_mean) / self.pixel_std
-
-        # Pad
-        h, w = x.shape[-2:]
-        padh = self.image_encoder.img_size - h
-        padw = self.image_encoder.img_size - w
-        x = F.pad(x, (0, padw, 0, padh))
-        return x
 
 
 if __name__ == "__main__":
