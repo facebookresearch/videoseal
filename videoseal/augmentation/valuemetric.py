@@ -11,7 +11,6 @@ import torchvision.transforms as transforms
 import torchvision.transforms.functional as F
 from PIL import Image
 
-from ..data.transforms import normalize_img, unnormalize_img
 from ..utils.image import jpeg_compress, median_filter
 
 # from compressai.zoo import bmshj2018_factorized
@@ -33,9 +32,9 @@ from ..utils.image import jpeg_compress, median_filter
 #         for param in net.parameters():
 #             if param.grad is not None:
 #                 param.grad.zero_()
-#         image = unnormalize_img(image).clamp(0, 1)
+#             image = image.clamp(0, 1)
 #         image = net(image)['x_hat']
-#         return normalize_img(image), mask
+#         return image, mask
 
 
 class JPEG(nn.Module):
@@ -57,13 +56,13 @@ class JPEG(nn.Module):
                 raise ValueError("Quality range must be specified")
             quality = torch.randint(
                 self.min_quality, self.max_quality + 1, size=(1, )).item()
-        image = unnormalize_img(image).clamp(0, 1)
+        image = image.clamp(0, 1)
         if len(image.shape) == 4:  # b c h w
             for ii in range(image.shape[0]):
                 image[ii] = self.jpeg_single(image[ii], quality)
         else:
             image = self.jpeg_single(image, quality)
-        return normalize_img(image), mask
+        return image, mask
 
 
 class GaussianBlur(nn.Module):
@@ -79,9 +78,9 @@ class GaussianBlur(nn.Module):
             kernel_size = torch.randint(
                 self.min_kernel_size, self.max_kernel_size + 1, size=(1, )).item()
             kernel_size = kernel_size + 1 if kernel_size % 2 == 0 else kernel_size
-        image = unnormalize_img(image).clamp(0, 1)
+        image = image.clamp(0, 1)
         image = F.gaussian_blur(image, kernel_size)
-        return normalize_img(image), mask
+        return image, mask
 
 
 class MedianFilter(nn.Module):
@@ -98,13 +97,13 @@ class MedianFilter(nn.Module):
             kernel_size = torch.randint(
                 self.min_kernel_size, self.max_kernel_size + 1, size=(1, )).item()
             kernel_size = kernel_size + 1 if kernel_size % 2 == 0 else kernel_size
-        image = unnormalize_img(image).clamp(0, 1)
+        image = image.clamp(0, 1)
         if self.passthrough:
             image = (median_filter(image, kernel_size) -
                      image).detach() + image
         else:
             image = median_filter(image, kernel_size)
-        return normalize_img(image), mask
+        return image, mask
 
 
 class Brightness(nn.Module):
@@ -119,10 +118,9 @@ class Brightness(nn.Module):
                 raise ValueError("min_factor and max_factor must be provided")
             factor = torch.rand(1).item() * (self.max_factor -
                                              self.min_factor) + self.min_factor
-        image = unnormalize_img(image)
         image = image.clamp(0, 1)
         image = F.adjust_brightness(image, factor)
-        return normalize_img(image), mask
+        return image, mask
 
 
 class Contrast(nn.Module):
@@ -137,9 +135,9 @@ class Contrast(nn.Module):
                 raise ValueError("min_factor and max_factor must be provided")
             factor = torch.rand(1).item() * (self.max_factor -
                                              self.min_factor) + self.min_factor
-        image = unnormalize_img(image).clamp(0, 1)
+        image = image.clamp(0, 1)
         image = F.adjust_contrast(image, factor)
-        return normalize_img(image), mask
+        return image, mask
 
 
 class Saturation(nn.Module):
@@ -154,9 +152,9 @@ class Saturation(nn.Module):
                 raise ValueError("Factor range must be specified")
             factor = torch.rand(1).item() * (self.max_factor -
                                              self.min_factor) + self.min_factor
-        image = unnormalize_img(image).clamp(0, 1)
+        image = image.clamp(0, 1)
         image = F.adjust_saturation(image, factor)
-        return normalize_img(image), mask
+        return image, mask
 
 
 class Hue(nn.Module):
@@ -171,9 +169,9 @@ class Hue(nn.Module):
                 raise ValueError("Factor range must be specified")
             factor = torch.rand(1).item() * (self.max_factor -
                                              self.min_factor) + self.min_factor
-        image = unnormalize_img(image).clamp(0, 1)
+        image = image.clamp(0, 1)
         image = F.adjust_hue(image, factor)
-        return normalize_img(image), mask
+        return image, mask
 
 
 if __name__ == "__main__":
@@ -184,7 +182,7 @@ if __name__ == "__main__":
     from torchvision.transforms import ToTensor
     from torchvision.utils import save_image
 
-    from ..data.transforms import default_transform, unnormalize_img
+    from ..data.transforms import default_transform
 
     # Define the transformations and their parameter ranges
     transformations = [
@@ -220,8 +218,7 @@ if __name__ == "__main__":
 
             # Save the transformed images
             filename = f"{transform.__name__}_strength_{strength}.png"
-            save_image(unnormalize_img(imgs_transformed).clamp(
-                0, 1), os.path.join(output_dir, filename))
+            save_image(imgs_transformed.clamp(0, 1), os.path.join(output_dir, filename))
 
             # Print the path to the saved image
             print(f"Saved transformed images ({transform.__name__}, strength={strength}) to:", os.path.join(

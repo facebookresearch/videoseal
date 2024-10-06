@@ -2,11 +2,8 @@
 import torch
 from torchvision import transforms
 
-normalize_img = transforms.Lambda(lambda x: x * 2 - 1),
-unnormalize_img = transforms.Lambda(lambda x: (x + 1) / 2)
 default_transform = transforms.Compose([
     transforms.ToTensor(),
-    normalize_img,
 ])
 
 
@@ -15,7 +12,7 @@ def rgb_to_yuv(img):
                       [-0.14713, -0.28886, 0.436],
                       [0.615, -0.51499, -0.10001]], dtype=torch.float32).to(img.device)
     img = img.permute(0, 2, 3, 1)  # b h w c
-    yuv = torch.matmul(img, M)
+    yuv = torch.matmul(img, M.T)
     yuv = yuv.permute(0, 3, 1, 2)
     return yuv
 
@@ -25,7 +22,7 @@ def yuv_to_rgb(img):
                       [1.0, -0.39465, -0.58060],
                       [1.0, 2.03211, 0.0]], dtype=torch.float32).to(img.device)
     img = img.permute(0, 2, 3, 1)  # b h w c
-    rgb = torch.matmul(img, M)
+    rgb = torch.matmul(img, M.T)
     rgb = rgb.permute(0, 3, 1, 2)
     return rgb
 
@@ -44,13 +41,11 @@ def get_transforms(
             brightness=brightness, contrast=contrast, saturation=saturation, hue=hue),
         transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
-        normalize_img,
     ])
     val_transform = transforms.Compose([
         transforms.Resize(img_size),
         transforms.CenterCrop(img_size),
         transforms.ToTensor(),
-        normalize_img,
     ])
     return train_transform, val_transform
 
@@ -59,7 +54,6 @@ def get_resize_transform(img_size):
     transform = transforms.Compose([
         transforms.Resize(img_size),
         transforms.CenterCrop(img_size),
-        normalize_img
     ])
     return transform, transform, transform, transform
 
@@ -91,7 +85,6 @@ def get_transforms_segmentation(
         transforms.ColorJitter(
             brightness=brightness, contrast=contrast, saturation=saturation, hue=hue),
         transforms.ToTensor(),
-        normalize_img,
     ])
     train_mask_transform = transforms.Compose([
         transforms.Resize(img_size),
@@ -101,7 +94,6 @@ def get_transforms_segmentation(
         transforms.Resize(img_size),
         transforms.CenterCrop(img_size),
         transforms.ToTensor(),
-        normalize_img,
     ])
     val_mask_transform = transforms.Compose([
         transforms.Resize(img_size),
