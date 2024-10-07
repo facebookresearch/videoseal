@@ -418,7 +418,14 @@ def main(params):
             image_detection_loss.discriminator, device_ids=[params.local_rank]
         )
         wam = wam_ddp.module
-    else:
+    else:    builtin_stderr_write = sys.stderr.write
+    def stderr_write(*args, **kwargs):
+        rank = get_rank()
+        args = [f"[rank{rank}]: {a}" for a in args]
+        builtin_stderr_write(*args, **kwargs)
+        # force = kwargs.pop('force', False)
+        # if is_master or force:
+        #     builtin_stderr_write(*args)
         wam_ddp = wam
 
     # setup for validation

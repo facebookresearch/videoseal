@@ -120,7 +120,7 @@ class MetricLogger(object):
                 break
         total_time = time.time() - start_time
         total_time_str = str(datetime.timedelta(seconds=int(total_time)))
-        logger.info("{} Total time: {} ({:.6f} s / it)".format(header, total_time_str, total_time / n_iterations))
+        logging.info("{} Total time: {} ({:.6f} s / it)".format(header, total_time_str, total_time / n_iterations))
 
 
 class SmoothedValue:
