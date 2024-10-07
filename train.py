@@ -221,7 +221,8 @@ def main(params):
     udist.init_distributed_mode(params)
 
     # Set seeds for reproductibility
-    seed = params.seed + udist.get_rank()
+    # seed = params.seed + udist.get_rank()
+    seed = params.seed
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
     np.random.seed(seed)
