@@ -709,6 +709,25 @@ def eval_one_epoch(
         deltas_w = wam.embedder(imgs, msgs)
         imgs_w = wam.scaling_i * imgs + wam.scaling_w * deltas_w
 
+        if (epoch % params.saveimg_freq == 0) and (it == 0) and udist.is_main_process():
+            ori_path = os.path.join(
+                params.output_dir, f'{epoch:03}_{it:03}_{epoch_modality}_val_0_ori.png')
+            wm_path = os.path.join(
+                params.output_dir, f'{epoch:03}_{it:03}_{epoch_modality}_val_1_wm.png')
+            diff_path = os.path.join(
+                params.output_dir, f'{epoch:03}_{it:03}_{epoch_modality}_val_2_diff.png')
+            save_image(imgs,ori_path, nrow=8)
+            save_image(imgs_w, wm_path, nrow=8)
+            save_image(create_diff_img(imgs, imgs_w), diff_path, nrow=8)
+            if epoch_modality == Modalities.VIDEO:
+                fps = 24 // 1
+                ori_path = ori_path.replace(".png", ".mp4")
+                wm_path = wm_path.replace(".png", ".mp4")
+                diff_path = diff_path.replace(".png", ".mp4")
+                save_vid(imgs, ori_path, fps)
+                save_vid(imgs_w, wm_path, fps)
+                save_vid(imgs - imgs_w, diff_path, fps)
+
         # quality metrics
         metrics = {}
         metrics['psnr'] = psnr(imgs_w, imgs).mean().item()
@@ -780,25 +799,6 @@ def eval_one_epoch(
 
                     torch.cuda.synchronize()
                     metric_logger.update(**aug_log_stats)
-
-    if udist.is_main_process():
-        ori_path = os.path.join(
-            params.output_dir, f'{epoch:03}_{it:03}_{epoch_modality}_val_0_ori.png')
-        wm_path = os.path.join(
-            params.output_dir, f'{epoch:03}_{it:03}_{epoch_modality}_val_1_wm.png')
-        diff_path = os.path.join(
-            params.output_dir, f'{epoch:03}_{it:03}_{epoch_modality}_val_2_diff.png')
-        save_image(imgs,ori_path, nrow=8)
-        save_image(imgs_w, wm_path, nrow=8)
-        save_image(create_diff_img(imgs, imgs_w), diff_path, nrow=8)
-        if epoch_modality == Modalities.VIDEO:
-            fps = 24 // 1
-            ori_path.replace(".png", ".mp4")
-            wm_path.replace(".png", ".mp4")
-            diff_path.replace(".png", ".mp4")
-            save_vid(imgs, ori_path, fps)
-            save_vid(imgs_w, wm_path, fps)
-            save_vid(imgs - imgs_w, diff_path, fps)
 
     metric_logger.synchronize_between_processes()
     print("Averaged {} stats:".format('val'), metric_logger)

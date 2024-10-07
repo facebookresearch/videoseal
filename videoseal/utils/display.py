@@ -36,8 +36,7 @@ def save_vid(vid: Tensor, out_path: str, fps: int) -> None:
     vid = vid.to(torch.uint8).cpu()
 
     # Write the video file
-    torchvision.io.write_video(
-        out_path, vid, fps=fps, video_codec='libx264', options={'crf': '21'})
+    torchvision.io.write_video(out_path, vid, fps=fps)
 
 
 def get_fps(video_path: Union[str, os.PathLike]) -> tuple:
