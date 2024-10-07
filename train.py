@@ -486,7 +486,7 @@ def main(params):
     
     modalities = [get_modality(epoch, params) for epoch in range(params.epochs)]
     print(f"rank{udist.get_rank()}: modalities: {
-        ['i' if m == Modalities.IMAGE else 'v' for m in modalities]
+        "".join(['i' if m == Modalities.IMAGE else 'v' for m in modalities])
     }", force=True)
 
     # start training
