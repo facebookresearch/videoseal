@@ -10,9 +10,7 @@ from PIL import Image
 from torch import nn
 from torchvision.utils import save_image
 
-from videoseal.utils.data import Modalities
-
-from ..data.transforms import default_transform, unnormalize_img
+from ..data.transforms import default_transform
 from .geometric import (Crop, HorizontalFlip, Identity, Perspective, Resize,
                         Rotate)
 from .masks import get_mask_embedder
@@ -206,7 +204,7 @@ if __name__ == "__main__":
     os.makedirs(output_dir, exist_ok=True)
     for ii in range(10):
         imgs_aug, mask_targets, selected_aug = augmenter(imgs_w, imgs)
-        save_image(unnormalize_img(imgs_aug).clamp(0, 1),
+        save_image(imgs_aug.clamp(0, 1),
                    os.path.join(output_dir, f"imgs_aug_{ii}.png"), nrow=2)
         save_image(mask_targets, os.path.join(
             output_dir, f"mask_targets_{ii}.png"), nrow=2)

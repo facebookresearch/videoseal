@@ -16,6 +16,8 @@ class Embedder(nn.Module):
 
     def __init__(self) -> None:
         super(Embedder, self).__init__()
+        self.preprocess = lambda x: x * 2 - 1
+        self.postprocess = lambda x: (x + 1) / 2
 
     def get_random_msg(self, bsz: int = 1, nb_repetitions=1) -> torch.Tensor:
         """
@@ -71,13 +73,12 @@ class VAEEmbedder(Embedder):
         Returns:
             The watermarked images.
         """
-        if self.yuv:
-            imgs = rgb_to_yuv(imgs)
+        if self.yuv:  # only use the Y channel
+            imgs = rgb_to_yuv(imgs)[..., :1, :, :]
+        imgs = self.preprocess(imgs)  # put in [-1, 1]
         latents = self.encoder(imgs)
         latents_w = self.msg_processor(latents, msgs)
         imgs_w = self.decoder(latents_w)
-        if self.yuv:
-            imgs_w = yuv_to_rgb(imgs_w)
         return imgs_w
 
 
@@ -112,11 +113,10 @@ class UnetEmbedder(Embedder):
         Returns:
             The watermarked images.
         """
-        if self.yuv:
-            imgs = rgb_to_yuv(imgs)
+        if self.yuv:  # only use the Y channel
+            imgs = rgb_to_yuv(imgs)[..., :1, :, :]
+        imgs = self.preprocess(imgs)  # put in [-1, 1]
         imgs_w = self.unet(imgs, msgs)
-        if self.yuv:
-            imgs_w = yuv_to_rgb(imgs_w)
         return imgs_w
 
 
@@ -128,9 +128,11 @@ class HiddenEmbedder(Embedder):
     def __init__(
         self,
         hidden_encoder: HiddenEncoder,
+        yuv: bool = False
     ) -> None:
         super(HiddenEmbedder, self).__init__()
         self.hidden_encoder = hidden_encoder
+        self.yuv = yuv
 
     def get_random_msg(self, bsz: int = 1, nb_repetitions=1) -> torch.Tensor:
         nbits = self.hidden_encoder.num_bits
@@ -149,6 +151,9 @@ class HiddenEmbedder(Embedder):
             The watermarked images.
         """
         msgs = 2 * msgs.float() - 1
+        if self.yuv:  # only use the Y channel
+            imgs = rgb_to_yuv(imgs)[..., :1, :, :]
+        imgs = self.preprocess(imgs)
         return self.hidden_encoder(imgs, msgs)
 
 

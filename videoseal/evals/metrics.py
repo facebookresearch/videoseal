@@ -5,8 +5,6 @@ import numpy as np
 from pytorch_msssim import ssim as pytorch_ssim
 # from vmaf import run_vmaf
 
-from videoseal.data.transforms import image_std, unnormalize_img
-
 def psnr(x, y):
     """ 
     Return PSNR 
@@ -14,9 +12,7 @@ def psnr(x, y):
         x: Image tensor with normalized values (≈ [-1,1])
         y: Image tensor with normalized values (≈ [-1,1]), ex: original image
     """
-    delta = unnormalize_img(x) - unnormalize_img(y)
-    # delta = 255 * (delta * image_std.view(1, 3, 1, 1).to(x.device))
-    delta = 255 * delta
+    delta = 255 * (x - y)
     delta = delta.reshape(-1, x.shape[-3], x.shape[-2], x.shape[-1])  # BxCxHxW
     peak = 20 * math.log10(255.0)
     noise = torch.mean(delta**2, dim=(1,2,3))  # B
@@ -30,8 +26,6 @@ def ssim(x, y, data_range=1.0):
         x: Image tensor with normalized values (≈ [-1,1])
         y: Image tensor with normalized values (≈ [-1,1]), ex: original image
     """
-    x = unnormalize_img(x)
-    y = unnormalize_img(y)
     return pytorch_ssim(x, y, data_range=data_range, size_average=False)
 
 # def vmaf(x, y):
@@ -46,8 +40,6 @@ def ssim(x, y, data_range=1.0):
 #     Returns: 
 #         VMAF score
 #     """
-#     x = unnormalize_img(x)
-#     y = unnormalize_img(y)
 #     # Ensure tensors are on CPU and convert them to numpy arrays
 #     video1_array = x.cpu().numpy()
 #     video2_array = y.cpu().numpy()
