@@ -190,7 +190,7 @@ def init_distributed_mode(params):
         # set GPU device
         torch.cuda.set_device(params.local_rank)
         dist.barrier()
-        setup_for_distributed(params.is_master)
+        # setup_for_distributed(params.is_master)
 
 
 

@@ -413,11 +413,11 @@ def main(params):
 
     # specific thing to do if distributed training
     if params.distributed:
-        wam_ddp = nn.parallel.DistributedDataParallel(
-            wam, device_ids=[params.local_rank])
+        wam_ddp = nn.parallel.DistributedDataParallel(wam, device_ids=[params.local_rank])
         image_detection_loss.discriminator = nn.parallel.DistributedDataParallel(
             image_detection_loss.discriminator, device_ids=[params.local_rank]
         )
+        wam = wam_ddp.module
     else:
         wam_ddp = wam
 
@@ -499,13 +499,9 @@ def main(params):
             epoch_train_loader.sampler.set_epoch(epoch)
             epoch_val_loader.sampler.set_epoch(epoch)
 
-        train_stats = train_one_epoch(
-            wam_ddp, optimizers, epoch_train_loader, epoch_modality, image_detection_loss, epoch, params)
-        log_stats = {**log_stats, **
-                     {f'train_{k}': v for k, v in train_stats.items()}}
+        train_stats = train_one_epoch(wam_ddp, optimizers, epoch_train_loader, epoch_modality, image_detection_loss, epoch, params)
+        log_stats = {**log_stats, **{f'train_{k}': v for k, v in train_stats.items()}}
 
-        # validation only runs in main process to avoid nccl erros.
-        # valid on wam_ddp is not supported since some func. is not broadcasted
         if epoch % params.eval_freq == 0 and udist.is_main_process():
             if epoch % params.full_eval_freq == 0:
                 augs = validation_augs.copy() 
@@ -517,8 +513,7 @@ def main(params):
                     augs.append((VideoCompressorAugmenter, [32]))
             val_stats = eval_one_epoch(wam, epoch_val_loader, epoch_modality, image_detection_loss,
                                        epoch, augs, validation_masks, params)
-            log_stats = {**log_stats, **
-                         {f'val_{k}': v for k, v in val_stats.items()}}
+            log_stats = {**log_stats, **{f'val_{k}': v for k, v in val_stats.items()}}
 
             with open(os.path.join(params.output_dir, 'log.txt'), 'a') as f:
                 f.write(json.dumps(log_stats) + "\n")
@@ -562,11 +557,14 @@ def train_one_epoch(
     metric_logger = ulogger.MetricLogger(delimiter="  ")
 
     for it, batch_items in enumerate(metric_logger.log_every(train_loader, 10, header)):
+        if it >= params.iter_per_epoch:
+            break
 
         if len(batch_items) == 3:
             imgs, masks, frames_positions = batch_items
         elif len(batch_items) == 2:
             imgs, masks = batch_items
+
 
         # masks are only used if segm_proba > 0
         imgs = imgs.to(device)
@@ -637,6 +635,19 @@ def train_one_epoch(
 
         for name, value in log_stats.items():
             metric_logger.update(**{name: value})
+        
+        # only save images if not in distributed mode, for debugging
+        if (epoch % params.saveimg_freq == 0) and (it % 50 == 0) and (params.master_port == -1):
+            ori_path = os.path.join(
+                params.output_dir, f'{epoch:03}_{it:03}_{epoch_modality}_train_0_ori.png')
+            wm_path = os.path.join(
+                params.output_dir, f'{epoch:03}_{it:03}_{epoch_modality}_train_1_wm.png')
+            diff_path = os.path.join(
+                params.output_dir, f'{epoch:03}_{it:03}_{epoch_modality}_train_2_diff.png')
+            if udist.is_main_process():
+                save_image(imgs,ori_path, nrow=8)
+                save_image(outputs["imgs_w"], wm_path, nrow=8)
+                save_image(create_diff_img(imgs, outputs["imgs_w"]), diff_path, nrow=8)
 
     metric_logger.synchronize_between_processes()
     print("Averaged {} stats:".format('train'), metric_logger)
@@ -644,7 +655,7 @@ def train_one_epoch(
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
 
 
-@ torch.no_grad()
+@torch.no_grad()
 def eval_one_epoch(
     wam: Wam,
     val_loader: torch.utils.data.DataLoader,
@@ -675,16 +686,15 @@ def eval_one_epoch(
         epoch, params.epochs, epoch_modality)
     metric_logger = ulogger.MetricLogger(delimiter="  ")
 
-    for it, batch_items in enumerate(metric_logger.log_every(val_loader, 10, header, max_iter=params.iter_per_valid)):
+    for it, batch_items in enumerate(metric_logger.log_every(val_loader, 10, header)):
         if len(batch_items) == 3:
             imgs, masks, frames_positions = batch_items
         elif len(batch_items) == 2:
             imgs, masks = batch_items
 
+        # get imgs and random messages
         imgs = imgs.to(device)
-
         msgs = wam.get_random_msg(imgs.shape[0])  # b x k
-
         msgs = msgs.to(imgs.device)
 
         # generate watermarked images
@@ -763,24 +773,26 @@ def eval_one_epoch(
 
                     metric_logger.update(**aug_log_stats)
 
-    save_image(imgs,
-               os.path.join(params.output_dir, f'{epoch:03}_{epoch_modality}_val_0_ori.png'), nrow=8)
-    save_image(imgs_w,
-               os.path.join(params.output_dir, f'{epoch:03}_{epoch_modality}_val_1_wm.png'), nrow=8)
-    save_image(create_diff_img(imgs, imgs_w),
-               os.path.join(params.output_dir, f'{epoch:03}_{epoch_modality}_val_2_diff.png'), nrow=8)
-    if epoch_modality == Modalities.VIDEO:
+    if udist.is_main_process():
         ori_path = os.path.join(
-            params.output_dir, f'{epoch:03}_{it:03}_{epoch_modality}_val_0_ori.mp4')
+            params.output_dir, f'{epoch:03}_{it:03}_{epoch_modality}_val_0_ori.png')
         wm_path = os.path.join(
-            params.output_dir, f'{epoch:03}_{it:03}_{epoch_modality}_val_1_wm.mp4')
+            params.output_dir, f'{epoch:03}_{it:03}_{epoch_modality}_val_1_wm.png')
         diff_path = os.path.join(
-            params.output_dir, f'{epoch:03}_{it:03}_{epoch_modality}_val_2_diff.mp4')
-        fps = 24 // 1
-        save_vid(imgs, ori_path, fps)
-        save_vid(imgs_w, wm_path, fps)
-        save_vid(imgs - imgs_w, diff_path, fps)
+            params.output_dir, f'{epoch:03}_{it:03}_{epoch_modality}_val_2_diff.png')
+        save_image(imgs,ori_path, nrow=8)
+        save_image(imgs_w, wm_path, nrow=8)
+        save_image(create_diff_img(imgs, imgs_w), diff_path, nrow=8)
+        if epoch_modality == Modalities.VIDEO:
+            fps = 24 // 1
+            ori_path.replace(".png", ".mp4")
+            wm_path.replace(".png", ".mp4")
+            diff_path.replace(".png", ".mp4")
+            save_vid(imgs, ori_path, fps)
+            save_vid(imgs_w, wm_path, fps)
+            save_vid(imgs - imgs_w, diff_path, fps)
 
+    metric_logger.synchronize_between_processes()
     print("Averaged {} stats:".format('val'), metric_logger)
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
 
