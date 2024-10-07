@@ -419,14 +419,7 @@ def main(params):
             image_detection_loss.discriminator, device_ids=[params.local_rank]
         )
         wam = wam_ddp.module
-    else:    builtin_stderr_write = sys.stderr.write
-    def stderr_write(*args, **kwargs):
-        rank = get_rank()
-        args = [f"[rank{rank}]: {a}" for a in args]
-        builtin_stderr_write(*args, **kwargs)
-        # force = kwargs.pop('force', False)
-        # if is_master or force:
-        #     builtin_stderr_write(*args)
+    else:
         wam_ddp = wam
 
     # setup for validation
@@ -477,12 +470,7 @@ def main(params):
                     f.write(json.dumps(val_stats) + "\n")
         return
 
-    # start training
-    print('training...')
-    start_time = time.time()
-    for epoch in range(start_epoch, params.epochs):
-        log_stats = {'epoch': epoch}
-
+    def get_modality(epoch, params):
         # Decide on the modality of this epoch either video or images
         if params.modality == Modalities.HYBRID:
             if epoch >= params.video_start:
@@ -494,7 +482,19 @@ def main(params):
                 epoch_modality = Modalities.IMAGE
         else:
             epoch_modality = params.modality
+        return epoch_modality
+    
+    modalities = [get_modality(epoch, params) for epoch in range(params.epochs)]
+    print(f"rank{udist.get_rank()}: modalities: {
+        ['i' if m == Modalities.IMAGE else 'v' for m in modalities]
+    }", force=True)
 
+    # start training
+    print('training...')
+    start_time = time.time()
+    for epoch in range(start_epoch, params.epochs):
+        log_stats = {'epoch': epoch}
+        epoch_modality = modalities[epoch]
         epoch_train_loader = video_train_loader if epoch_modality == Modalities.VIDEO else image_train_loader
         epoch_val_loader = video_val_loader if epoch_modality == Modalities.VIDEO else image_val_loader
 
