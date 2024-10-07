@@ -18,7 +18,8 @@ Args inventory:
     --embedder_model vae_sd --embedder_config configs/embedder_sd.yaml
     --local_rank 0  --only_eval True --scaling_w 0.4 --embedder_model vae_small --extractor_model sam_small --augmentation_config configs/all_augs.yaml --resume_from /checkpoint/pfz/2024_logs/0708_segmark_bigger_vae/_scaling_w=0.4_embedder_model=vae_small_extractor_model=sam_small/checkpoint.pth
     --local_rank 0  --only_eval True --scaling_w 2.0 --scaling_i 1.0 --nbits 16 --lambda_dec 6.0 --lambda_det 1.0 --lambda_d 0.0 --lambda_i 0.0 --perceptual_loss none --seed 0 --scheduler none --optimizer AdamW,lr=1e-5 --epochs 50 --batch_size_eval 32 --batch_size 16 --img_size 256 --attenuation jnd_1_3 --resume_from /checkpoint/pfz/2024_logs/0708_segmark_bigger_vae/_scaling_w=0.4_embedder_model=vae_small_extractor_model=sam_small/checkpoint.pth --embedder_model vae_small --extractor_model sam_small --augmentation_config configs/all_augs.yaml
-
+    --video_dataset sa-v
+    --image_dataset coco
 """
 
 import argparse
@@ -33,10 +34,11 @@ from typing import List
 
 import numpy as np
 import omegaconf
+import psutil
 import torch
+import torch.distributed as dist
 import torch.nn as nn
 import torch.nn.functional as F
-from torchvision.datasets import CocoDetection
 from torchvision.utils import save_image
 
 import videoseal.utils as utils
@@ -49,27 +51,27 @@ from videoseal.augmentation.geometric import (Crop, HorizontalFlip, Identity,
 from videoseal.augmentation.valuemetric import (JPEG, Brightness, Contrast,
                                                 GaussianBlur, Hue,
                                                 MedianFilter, Saturation)
-from videoseal.data.loader import (get_dataloader, get_dataloader_segmentation,
+from videoseal.data.loader import (get_dataloader_segmentation,
                                    get_video_dataloader)
+
 from videoseal.evals.metrics import (accuracy, bit_accuracy,
                                     bit_accuracy_inference, iou, psnr)
+
 from videoseal.data.transforms import (get_transforms,
                                        get_transforms_segmentation,
                                        normalize_img, unnormalize_img,
                                        unstd_img)
+from videoseal.evals.metrics import (accuracy, bit_accuracy,
+                                     bit_accuracy_inference, iou, psnr, ssim)
 from videoseal.losses.detperceptual import LPIPSWithDiscriminator
-from videoseal.models import Wam, build_embedder, build_extractor
+from videoseal.models import VideoWam, Wam, build_embedder, build_extractor
 from videoseal.modules.jnd import JND
+from videoseal.utils.data import Modalities, parse_dataset_params
+from videoseal.utils.display import get_fps, save_vid
 from videoseal.utils.image import create_diff_img, detect_wm_hm
 
 device = torch.device(
     'cuda') if torch.cuda.is_available() else torch.device('cpu')
-
-
-modality_to_datasets = {
-    "image": ["coco"],
-    "video": ["sa-v"]
-}
 
 
 def get_dataset_parser(parser):
@@ -79,67 +81,13 @@ def get_dataset_parser(parser):
         parser (argparse.ArgumentParser): The parser to add arguments to.
     """
     group = parser.add_argument_group('Dataset parameters')
-    group.add_argument("--modality", type=str, default="image",
-                       choices=["image", "video"], help="Modality of the dataset. Options: 'image', 'video'")
-    group.add_argument("--dataset", type=str, default="coco",
-                       choices=[j for i in modality_to_datasets.values() for j in i], help="Name of the dataset. Options: 'coco', 'sa-v'. If provided, will override explicit directory paths.")
-    group.add_argument("--train_dir", type=str, default=None,
-                       help="Path to the training directory. Required if --dataset is not provided.")
-    group.add_argument("--train_annotation_file", type=str, default=None,
-                       help="Path to the training annotation file. Required for image modality if --dataset is not provided.")
-    group.add_argument("--val_dir", type=str, default=None,
-                       help="Path to the validation directory. Required if --dataset is not provided.")
-    group.add_argument("--val_annotation_file", type=str, default=None,
-                       help="Path to the validation annotation file. Required for image modality if --dataset is not provided.")
+    group.add_argument("--image_dataset", type=str,
+                       choices=["coco"], help="Name of the image dataset.")
+    group.add_argument("--video_dataset", type=str,
+                       choices=["sa-v"], help="Name of the video dataset.")
+    group.add_argument("--image_to_video_percentage_in_hybrid", type=float, default=0.5,
+                       help="Percentage of images in the hybrid dataset 0.5 means for each 5 epochs of images 5 video epoch is made. Only applicable if both --image_dataset and --video_dataset are provided.")
     return parser
-
-
-def parse_dataset_params(params):
-    """
-    Parses the dataset parameters and loads the dataset configuration.
-
-    Logic:
-    1. If explicit directory paths are provided (--train_dir, --val_dir, etc.), use those.
-    2. If a dataset name is provided (--dataset), load the corresponding configuration from configs/datasets/<dataset_name>.yaml.
-    3. If neither explicit directory paths nor a dataset name is provided, raise an error.
-
-    Args:
-        params (argparse.Namespace): The parsed command-line arguments.
-
-
-    Returns:
-        omegaconf.DictConfig: The parsed and merged dataset configuration.
-    """
-    assert params.dataset in modality_to_datasets[
-        params.modality], f"Invalid dataset '{params.dataset}' for modality '{params.modality}'"
-
-    if params.train_dir is not None and params.val_dir is not None:
-        # Use explicit directory paths
-        print("Warning: Using explicitly provided train and val directories. Ignoring dataset name.")
-        params_dict = vars(params)
-    elif params.dataset is not None:
-        # Load dataset configuration
-        dataset_cfg = omegaconf.OmegaConf.load(
-            f"configs/datasets/{params.dataset}.yaml")
-        params_dict = vars(params)
-        # Convert params_dict to OmegaConf object
-        params_omega = omegaconf.OmegaConf.create(params_dict)
-        # Merge params with dataset_cfg
-        merged_cfg = omegaconf.OmegaConf.merge(params_omega, dataset_cfg)
-        return merged_cfg
-    else:
-        # Raise an error if neither explicit directory paths nor a dataset name is provided
-        raise ValueError(
-            "Either provide dataset name or explicit train and val directories")
-
-    if params_dict['modality'] == "image":
-        # Check that annotation files are provided for image modality
-        assert params_dict['train_annotation_file'] is not None and params_dict['val_annotation_file'] is not None, \
-            "Annotation files are required for image modality"
-
-    # Convert params_dict to OmegaConf object
-    params_omega = omegaconf.OmegaConf.create(params_dict)
-    return params_omega
 
 
 def get_parser():
@@ -149,7 +97,8 @@ def get_parser():
         group.add_argument(*args, **kwargs)
 
     group = parser.add_argument_group('Experiments parameters')
-    # Dataset #
+
+    # Dataset
     parser = get_dataset_parser(parser)
 
     aa("--output_dir", type=str, default="output/",
@@ -172,7 +121,8 @@ def get_parser():
     group = parser.add_argument_group('Image and watermark parameters')
     aa("--nbits", type=int, default=32,
        help="Number of bits used to generate the message. If 0, no message is used.")
-    aa("--img_size", type=int, default=256, help="Size of the input images")
+    aa("--img_size", type=int, default=256,
+       help="Size of the input images for data preprocessing")
     aa("--img_size_extractor", type=int,
        default=256, help="Images are resized to this size before being fed to the extractor")
     aa("--attenuation", type=str, default="None", help="Attenuation model to use")
@@ -184,6 +134,13 @@ def get_parser():
        help="Scaling factor for the image in the embedder model")
     aa("--threshold_mask", type=float, default=0.6,
        help="Threshold for the mask prediction using heatmap only (default: 0.7)")
+    # VideoWam parameters related how to do video watermarking inference
+    aa("--videowam_frame_intermediate_size", type=int, default=256,
+       help="The size of the frame to resize to intermediately while generating the watermark then upscale, the final video/image size is kept the same.")
+    aa("--videowam_chunk_size", type=int, default=8,
+       help="The number of frames to encode at a time.")
+    aa("--videowam_step_size", type=int, default=4,
+       help="The number of frames to propagate the watermark to.")
 
     group = parser.add_argument_group('Optimizer parameters')
     aa("--optimizer", type=str, default="AdamW,lr=1e-4",
@@ -192,6 +149,10 @@ def get_parser():
        help="Discriminator optimizer. If None uses the same params (default: None)")
     aa("--scheduler", type=str, default="None", help="Scheduler (default: None)")
     aa('--epochs', default=100, type=int, help='Number of total epochs to run')
+    aa('--iter_per_epoch', default=10000, type=int,
+       help='Number of iterations per epoch, made for very large datasets')
+    aa('--iter_per_valid', default=None, type=int,
+       help='Number of iterations per eval, made for very large eval datasets if None eval on all dataset')
     aa('--batch_size', default=16, type=int, help='Batch size')
     aa('--batch_size_eval', default=64, type=int, help='Batch size for evaluation')
     aa('--temperature', default=1.0, type=float,
@@ -239,8 +200,11 @@ def get_parser():
 
 def main(params):
 
-    # Load Dataset Params
-    params = parse_dataset_params(params)
+    # Load dataset params from config files
+    parse_dataset_params(params)
+
+    # Convert params to OmegaConf object
+    params = omegaconf.OmegaConf.create(vars(params))
 
     # Distributed mode
     udist.init_distributed_mode(params)
@@ -256,7 +220,9 @@ def main(params):
 
     # Print the arguments
     print("__git__:{}".format(utils.get_sha()))
-    print("__log__:{}".format(omegaconf.OmegaConf.to_yaml(params)))
+    print(params)
+    print("__log__:{}".format(json.dumps(
+        omegaconf.OmegaConf.to_container(params, resolve=True))))
 
     # Copy the config files to the output dir
     if udist.is_main_process():
@@ -304,8 +270,11 @@ def main(params):
     print(f'attenuation: {attenuation}')
 
     # build the complete model
-    wam = Wam(embedder, extractor, augmenter, attenuation,
-              params.scaling_w, params.scaling_i)
+    wam = VideoWam(embedder, extractor, augmenter, attenuation,
+                   params.scaling_w, params.scaling_i,
+                   frame_intermediate_size=params.videowam_frame_intermediate_size,
+                   chunk_size=params.videowam_chunk_size,
+                   step_size=params.videowam_step_size)
     wam.to(device)
     print(wam)
 
@@ -356,43 +325,53 @@ def main(params):
     train_transform, train_mask_transform, val_transform, val_mask_transform = get_transforms_segmentation(
         params.img_size)
 
-    if params.modality == "image":
-        train_loader = get_dataloader_segmentation(params.train_dir, params.train_annotation_file,
-                                                   transform=train_transform, mask_transform=train_mask_transform,
-                                                   batch_size=params.batch_size,
-                                                   num_workers=params.workers, shuffle=True)
-        val_loader = get_dataloader_segmentation(params.val_dir, params.val_annotation_file,
-                                                 transform=val_transform, mask_transform=val_mask_transform,
-                                                 batch_size=params.batch_size_eval,
-                                                 num_workers=params.workers, shuffle=False, random_nb_object=False)
-    elif params.modality == "video":
-        train_loader = get_video_dataloader(params.train_dir, batch_size=params.batch_size,
-                                            num_workers=params.workers, transform=train_transform,
-                                            mask_transform=train_mask_transform,
-                                            output_resolution=(
-                                                params.img_size, params.img_size),
-                                            flatten_clips_to_frames=True,
-                                            frames_per_clip=32,
-                                            frame_step=4,
-                                            # TODO: Find a smart way to shuffle while making cache efficient
-                                            shuffle=False,
-                                            num_clips=20,
-                                            )
-        val_loader = get_video_dataloader(params.val_dir, batch_size=params.batch_size,
-                                          num_workers=params.workers, transform=val_transform,
-                                          mask_transform=val_mask_transform,
-                                          output_resolution=(
-                                              params.img_size, params.img_size),
-                                          flatten_clips_to_frames=True,
-                                          frames_per_clip=32,
-                                          # TODO: Find a smart way to shuffle while making cache efficient
-                                          shuffle=False,
-                                          frame_step=4,
-                                          num_clips=20,
-                                          )
-    else:
-        raise ValueError(
-            f"Invalid modality: {params.modality}. Supported modalities are 'image' and 'video'.")
+    image_train_loader = image_val_loader = video_train_loader = video_val_loader = None
+    if params.modality in [Modalities.IMAGE, Modalities.HYBRID]:
+        image_train_loader = get_dataloader_segmentation(params.image_dataset_config.train_dir,
+                                                         params.image_dataset_config.train_annotation_file,
+                                                         transform=train_transform,
+                                                         mask_transform=train_mask_transform,
+                                                         batch_size=params.batch_size,
+                                                         num_workers=params.workers, shuffle=True)
+        image_val_loader = get_dataloader_segmentation(params.image_dataset_config.val_dir,
+                                                       params.image_dataset_config.val_annotation_file,
+                                                       transform=val_transform,
+                                                       mask_transform=val_mask_transform,
+                                                       batch_size=params.batch_size_eval,
+                                                       num_workers=params.workers,
+                                                       shuffle=False,
+                                                       random_nb_object=False)
+    if params.modality in [Modalities.VIDEO, Modalities.HYBRID]:
+        video_train_loader = get_video_dataloader(params.video_dataset_config.train_dir,
+                                                  batch_size=params.batch_size,
+                                                  num_workers=params.workers,
+                                                  transform=train_transform,
+                                                  mask_transform=train_mask_transform,
+                                                  output_resolution=(
+                                                      params.img_size, params.img_size),
+                                                  # for now we are fixing 1 video / batch
+                                                  flatten_clips_to_frames=True,
+                                                  frames_per_clip=32,
+                                                  frame_step=4,
+                                                  # TODO: Find a smart way to shuffle while making cache efficient
+                                                  shuffle=False,
+                                                  num_clips=20,
+                                                  )
+        video_val_loader = get_video_dataloader(params.video_dataset_config.val_dir,
+                                                batch_size=params.batch_size,
+                                                num_workers=params.workers,
+                                                transform=val_transform,
+                                                mask_transform=val_mask_transform,
+                                                output_resolution=(
+                                                    params.img_size, params.img_size),
+                                                # for now we are fixing 1 video / batch
+                                                flatten_clips_to_frames=True,
+                                                frames_per_clip=32,
+                                                # TODO: Find a smart way to shuffle while making cache efficient
+                                                shuffle=False,
+                                                frame_step=4,
+                                                num_clips=20,
+                                                )
 
     # optionally resume training
     if params.resume_from is not None:
@@ -453,9 +432,10 @@ def main(params):
         dummy_img)  # n 1 h w, full of ones or random masks depending on config
 
     # evaluation only
+    # TODO: fix me
     if params.only_eval:
-        val_stats = eval_one_epoch(wam, val_loader, image_detection_loss,
-                                   0, validation_augs, validation_masks, params)
+        val_stats = eval_one_epoch(
+            wam, val_loader, image_detection_loss, 0, validation_augs, validation_masks, params)
         if udist.is_main_process():
             with open(os.path.join(params.output_dir, 'log_only_eval.txt'), 'a') as f:
                 f.write(json.dumps(val_stats) + "\n")
@@ -467,31 +447,41 @@ def main(params):
     for epoch in range(start_epoch, params.epochs):
         log_stats = {'epoch': epoch}
 
+        # Decide on the modality of this epoch either video or images
+        if params.modality == Modalities.HYBRID:
+            epoch_modality = Modalities.IMAGE if random.random(
+            ) < params.image_to_video_percentage_in_hybrid else Modalities.VIDEO
+        else:
+            epoch_modality = params.modality
+
+        epoch_train_loader = video_train_loader if epoch_modality == "video" else image_train_loader
+        epoch_val_loader = video_val_loader if epoch_modality == "video" else image_val_loader
+
         if scheduler is not None:
             scheduler.step(epoch)
         if scaling_scheduler is not None:
             scaling_scheduler.step(epoch)
 
         if params.distributed:
-            train_loader.sampler.set_epoch(epoch)
-            val_loader.sampler.set_epoch(epoch)
+            epoch_train_loader.sampler.set_epoch(epoch)
+            epoch_val_loader.sampler.set_epoch(epoch)
 
         train_stats = train_one_epoch(
-            wam_ddp, optimizers, train_loader, image_detection_loss, epoch, params)
+            wam_ddp, optimizers, epoch_train_loader, epoch_modality, image_detection_loss, epoch, params)
         log_stats = {**log_stats, **
                      {f'train_{k}': v for k, v in train_stats.items()}}
 
         if epoch % params.eval_freq == 0:
             augs = validation_augs if epoch % params.full_eval_freq == 0 else validation_augs_subset
-            val_stats = eval_one_epoch(wam, val_loader, image_detection_loss,
+            val_stats = eval_one_epoch(wam, epoch_val_loader, epoch_modality, image_detection_loss,
                                        epoch, augs, validation_masks, params)
-            # val_stats = eval_one_epoch(wam_ddp, val_loader, image_detection_loss, epoch, params)
             log_stats = {**log_stats, **
                          {f'val_{k}': v for k, v in val_stats.items()}}
         if udist.is_main_process():
             with open(os.path.join(params.output_dir, 'log.txt'), 'a') as f:
                 f.write(json.dumps(log_stats) + "\n")
 
+        print("Saving Checkpoint..")
         save_dict = {
             'epoch': epoch + 1,
             'model': wam.state_dict(),
@@ -514,22 +504,19 @@ def train_one_epoch(
     wam: Wam,
     optimizers: List[torch.optim.Optimizer],
     train_loader: torch.utils.data.DataLoader,
+    epoch_modality: str,
     image_detection_loss: LPIPSWithDiscriminator,
     epoch: int,
     params: argparse.Namespace,
 ):
+    assert epoch_modality in [Modalities.IMAGE, Modalities.VIDEO]
     wam.train()
 
-    header = 'Train - Epoch: [{}/{}]'.format(epoch, params.epochs)
+    header = 'Train - Epoch: [{}/{}] - Modality: {}'.format(
+        epoch, params.epochs, epoch_modality)
     metric_logger = ulogger.MetricLogger(delimiter="  ")
 
-    # TODO: FixMe
-    max_iter_per_epoch = 10000
-
-    for it, batch_items in enumerate(metric_logger.log_every(train_loader, 1, header)):
-
-        if it > max_iter_per_epoch:
-            break
+    for it, batch_items in enumerate(metric_logger.log_every(train_loader, 10, header, max_iter=params.iter_per_epoch)):
 
         if len(batch_items) == 3:
             imgs, masks, frames_positions = batch_items
@@ -540,7 +527,10 @@ def train_one_epoch(
         imgs = imgs.to(device, non_blocking=True)
 
         # forward
-        outputs = wam(imgs, masks)
+        # TODO deal with the usecase of batch of videos, for now we support flattened videos
+        outputs = wam(imgs, masks, is_video=(
+            epoch_modality == Modalities.VIDEO))
+
         outputs["preds"] /= params.temperature
 
         if params.embedder_model.startswith("vae"):
@@ -571,7 +561,9 @@ def train_one_epoch(
             **logs,
             'psnr': psnr(outputs["imgs_w"], imgs).mean().item(),
             'lr': optimizers[0].param_groups[0]['lr'],
+            "ssim": ssim(outputs["imgs_w"], imgs).mean().item(),
         }
+
         bit_preds = outputs["preds"][:, 1:]  # b k h w
         mask_preds = outputs["preds"][:, 0:1]  # b 1 h w
 
@@ -596,42 +588,23 @@ def train_one_epoch(
         for name, loss in log_stats.items():
             metric_logger.update(**{name: loss})
 
-        # save images
-        if epoch % params.saveimg_freq == 0 and it == 0 and udist.is_main_process():
-            # if epoch % params.saveimg_freq == 0 and it % 200 == 0 and udist.is_main_process():
-            # save images and diff
-            save_image(unnormalize_img(imgs),
-                       os.path.join(params.output_dir, f'{epoch:03}_{it:03}_train_0_ori.png'), nrow=8)
-            save_image(unnormalize_img(outputs["imgs_w"]),
-                       os.path.join(params.output_dir, f'{epoch:03}_{it:03}_train_1_w.png'), nrow=8)
-            save_image(create_diff_img(imgs, outputs["imgs_w"]),
-                       # save_image(5 * unstd_img(params.scaling_w * outputs["deltas_w"]).abs(),
-                       os.path.join(params.output_dir, f'{epoch:03}_{it:03}_train_2_diff.png'), nrow=8)
-            save_image(unnormalize_img(outputs["imgs_aug"]),
-                       os.path.join(params.output_dir, f'{epoch:03}_{it:03}_train_3_aug.png'), nrow=8)
-            # save pred and target masks
-            if params.lambda_det > 0:
-                save_image(outputs["masks"],
-                           os.path.join(params.output_dir, f'{epoch:03}_{it:03}_train_4_mask.png'), nrow=8)
-                save_image(F.sigmoid(mask_preds / params.temperature),
-                           os.path.join(params.output_dir, f'{epoch:03}_{it:03}_train_5_pred.png'), nrow=8)
-
     metric_logger.synchronize_between_processes()
     print("Averaged {} stats:".format('train'), metric_logger)
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
 
 
-@torch.no_grad()
+@ torch.no_grad()
 def eval_one_epoch(
     wam: Wam,
     val_loader: torch.utils.data.DataLoader,
+    epoch_modality: str,
     image_detection_loss: LPIPSWithDiscriminator,
     epoch: int,
     validation_augs: List,
     validation_masks: torch.Tensor,
     params: argparse.Namespace,
 ) -> dict:
-    """ 
+    """
     Evaluate the model on the validation set, with different augmentations
 
     Args:
@@ -646,14 +619,12 @@ def eval_one_epoch(
     if torch.is_tensor(validation_masks):
         validation_masks = list(torch.unbind(validation_masks, dim=0))
     wam.eval()
-    header = 'Val Full - Epoch: [{}/{}]'.format(epoch, params.epochs)
+    header = 'Val Full - Epoch: [{}/{}] - Modality: {}'.format(
+        epoch, params.epochs, epoch_modality)
     metric_logger = ulogger.MetricLogger(delimiter="  ")
 
-    aug_metrics = {}
     for it, batch_items in enumerate(metric_logger.log_every(val_loader, 10, header)):
-
-        if it * params.batch_size_eval >= 100:
-            break
+        aug_metrics = {}
 
         if len(batch_items) == 3:
             imgs, masks, frames_positions = batch_items
@@ -667,6 +638,12 @@ def eval_one_epoch(
         # generate watermarked images
         deltas_w = wam.embedder(imgs, msgs)
         imgs_w = wam.scaling_i * imgs + wam.scaling_w * deltas_w
+
+        # quality metrics
+        aug_metrics['psnr'] = psnr(
+            imgs_w, imgs).mean().item()
+        aug_metrics['ssim'] = ssim(
+            imgs_w, imgs).mean().item()
 
         # attenuate
         if wam.attenuation is not None:
@@ -733,21 +710,27 @@ def eval_one_epoch(
                     # save stats of the current augmentation
                     aug_metrics = {**aug_metrics, **log_stats}
 
-                    # save some of the images
-                    if (epoch % params.saveimg_freq == 0 or params.only_eval) and it == 0 and udist.is_main_process():
-                        save_image(unnormalize_img(imgs),
-                                   os.path.join(params.output_dir, f'{epoch:03}_{it:03}_val_0_ori.png'), nrow=8)
-                        save_image(unnormalize_img(imgs_w),
-                                   os.path.join(params.output_dir, f'{epoch:03}_{it:03}_val_1_w.png'), nrow=8)
-                        save_image(create_diff_img(imgs, imgs_w),
-                                   os.path.join(params.output_dir, f'{epoch:03}_{it:03}_val_2_diff.png'), nrow=8)
-                        save_image(unnormalize_img(imgs_aug),
-                                   os.path.join(params.output_dir, f'{epoch:03}_{it:03}_val_3_aug.png'), nrow=8)
-                        if params.lambda_det > 0:
-                            save_image(masks,
-                                       os.path.join(params.output_dir, f'{epoch:03}_{it:03}_val_4_mask.png'), nrow=8)
-                            save_image(F.sigmoid(mask_preds / params.temperature),
-                                       os.path.join(params.output_dir, f'{epoch:03}_{it:03}_val_5_pred.png'), nrow=8)
+        # save some of the images
+        if (epoch % params.saveimg_freq == 0 or params.only_eval) and it == 0 and udist.is_main_process():
+            save_image(unnormalize_img(imgs),
+                       os.path.join(params.output_dir, f'{epoch:03}_{it:03}_val_0_ori.png'), nrow=8)
+            save_image(unnormalize_img(imgs_w),
+                       os.path.join(params.output_dir, f'{epoch:03}_{it:03}_val_1_w.png'), nrow=8)
+            save_image(create_diff_img(imgs, imgs_w),
+                       os.path.join(params.output_dir, f'{epoch:03}_{it:03}_val_2_diff.png'), nrow=8)
+
+            if epoch_modality == Modalities.VIDEO:
+                raw_path = os.path.join(
+                    params.output_dir, f'{epoch:03}_{it:03}_raw.mp4')
+                wmed_path = os.path.join(
+                    params.output_dir, f'{epoch:03}_{it:03}_wmed.mp4')
+                wm_path = os.path.join(
+                    params.output_dir, f'{epoch:03}_{it:03}_wm.mp4')
+
+                fps = 24 // 1
+                save_vid(imgs, raw_path, fps)
+                save_vid(imgs_w, wmed_path, fps)
+                save_vid(imgs - imgs_w, wm_path, fps)
 
         torch.cuda.synchronize()
         for name, loss in aug_metrics.items():
@@ -769,4 +752,5 @@ if __name__ == '__main__':
     params = parser.parse_args()
 
     # run experiment
+    main(params)
     main(params)
