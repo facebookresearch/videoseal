@@ -20,13 +20,33 @@ Other dependencies:
 pip install -e . 
 ```
 
+
+#### VMAF
+
+For VMAF score, install latest git build from [here](https://johnvansickle.com/ffmpeg/builds), then update the PATH:
+```
+wget https://johnvansickle.com/ffmpeg/builds/ffmpeg-git-amd64-static.tar.xz
+tar -xvf ffmpeg-git-amd64-static.tar.xz 
+export PATH=$PATH:/path/to/ffmpeg-git-20220307-amd64-static
+```
+Test the installation with:
+```
+which ffmpeg
+ffmpeg -version
+ffmpeg -filters | grep vmaf
+```
+It should output the path to the ffmpeg binary, the version of ffmpeg and the vmaf filter.
+
+
+
 ### Envs
 
 - H2
     
     `/private/home/pfz/miniconda3/envs/img_wm`
 
-
+    Path to ffmpeg binary: `/private/home/pfz/09-videoseal/vmaf-dev/ffmpeg-git-20240629-amd64-static/ffmpeg`.
+    To load the good binary, run  `export PATH=$PATH:/private/home/pfz/09-videoseal/vmaf-dev/ffmpeg-git-20240629-amd64-static/ffmpeg`
 
 ## Running experiments
 
