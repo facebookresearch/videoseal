@@ -10,14 +10,12 @@ import numpy as np
 import torch
 from pytorch_msssim import ssim as pytorch_ssim
 
-from videoseal.data.transforms import image_std, unnormalize_img, normalize_img
-
 def psnr(x, y):
     """ 
     Return PSNR 
     Args:
-        x: Image tensor with normalized values (≈ [-1,1])
-        y: Image tensor with normalized values (≈ [-1,1]), ex: original image
+        x: Image tensor with normalized values (≈ [0,1])
+        y: Image tensor with normalized values (≈ [0,1]), ex: original image
     """
     delta = 255 * (x - y)
     delta = delta.reshape(-1, x.shape[-3], x.shape[-2], x.shape[-1])  # BxCxHxW
@@ -30,8 +28,8 @@ def ssim(x, y, data_range=1.0):
     """
     Return SSIM
     Args:
-        x: Image tensor with normalized values (≈ [-1,1])
-        y: Image tensor with normalized values (≈ [-1,1]), ex: original image
+        x: Image tensor with normalized values (≈ [0,1])
+        y: Image tensor with normalized values (≈ [0,1]), ex: original image
     """
     return pytorch_ssim(x, y, data_range=data_range, size_average=False)
 
@@ -251,14 +249,12 @@ def vmaf_on_tensor(
     and encoded using the specified codec.
 
     Args:
-        vid_o (torch.Tensor): Original video tensor with shape TxCxHxW with normalized values (≈ [-1,1])
-        vid_w (torch.Tensor): Watermarked video tensor with shape TxCxHxW with normalized values (≈ [-1,1])
+        vid_o (torch.Tensor): Original video tensor with shape TxCxHxW with normalized values (≈ [0,1])
+        vid_w (torch.Tensor): Watermarked video tensor with shape TxCxHxW with normalized values (≈ [0,1])
         codec (str): Codec to use for encoding the video
         crf (int): Constant Rate Factor for the codec
         fps (int): Frames per second of the video
     """
-    # Normalize
-    vid_o = unnormalize_img(vid_o)
     vid_o = vid_o.clamp(0, 1).permute(0, 2, 3, 1)  # t c h w -> t w h c
     vid_o = (vid_o * 255).to(torch.uint8).numpy()
     # Create an in-memory bytes buffer
@@ -281,8 +277,6 @@ def vmaf_on_tensor(
         container.mux(packet)
     container.close()
     
-    # Normalize
-    vid_w = unnormalize_img(vid_w)
     vid_w = vid_w.clamp(0, 1).permute(0, 2, 3, 1)  # t c h w -> t w h c
     vid_w = (vid_w * 255).to(torch.uint8).numpy()
     # Create an in-memory bytes buffer
@@ -366,8 +360,8 @@ if __name__ == '__main__':
     from videoseal.data.loader import load_video
     vid_o = load_video(vid_o)
     vid_w = load_video(vid_w)
-    vid_o = normalize_img( vid_o / 255)
-    vid_w = normalize_img( vid_w / 255)
+    vid_o = vid_o / 255
+    vid_w = vid_w / 255
     try:
         result = vmaf_on_tensor(vid_o, vid_w)
         if result is not None:
