@@ -358,9 +358,9 @@ def main(params):
                                                        shuffle=False,
                                                        random_nb_object=False)
     if params.modality in [Modalities.VIDEO, Modalities.HYBRID]:
-
+        bsz_video = params.batch_size // (params.num_clips * params.frames_per_clip)
         video_train_loader = get_video_dataloader(params.video_dataset_config.train_dir,
-                                                  batch_size=params.batch_size,
+                                                  batch_size=bsz_video,
                                                   num_workers=params.workers,
                                                   transform=train_transform,
                                                   mask_transform=train_mask_transform,
@@ -375,7 +375,7 @@ def main(params):
                                                   num_clips=params.num_clips,
                                                   )
         video_val_loader = get_video_dataloader(params.video_dataset_config.val_dir,
-                                                batch_size=params.batch_size,
+                                                batch_size=bsz_video,
                                                 num_workers=params.workers,
                                                 transform=val_transform,
                                                 mask_transform=val_mask_transform,
@@ -574,9 +574,9 @@ def train_one_epoch(
         elif len(batch_items) == 2:
             imgs, masks = batch_items
 
-
-        # masks are only used if segm_proba > 0
         imgs = imgs.to(device)
+        if len(imgs.shape) == 5:
+            imgs = imgs.flatten(0, 1)
 
         # forward
         # TODO deal with the usecase of batch of videos, for now we support flattened videos
@@ -702,6 +702,9 @@ def eval_one_epoch(
 
         # get imgs and random messages
         imgs = imgs.to(device)
+        if len(imgs.shape) == 5:
+            imgs = imgs.flatten(0, 1)
+
         msgs = wam.get_random_msg(imgs.shape[0])  # b x k
         msgs = msgs.to(imgs.device)
 

@@ -115,16 +115,8 @@ class VideoDataset(Dataset):
         self.video_buffer = LRUDict(maxsize=150)
 
     def __getitem__(self, index):
-        if self.flatten_clips_to_frames:
-            # Calculate the index of the videofile, clip, and frame
-            videofile_index = index // (self.num_clips * self.frames_per_clip)
-            clip_index = (index % (self.num_clips *
-                          self.frames_per_clip)) // self.frames_per_clip
-            frame_index = index % self.frames_per_clip
-        else:
-            # Calculate the index of the sample and clip
-            videofile_index = index // self.num_clips
-            clip_index = index % self.num_clips
+        videofile_index = index // self.num_clips
+        clip_index = index % self.num_clips
 
         video_file = self.videofiles[videofile_index]
 
@@ -179,39 +171,22 @@ class VideoDataset(Dataset):
         # load directly from buffer here should be processed already
         buffer, frames_positions_in_clips = self.video_buffer[video_file]
 
-        if self.flatten_clips_to_frames:
-            # Return a single frame and its index
-            frame = buffer[clip_index, frame_index]
-            frame_index_in_video = frames_positions_in_clips[clip_index][frame_index]
+        # Return a clip and its frame indices
+        clip = buffer[clip_index]
+        clip_frame_indices = frames_positions_in_clips[clip_index]
 
-            if self.transform is not None:
-                frame = self.transform(frame)
+        if self.transform is not None:
+            clip = torch.stack([self.transform(frame) for frame in clip])
 
-            # Get MASKS
-            # TODO: Dummy mask of 1s
-            # TODO: implement mask transforms
-            mask = torch.ones_like(frame[0:1, ...])
-            if self.mask_transform is not None:
-                mask = self.mask_transform(mask)
+        # Get MASKS
+        # TODO: Dummy mask of 1s
+        # TODO: implement mask transforms
+        mask = torch.ones_like(clip[:, 0:1, ...])
+        if self.mask_transform is not None:
+            mask = torch.stack([self.mask_transform(one_mask)
+                                for one_mask in mask])
 
-            return frame, mask, frame_index_in_video
-        else:
-            # Return a clip and its frame indices
-            clip = buffer[clip_index]
-            clip_frame_indices = frames_positions_in_clips[clip_index]
-
-            if self.transform is not None:
-                clip = torch.stack([self.transform(frame) for frame in clip])
-
-            # Get MASKS
-            # TODO: Dummy mask of 1s
-            # TODO: implement mask transforms
-            mask = torch.ones_like(clip[:, 0:1, ...])
-            if self.mask_transform is not None:
-                mask = torch.stack([self.mask_transform(one_mask)
-                                    for one_mask in mask])
-
-            return clip, mask, clip_frame_indices
+        return clip, mask, clip_frame_indices
 
     def loadvideo_decord(self, sample):
         """ Load video content using Decord """

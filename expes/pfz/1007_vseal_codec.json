@@ -16,10 +16,10 @@
         "num_clips":            1,
         "frame_step":           1,
         "frames_per_clip":      32,    
-        "iter_per_epoch":       10,
-        "batch_size":           8,
-        "batch_size_eval":      8,
-        "epochs":               500,
+        "iter_per_epoch":       10000,
+        "batch_size":           32,
+        "batch_size_eval":      32,
+        "epochs":               100,
         "optimizer":            "AdamW,lr=1e-4",
         "scheduler":            "CosineLRScheduler,lr_min=1e-6,t_initial=100,warmup_lr_init=1e-6,warmup_t=5",
         "seed":                 666,
@@ -30,7 +30,7 @@
         "lambda_dec":           1.0,
         "nbits":                32,
         "scaling_i":            1.0,
-        "scaling_w":            0.2,
+        "scaling_w":            0.1,
         "balanced":             true,
         "workers":              0,
         "master_port":          "__SAMPLE__(10000, 20000)"
@@ -47,7 +47,7 @@
     },
     "meta": {
         "group": "",
-        "name": "1007_vseal_codec",
+        "name": "1007_vseal_codec_good",
         "dest-arg": "yes",
         "dest-name": "output_dir"
     }
