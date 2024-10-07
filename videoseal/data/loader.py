@@ -4,6 +4,7 @@ import glob
 import os
 import random
 from typing import Any, Callable, List, Optional, Union
+import warnings
 
 import cv2
 import numpy as np
@@ -16,15 +17,32 @@ from torch.utils.data import (DataLoader, Dataset, DistributedSampler,
 from torchvision import get_video_backend
 from torchvision.datasets import CocoDetection
 from torchvision.datasets.folder import default_loader, is_image_file
-from torchvision.io import VideoReader
 from torchvision.transforms import Compose, Normalize, ToTensor
 from tqdm import tqdm
+from decord import VideoReader, cpu
 
 from videoseal.data.datasets import VideoDataset
 from videoseal.utils.dist import is_dist_avail_and_initialized
 
 from .transforms import default_transform
 
+
+def load_video(fname):
+    """ Load video content using Decord """
+    if not os.path.exists(fname):
+        warnings.warn(f'video path not found {fname=}')
+        return []
+    _fsize = os.path.getsize(fname)
+    if _fsize < 1 * 1024:  # avoid hanging issue
+        warnings.warn(f'video too short {fname=}')
+        return []
+    try:
+        vr = VideoReader(fname, num_threads=1, ctx=cpu(0))
+    except Exception:
+        return []
+
+    vid_np = vr.get_batch(range(len(vr))).asnumpy().transpose(0, 3, 1, 2)
+    return torch.from_numpy(vid_np)
 
 @functools.lru_cache()
 def get_image_paths(path):
