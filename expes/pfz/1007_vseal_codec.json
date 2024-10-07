@@ -16,7 +16,7 @@
         "num_clips":            1,
         "frame_step":           1,
         "frames_per_clip":      32,    
-        "iter_per_epoch":       500,
+        "iter_per_epoch":       10,
         "batch_size":           8,
         "batch_size_eval":      8,
         "epochs":               500,
