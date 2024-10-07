@@ -502,7 +502,7 @@ def main(params):
         train_stats = train_one_epoch(wam_ddp, optimizers, epoch_train_loader, epoch_modality, image_detection_loss, epoch, params)
         log_stats = {**log_stats, **{f'train_{k}': v for k, v in train_stats.items()}}
 
-        if epoch % params.eval_freq == 0 and udist.is_main_process():
+        if epoch % params.eval_freq == 0:
             if epoch % params.full_eval_freq == 0:
                 augs = validation_augs.copy() 
                 if epoch_modality == Modalities.VIDEO:
@@ -515,8 +515,9 @@ def main(params):
                                        epoch, augs, validation_masks, params)
             log_stats = {**log_stats, **{f'val_{k}': v for k, v in val_stats.items()}}
 
-            with open(os.path.join(params.output_dir, 'log.txt'), 'a') as f:
-                f.write(json.dumps(log_stats) + "\n")
+            if udist.is_main_process():
+                with open(os.path.join(params.output_dir, 'log.txt'), 'a') as f:
+                    f.write(json.dumps(log_stats) + "\n")
 
         dist.barrier()  # Ensures all processes wait until the main node finishes validation
 

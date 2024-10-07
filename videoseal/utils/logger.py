@@ -8,10 +8,10 @@ import time
 
 import torch
 
-from .dist import is_dist_avail_and_initialized, is_main_process
+from .dist import is_dist_avail_and_initialized, is_main_process, get_rank
 
 
-logger = logging.getLogger("videoseal")
+logger = logging.getLogger(f"videoseal:rank{get_rank()}")
 
 
 class MetricLogger(object):
