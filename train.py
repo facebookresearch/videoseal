@@ -561,7 +561,7 @@ def train_one_epoch(
         epoch, params.epochs, epoch_modality)
     metric_logger = ulogger.MetricLogger(delimiter="  ")
 
-    for it, batch_items in enumerate(metric_logger.log_every(train_loader, 10, header, max_iter=params.iter_per_epoch)):
+    for it, batch_items in enumerate(metric_logger.log_every(train_loader, 10, header)):
 
         if len(batch_items) == 3:
             imgs, masks, frames_positions = batch_items
