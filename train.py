@@ -601,8 +601,6 @@ def train_one_epoch(
             optimizers[optimizer_idx].zero_grad()
             loss.backward()
             optimizers[optimizer_idx].step()
-            torch.distributed.barrier()
-            torch.cuda.synchronize()  # Ensure completion of CUDA operations
 
         # log stats
         log_stats = {
@@ -634,6 +632,7 @@ def train_one_epoch(
                 f'miou': (iou0 + iou1) / 2,
             })
 
+        torch.cuda.synchronize()
         for name, value in log_stats.items():
             metric_logger.update(**{name: value})
         
@@ -704,10 +703,9 @@ def eval_one_epoch(
 
         # quality metrics
         metrics = {}
-        metrics['psnr'] = psnr(
-            imgs_w, imgs).mean().item()
-        metrics['ssim'] = ssim(
-            imgs_w, imgs).mean().item()
+        metrics['psnr'] = psnr(imgs_w, imgs).mean().item()
+        metrics['ssim'] = ssim(imgs_w, imgs).mean().item()
+        torch.cuda.synchronize()
         metric_logger.update(**metrics)
 
         # attenuate
@@ -772,6 +770,7 @@ def eval_one_epoch(
                     aug_log_stats = {f"{k}_{current_key}": v for k,
                                      v in aug_log_stats.items()}
 
+                    torch.cuda.synchronize()
                     metric_logger.update(**aug_log_stats)
 
     if udist.is_main_process():

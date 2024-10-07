@@ -1,4 +1,5 @@
 
+import logging
 import os
 import socket
 import subprocess
@@ -51,9 +52,12 @@ def setup_for_distributed(is_master):
 
     builtin_stderr_write = sys.stderr.write
     def stderr_write(*args, **kwargs):
-        force = kwargs.pop('force', False)
-        if is_master or force:
-            builtin_stderr_write(*args)
+        rank = get_rank()
+        args = [f"[rank{rank}]: {a}" for a in args]
+        builtin_stderr_write(*args, **kwargs)
+        # force = kwargs.pop('force', False)
+        # if is_master or force:
+        #     builtin_stderr_write(*args)
 
     sys.stderr.write = stderr_write
 
@@ -190,7 +194,7 @@ def init_distributed_mode(params):
         # set GPU device
         torch.cuda.set_device(params.local_rank)
         dist.barrier()
-        # setup_for_distributed(params.is_master)
+        setup_for_distributed(params.is_master)
 
 
 

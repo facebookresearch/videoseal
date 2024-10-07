@@ -10,10 +10,6 @@ import torch
 
 from .dist import is_dist_avail_and_initialized, is_main_process, get_rank
 
-
-logger = logging.getLogger(f"videoseal:rank{get_rank()}")
-
-
 class MetricLogger(object):
     def __init__(self, delimiter="\t", output_file=None):
         self.meters = defaultdict(SmoothedValue)
@@ -96,7 +92,7 @@ class MetricLogger(object):
                 eta_seconds = iter_time.global_avg * (n_iterations - i)
                 eta_string = str(datetime.timedelta(seconds=int(eta_seconds)))
                 if torch.cuda.is_available():
-                    logger.info(
+                    logging.info(
                         log_msg.format(
                             i,
                             n_iterations,
@@ -108,7 +104,7 @@ class MetricLogger(object):
                         )
                     )
                 else:
-                    logger.info(
+                    logging.info(
                         log_msg.format(
                             i,
                             n_iterations,
