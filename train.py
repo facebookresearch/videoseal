@@ -486,7 +486,7 @@ def main(params):
         # Decide on the modality of this epoch either video or images
         if params.modality == Modalities.HYBRID:
             if epoch >= params.video_start:
-                if random.random() < params.prop_img_vid:
+                if np.random() < params.prop_img_vid:
                     epoch_modality = Modalities.IMAGE
                 else:
                     epoch_modality = Modalities.VIDEO
