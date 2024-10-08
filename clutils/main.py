@@ -21,8 +21,9 @@ from src.params import enumerateParams, generateExt
 basename = os.path.basename
 
 IS_FAIR_CLUSTER = os.path.exists("/checkpoint")
-IS_AWS_CLUSTER = os.path.exists("/checkpoints")
+IS_AWS_CLUSTER = os.path.exists("/fsx-checkpoints")
 IS_NEW_CLUSTER = IS_FAIR_CLUSTER or IS_AWS_CLUSTER
+
 
 def step_number(s):
     if np.mean(s == 'PENDING') == 1.0:
@@ -38,8 +39,9 @@ def step_number(s):
     else:
         return 4
 
+
 def update_status(expdir, s):
-    #snippet, status = line.strip().split('\t')
+    # snippet, status = line.strip().split('\t')
     failed = check_failed(join(expdir, 'logs', s.snippet + '.stderr'))
     finished = check_finished(join(expdir, 'logs', s.snippet + '.stdout'))
     started = check_started(join(expdir, 'logs', s.snippet + '.stdout'))
@@ -62,31 +64,40 @@ def trash_expe(expe, trash_dir):
     base_level = len([x for x in ckpt_default().split("/") if x != ""])
 
     assert os.path.exists(expe), "Experiment does not exist"
-    assert expe.startswith(ckpt_default()), "Directory should start with default checkpoint"
-    assert len(dirs) - base_level == 1, "Experiment should be 1 levels below main checkpoint directory"
+    assert expe.startswith(
+        ckpt_default()), "Directory should start with default checkpoint"
+    assert len(
+        dirs) - base_level == 1, "Experiment should be 1 levels below main checkpoint directory"
 
     dirs.append(datetime.datetime.now(tz=GMT1()).strftime('%Y%m%d_%H%M%S'))
     dst = join(trash_dir, "_".join(dirs[base_level:]))
     print("Moving %s to %s" % (expe, dst))
     shutil.move(expe, dst)
 
+
 def check_started(std_path):
-    cmd = f"grep -c -ni -P 'Beginning program' {std_path}  || true" # Hack to have exit code of 0
+    # Hack to have exit code of 0
+    cmd = f"grep -c -ni -P 'Beginning program' {std_path}  || true"
     output = run_command(cmd)
     return int(output) != 0
 
+
 def check_failed(std_path):
-    cmd = f"grep -c -ni -P 'srun(?!.* step creation temporarily disabled, retrying)(?!.* Step created for job)' {std_path}  || true" # Hack to have exit code of 0
+    # Hack to have exit code of 0
+    cmd = f"grep -c -ni -P 'srun(?!.* step creation temporarily disabled, retrying)(?!.* Step created for job)' {std_path}  || true"
     output = run_command(cmd)
     try:
         return int(output) != 0
     except:
         return False
 
+
 def check_finished(std_path):
-    cmd = f"grep -c -ni -P 'JOB_FINISHED' {std_path}  || true" # Hack to have exit code of 0
+    # Hack to have exit code of 0
+    cmd = f"grep -c -ni -P 'JOB_FINISHED' {std_path}  || true"
     output = run_command(cmd)
     return int(output) != 0
+
 
 def ckpt_default():
     year = datetime.date.today().year
@@ -94,9 +105,10 @@ def ckpt_default():
     if IS_FAIR_CLUSTER:
         return f"/checkpoint/{user}/{year}_logs/"
     elif IS_AWS_CLUSTER:
-        return f"/checkpoints/{user}/{year}_logs/"
+        return f"/fsx-checkpoints/{user}/{year}_logs/"
     else:
         return f"/checkpoint/{user}/{year}_logs/"
+
 
 def jobname_default():
     year = datetime.date.today().year
@@ -104,9 +116,10 @@ def jobname_default():
     if IS_FAIR_CLUSTER:
         return f"/checkpoint/{user}/{year}_logs/jobnames.txt"
     elif IS_AWS_CLUSTER:
-        return f"/checkpoints/{user}/{year}_logs/jobnames.txt"
+        return f"/fsx-checkpoints/{user}/{year}_logs/jobnames.txt"
     else:
         return f"/checkpoint/{user}/{year}_logs/jobnames.txt"
+
 
 def stool_stress(partition):
     """
@@ -165,6 +178,7 @@ def stool_stress(partition):
 
     return None
 
+
 if IS_NEW_CLUSTER:
     blacklist = []
     sbatch = "sbatch "
@@ -179,8 +193,10 @@ else:
 parser = argparse.ArgumentParser()
 parser.add_argument("--ckpt-root", type=str, default=ckpt_default())
 parser.add_argument("--jobnames", type=str, default=jobname_default())
-parser.add_argument("--trash-dir", type=str, default=join(ckpt_default(), "trash"))
-parser.add_argument("--launch-parallel", action='store_true', dest='launch_parallel')
+parser.add_argument("--trash-dir", type=str,
+                    default=join(ckpt_default(), "trash"))
+parser.add_argument("--launch-parallel",
+                    action='store_true', dest='launch_parallel')
 parser.set_defaults(launch_parallel=False)
 subparsers = parser.add_subparsers(dest='command')
 
@@ -221,7 +237,8 @@ if not IS_NEW_CLUSTER:
 # print(args)
 
 if args.command == 'sweep':
-    assert os.path.exists(args.grid), "Config file %s does not exist. Are you in the right repository ?" % args.grid
+    assert os.path.exists(
+        args.grid), "Config file %s does not exist. Are you in the right repository ?" % args.grid
     config = json.load(open(args.grid), object_pairs_hook=OrderedDict)
     if "pwd" not in config:
         config["pwd"] = "."
@@ -251,7 +268,8 @@ if args.command == 'sweep':
             ngpu = int(config["machine"]["gres"].split(":")[1])
             if ngpu >= 1:
                 sbatch += "--gpu %d " % ngpu
-                sbatch = sbatch.replace("fblearner_ash_cpuram_default", "fblearner_ash_bigbasin_fair")
+                sbatch = sbatch.replace(
+                    "fblearner_ash_cpuram_default", "fblearner_ash_bigbasin_fair")
 
     expdir = join(group_root, name)
     log_dir = join(expdir, "logs")
@@ -259,7 +277,8 @@ if args.command == 'sweep':
     if os.path.exists(log_dir):
         print(f"Experiment {group_root}/{name} already exists. You can: ")
         print(f"- Run it anyway. Any output of a previous experiment with the same hyperparameters will be overwritten. The code used will be the existing code and not a fresh clone.")
-        print(f"- Trash existing experiment folder and create a fresh one. The (old) experiment folder will be put in the trash ({args.trash_dir})")
+        print(
+            f"- Trash existing experiment folder and create a fresh one. The (old) experiment folder will be put in the trash ({args.trash_dir})")
         print(f"- (default) Abort. Experiment folder will be kpet untouched and new experiments will not be run.")
         print(f"What do you choose ? [run|trash|abort]")
         answer = input().lower()
@@ -269,7 +288,8 @@ if args.command == 'sweep':
             trash_expe(expdir, args.trash_dir)
             os.makedirs(log_dir)
         else:
-            import sys;sys.exit(0)
+            import sys
+            sys.exit(0)
     else:
         os.makedirs(log_dir)
 
@@ -281,9 +301,11 @@ if args.command == 'sweep':
         if IS_NEW_CLUSTER:
             if "git" in config:
                 if "commit" in config and len(config["commit"]) > 0:
-                    run_command("cd %s && git clone --depth 1 --single-branch --branch %s %s code" % (expdir, config["commit"], config["git"]))
+                    run_command("cd %s && git clone --depth 1 --single-branch --branch %s %s code" %
+                                (expdir, config["commit"], config["git"]))
                 else:
-                    run_command("cd %s && git clone %s code" % (expdir, config["git"]))
+                    run_command("cd %s && git clone %s code" %
+                                (expdir, config["git"]))
                 path_repo = join(expdir, "code")
                 if os.path.exists(join(path_repo, "init.sh")):
                     run_command("cd %s && ./init.sh" % path_repo)
@@ -294,23 +316,26 @@ if args.command == 'sweep':
             # Make a fresh download of the code and send it to gfsai
             tmpdir = tempfile.NamedTemporaryFile().name
             assert tmpdir.startswith("/tmp")
-            run_command("cd /tmp && git clone %s %s" % (config["git"], tmpdir[5:]))
+            run_command("cd /tmp && git clone %s %s" %
+                        (config["git"], tmpdir[5:]))
             if os.path.exists(join(tmpdir, "init.sh")):
                 run_command("cd %s && ./init.sh" % tmpdir)
-            run_command("cd %s && tar cf code.tar . && cp code.tar %s" % (tmpdir, expdir))
+            run_command("cd %s && tar cf code.tar . && cp code.tar %s" %
+                        (tmpdir, expdir))
             run_command("rm -rf %s" % tmpdir)
     else:
         config["pwd"] = join(expdir, "code", config["pwd"])
 
-
     # List config of parameters
     paramset = enumerateParams(config["params"])
     param_names = list(set([k for d in paramset for k in d.keys()]))
-    param_values = {k: list(dict.fromkeys([(tuple(d[k]) if isinstance(d[k], list) else d[k]) for d in paramset if k in d])) for k in param_names}
+    param_values = {k: list(dict.fromkeys([(tuple(d[k]) if isinstance(
+        d[k], list) else d[k]) for d in paramset if k in d])) for k in param_names}
     # param_values = {k: sorted(list(dict.fromkeys([(tuple(d[k]) if isinstance(d[k], list) else d[k]) for d in paramset if k in d]))) for k in param_names}
     # param_values = {k: sorted(list(set([d[k] for d in paramset if k in d]))) for k in param_names}
     if args.sample != -1:
-        paramset = [paramset[i] for i in np.random.choice(len(paramset), args.sample, replace=False)]
+        paramset = [paramset[i] for i in np.random.choice(
+            len(paramset), args.sample, replace=False)]
 
     if os.path.exists(args.jobnames):
         jobnames = loadlist(args.jobnames)
@@ -324,17 +349,20 @@ if args.command == 'sweep':
         launchfilename = tempfile.NamedTemporaryFile().name
         launchfile = open(launchfilename, "w")
 
-    params_to_index = [k for k, values in param_values.items() if len(values) >= 2 and (any(["/" in v for v in values if type(v) is str]) or any([len(str(v)) >= 20 for v in values]))]
+    params_to_index = [k for k, values in param_values.items() if len(values) >= 2 and (any(
+        ["/" in v for v in values if type(v) is str]) or any([len(str(v)) >= 20 for v in values]))]
     if args.array:
         filename = join(expdir, "run.sh")
         log_stdout = join(log_dir, "common.stdout")
         log_stderr = join(log_dir, "common.stderr")
         with open(filename, "w") as f:
-            f.write(cmdPre(config, None, name, log_stdout, log_stderr, filename, num_expes=len(paramset), pooling=args.pooling))
+            f.write(cmdPre(config, None, name, log_stdout, log_stderr,
+                    filename, num_expes=len(paramset), pooling=args.pooling))
 
         with open(join(expdir, "params.txt"), "w") as f, open(join(expdir, "commands.txt"), "w") as f_cmd, open(join(expdir, "status.txt"), "w") as f_status:
             for i_param, params in enumerate(paramset):
-                ext = generateExt(params, param_values, to_index=params_to_index)
+                ext = generateExt(params, param_values,
+                                  to_index=params_to_index)
                 if args.numeric:
                     new_ext = "%d" % i_param
                     with open(join(log_dir, new_ext + "_params.txt"), "w") as f_ext:
@@ -348,11 +376,13 @@ if args.command == 'sweep':
 
                 if args.dest_arg:
                     if os.path.exists(join(expdir, ext)):
-                        print('WARNING: %s already exists (whatever is in there will probably be overwritten by experiment)' % join(expdir, ext))
+                        print('WARNING: %s already exists (whatever is in there will probably be overwritten by experiment)' % join(
+                            expdir, ext))
                     else:
                         os.makedirs(join(expdir, ext))
                     dest_name = config["meta"]["dest-name"] if "dest-name" in config["meta"] else "dest"
-                    dest_name = [dest_name] if type(dest_name) is str else dest_name
+                    dest_name = [dest_name] if type(
+                        dest_name) is str else dest_name
                     for dname in dest_name:
                         params[dname] = join(expdir, ext)
 
@@ -389,17 +419,20 @@ if args.command == 'sweep':
 
             if args.dest_arg:
                 if os.path.exists(join(expdir, ext)):
-                    print('WARNING: %s already exists (whatever is in there will probably be overwritten by experiment)' % join(expdir, ext))
+                    print('WARNING: %s already exists (whatever is in there will probably be overwritten by experiment)' % join(
+                        expdir, ext))
                 else:
                     os.makedirs(join(expdir, ext))
                 dest_name = config["meta"]["dest-name"] if "dest-name" in config["meta"] else "dest"
-                dest_name = [dest_name] if type(dest_name) is str else dest_name
+                dest_name = [dest_name] if type(
+                    dest_name) is str else dest_name
                 for dname in dest_name:
                     params[dname] = join(expdir, ext)
 
             filename = join(expdir, 'run%s.sh' % ext)
             with open(filename, 'w') as f:
-                f.write(cmdPre(config, params, name+ext, log_stdout, log_stderr, filename))
+                f.write(cmdPre(config, params, name+ext,
+                        log_stdout, log_stderr, filename))
 
             if args.launch_parallel:
                 launchfile.write(sbatch + filename + "&\n")
@@ -407,7 +440,8 @@ if args.command == 'sweep':
                 print([sbatch + filename])
                 start = time.time()
                 if args.launch:
-                    r = subprocess.check_output([sbatch + filename], shell=True)
+                    r = subprocess.check_output(
+                        [sbatch + filename], shell=True)
                     # jobid = int(r.rstrip().split(" ")[3])
                     print(r)
                 print("Took %.2f" % (time.time() - start))
@@ -421,7 +455,8 @@ if args.command == 'sweep':
             launchfile.write("wait")
             launchfile.close()
             if args.launch:
-                r = subprocess.check_output("bash %s" % launchfilename, shell=True)
+                r = subprocess.check_output(
+                    "bash %s" % launchfilename, shell=True)
 
 elif args.command == 'count':
     config = json.load(open(args.grid), object_pairs_hook=OrderedDict)
@@ -440,26 +475,30 @@ elif args.command == 'stress':
 elif args.command == "status":
     users = [os.environ.get('USER')]
     users = ','.join(users)
-    print(run_command('squeue -u ' + users + ' -o "%.18i %.50j %.9P %.2t %.10M %.6D %R" --sort=j'))
+    print(run_command('squeue -u ' + users +
+          ' -o "%.18i %.50j %.9P %.2t %.10M %.6D %R" --sort=j'))
 elif args.command == "check":
-    assert os.path.exists(args.jobnames), "jobnames file not found at {}".format(args.jobnames)
+    assert os.path.exists(
+        args.jobnames), "jobnames file not found at {}".format(args.jobnames)
     jobnames = loadlist(args.jobnames)
     remaining_jobnames = []
-    jobnames = list(set(jobnames)) # deduplicating
+    jobnames = list(set(jobnames))  # deduplicating
     update = ""
     for jobname in jobnames:
         expdir = join(ckpt_default(), jobname)
-        df = pd.read_csv(join(expdir, "status.txt"), delimiter='\t', names=['snippet', 'status'])
+        df = pd.read_csv(join(expdir, "status.txt"),
+                         delimiter='\t', names=['snippet', 'status'])
         df['new_status'] = df.apply(partial(update_status, expdir), axis=1)
         if step_number(df['new_status']) > step_number(df['status']):
             update += jobname + "\n"
             update += str(df)
         df['status'] = df['new_status']
         df = df.drop(columns=['new_status'])
-        df.to_csv(join(ckpt_default(), jobname, "status.txt"), sep='\t', header=False, index=False)
+        df.to_csv(join(ckpt_default(), jobname, "status.txt"),
+                  sep='\t', header=False, index=False)
         if np.any(df['status'] == 'PENDING') or np.any(df['status'] == 'RUNNING'):
             remaining_jobnames.append(jobname)
-        
+
     if update != "":
         with open("/tmp/clutil_update.txt", "w") as f_update:
             f_update.write(update)
@@ -467,7 +506,8 @@ elif args.command == "check":
 elif args.command == "relaunch":
     jobname = args.jobname
     assert os.path.exists(join(ckpt_default(), jobname))
-    df = pd.read_csv(join(ckpt_default(), jobname, "status.txt"), delimiter='\t', names=['snippet', 'status'])
+    df = pd.read_csv(join(ckpt_default(), jobname, "status.txt"),
+                     delimiter='\t', names=['snippet', 'status'])
     job_ids = df.index[df["status"] == "FAILED"]
     for snippet in df["snippet"][job_ids].tolist():
         cmd = "rm " + join(ckpt_default(), jobname, "logs", snippet + '.std*')
@@ -483,6 +523,5 @@ elif args.command == "relaunch":
     run_command(cmd)
     print(f"{len(job_ids)} jobs relaunched")
     df["status"] = df["status"].replace(['FAILED'], 'PENDING')
-    df.to_csv(join(ckpt_default(), jobname, "status.txt"), sep='\t', header=False, index=False)
-
-
+    df.to_csv(join(ckpt_default(), jobname, "status.txt"),
+              sep='\t', header=False, index=False)
