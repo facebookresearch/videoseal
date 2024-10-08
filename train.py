@@ -458,7 +458,7 @@ def main(params):
             if val_loader is not None:
 
                 if modality == Modalities.VIDEO:
-                    augs.append((VideoCompressorAugmenter, [28, 32, 36]))
+                    augs.append((VideoCompressorAugmenter, [22, 32, 42]))
 
                 print(f"running eval on {modality} dataset.")
                 val_stats = eval_one_epoch(wam, val_loader, modality, image_detection_loss,
@@ -513,7 +513,7 @@ def main(params):
                     if epoch % params.full_eval_freq == 0:
                         augs = validation_augs.copy() 
                         if epoch_modality == Modalities.VIDEO:
-                            augs.append((VideoCompressorAugmenter, [28, 32, 36]))
+                            augs.append((VideoCompressorAugmenter, [22, 32, 42]))
                     else: 
                         augs = validation_augs_subset.copy()
                         if epoch_modality == Modalities.VIDEO:
