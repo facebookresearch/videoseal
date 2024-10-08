@@ -287,10 +287,11 @@ class VideoDataset(Dataset):
         return buffer, clip_indices
 
     def __len__(self):
-        if self.flatten_clips_to_frames:
-            return len(self.videofiles) * self.num_clips * self.frames_per_clip
-        else:
-            return len(self.videofiles) * self.num_clips
+        # if self.flatten_clips_to_frames:
+        #     return len(self.videofiles) * self.num_clips * self.frames_per_clip
+        # else:
+        #     return len(self.videofiles) * self.num_clips
+        return len(self.videofiles) * self.num_clips
 
 
 if __name__ == "__main__":
