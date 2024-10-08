@@ -42,7 +42,7 @@
         "gres": "gpu:8",
         "nodes": "1",
         "tasks-per-node": "8",
-        "partition": "devlab",
+        "partition": "learnlab",
         "cpus-per-task": "10",
         "time": 4320,
         "mem-per-cpu": "10G"

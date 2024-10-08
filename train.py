@@ -702,10 +702,10 @@ def eval_one_epoch(
         deltas_w = wam.embedder(imgs, msgs)
         imgs_w = wam.scaling_i * imgs + wam.scaling_w * deltas_w
 
-        if (epoch % params.saveimg_freq == 0) and (it == 0) and udist.is_main_process():
-            base_name = os.path.join(params.output_dir, f'{epoch:03}_{it:03}_{epoch_modality}_val')
         # if (epoch % params.saveimg_freq == 0) and (it == 0):
         #     base_name = os.path.join(params.output_dir, f'{udist.get_rank()}_{epoch:03}_{it:03}_{epoch_modality}_val')
+        if (epoch % params.saveimg_freq == 0) and (it == 0) and udist.is_main_process():
+            base_name = os.path.join(params.output_dir, f'{epoch:03}_{it:03}_{epoch_modality}_val')
             ori_path = base_name + '_0_ori.png'
             wm_path = base_name + '_1_wm.png'
             diff_path = base_name + '_2_diff.png'
