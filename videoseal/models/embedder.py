@@ -23,7 +23,10 @@ class Embedder(nn.Module):
         """
         Generate a random message
         """
-        return ...
+        return None
+
+    def get_last_layer(self) -> torch.Tensor:
+        return None
 
     def forward(
         self,
@@ -37,7 +40,7 @@ class Embedder(nn.Module):
         Returns:
             The watermarked images.
         """
-        return ...
+        return None
 
 
 class VAEEmbedder(Embedder):
@@ -60,6 +63,10 @@ class VAEEmbedder(Embedder):
 
     def get_random_msg(self, bsz: int = 1, nb_repetitions=1) -> torch.Tensor:
         return self.msg_processor.get_random_msg(bsz, nb_repetitions)  # b x k
+
+    def get_last_layer(self) -> torch.Tensor:
+        last_layer = self.decoder.conv_out.weight
+        return last_layer
 
     def forward(
         self,
@@ -101,6 +108,10 @@ class UnetEmbedder(Embedder):
     def get_random_msg(self, bsz: int = 1, nb_repetitions=1) -> torch.Tensor:
         return self.msg_processor.get_random_msg(bsz, nb_repetitions)  # b x k
 
+    def get_last_layer(self) -> torch.Tensor:
+        last_layer = self.unet.outc.weight
+        return last_layer
+
     def forward(
         self,
         imgs: torch.Tensor,
@@ -137,6 +148,10 @@ class HiddenEmbedder(Embedder):
     def get_random_msg(self, bsz: int = 1, nb_repetitions=1) -> torch.Tensor:
         nbits = self.hidden_encoder.num_bits
         return torch.randint(0, 2, (bsz, nbits))
+
+    def get_last_layer(self) -> torch.Tensor:
+        last_layer = self.hidden_encoder.final_layer.weight
+        return last_layer
 
     def forward(
         self,

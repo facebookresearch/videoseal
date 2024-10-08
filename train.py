@@ -551,11 +551,11 @@ def train_one_epoch(
     params: argparse.Namespace,
 ):
     assert epoch_modality in [Modalities.IMAGE, Modalities.VIDEO]
+    is_video=(epoch_modality == Modalities.VIDEO)
 
     wam.train()
 
-    header = 'Train - Epoch: [{}/{}] - Modality: {}'.format(
-        epoch, params.epochs, epoch_modality)
+    header = f'Train - Epoch: [{epoch}/{params.epochs}] - Modality: {epoch_modality}'
     metric_logger = ulogger.MetricLogger(delimiter="  ")
 
     for it, batch_items in enumerate(metric_logger.log_every(train_loader, 10, header)):
@@ -572,27 +572,16 @@ def train_one_epoch(
             imgs = imgs.flatten(0, 1)
 
         # forward
-        # TODO deal with the usecase of batch of videos, for now we support flattened videos
-        outputs = wam(imgs, masks, is_video=(
-            epoch_modality == Modalities.VIDEO))
-
+        outputs = wam(imgs, masks, is_video=is_video)
         outputs["preds"] /= params.temperature
 
-        if params.embedder_model.startswith("vae"):
-            last_layer = wam.module.embedder.decoder.conv_out.weight if params.distributed else wam.embedder.decoder.conv_out.weight
-        elif params.embedder_model.startswith("unet"):
-            last_layer = wam.module.embedder.unet.outc.weight if params.distributed else wam.embedder.unet.outc.weight
-        elif params.embedder_model.startswith("hidden"):
-            last_layer = wam.module.embedder.hidden_encoder.final_layer.weight if params.distributed else wam.embedder.hidden_encoder.final_layer.weight
-        else:
-            last_layer = None
-            # imgs.requires_grad = True
-            # last_layer = imgs
+        # last layer is used for gradient scaling
+        last_layer = wam.embedder.get_last_layer() if not params.distributed else wam.module.embedder.get_last_layer()
 
+        # index 1 for discriminator, 0 for embedder/extractor
         for optimizer_idx in [1, 0]:
             if params.lambda_d == 0 and optimizer_idx == 1:
                 continue
-            # index 1 for discriminator, 0 for embedder/extractor
             loss, logs = image_detection_loss(
                 imgs, outputs["imgs_w"],
                 outputs["masks"], outputs["msgs"], outputs["preds"],
@@ -683,8 +672,8 @@ def eval_one_epoch(
         validation_masks = list(torch.unbind(validation_masks, dim=0))
 
     wam.eval()
-    header = 'Val Full - Epoch: [{}/{}] - Modality: {}'.format(
-        epoch, params.epochs, epoch_modality)
+    
+    header = f'Val - Epoch: [{epoch}/{params.epochs}] - Modality: {epoch_modality}'
     metric_logger = ulogger.MetricLogger(delimiter="  ")
 
     for it, batch_items in enumerate(metric_logger.log_every(val_loader, 10, header)):
