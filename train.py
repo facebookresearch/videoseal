@@ -358,7 +358,7 @@ def main(params):
                                                        shuffle=False,
                                                        random_nb_object=False)
     if params.modality in [Modalities.VIDEO, Modalities.HYBRID]:
-        bsz_video = params.batch_size // (params.num_clips * params.frames_per_clip)
+        bsz_video = params.batch_size // params.frames_per_clip
         video_train_loader = get_video_dataloader(params.video_dataset_config.train_dir,
                                                   batch_size=bsz_video,
                                                   num_workers=params.workers,
@@ -366,12 +366,10 @@ def main(params):
                                                   mask_transform=train_mask_transform,
                                                   output_resolution=(
                                                       params.img_size, params.img_size),
-                                                  # for now we are fixing 1 video / batch
-                                                  flatten_clips_to_frames=True,
                                                   frames_per_clip=params.frames_per_clip,
                                                   frame_step=params.frame_step,
                                                   # TODO: Find a smart way to shuffle while making cache efficient
-                                                  shuffle=False,
+                                                  shuffle=True,
                                                   num_clips=params.num_clips,
                                                   )
         video_val_loader = get_video_dataloader(params.video_dataset_config.val_dir,
@@ -381,8 +379,6 @@ def main(params):
                                                 mask_transform=val_mask_transform,
                                                 output_resolution=(
                                                     params.img_size, params.img_size),
-                                                # for now we are fixing 1 video / batch
-                                                flatten_clips_to_frames=True,
                                                 frames_per_clip=params.frames_per_clip,
                                                 # TODO: Find a smart way to shuffle while making cache efficient
                                                 shuffle=False,
@@ -485,9 +481,6 @@ def main(params):
         return epoch_modality
     
     modalities = [get_modality(epoch, params) for epoch in range(params.epochs)]
-    print(f"rank{udist.get_rank()}: modalities: {
-        "".join(['i' if m == Modalities.IMAGE else 'v' for m in modalities])
-    }", force=True)
 
     # start training
     print('training...')
@@ -713,12 +706,10 @@ def eval_one_epoch(
         imgs_w = wam.scaling_i * imgs + wam.scaling_w * deltas_w
 
         if (epoch % params.saveimg_freq == 0) and (it == 0) and udist.is_main_process():
-            ori_path = os.path.join(
-                params.output_dir, f'{epoch:03}_{it:03}_{epoch_modality}_val_0_ori.png')
-            wm_path = os.path.join(
-                params.output_dir, f'{epoch:03}_{it:03}_{epoch_modality}_val_1_wm.png')
-            diff_path = os.path.join(
-                params.output_dir, f'{epoch:03}_{it:03}_{epoch_modality}_val_2_diff.png')
+            base_name = os.path.join(params.output_dir, f'{epoch:03}_{it:03}_{epoch_modality}_val')
+            ori_path = base_name + '_0_ori.png'
+            wm_path = base_name + '_1_wm.png'
+            diff_path = base_name + '_2_diff.png'
             save_image(imgs,ori_path, nrow=8)
             save_image(imgs_w, wm_path, nrow=8)
             save_image(create_diff_img(imgs, imgs_w), diff_path, nrow=8)
@@ -765,12 +756,12 @@ def eval_one_epoch(
                         imgs_aug, masks_aug = transform_instance(
                             imgs_masked, masks, strength)
                         if imgs_aug.shape[-2:] != (h, w):
-                            imgs_aug = nn.functional.interpolate(imgs_aug, size=(
-                                h, w), mode='bilinear', align_corners=False, antialias=True)
-                            masks_aug = nn.functional.interpolate(masks_aug, size=(
-                                h, w), mode='bilinear', align_corners=False, antialias=True)
-                    selected_aug = str(
-                        transform.__name__).lower() + '_' + str(strength)
+                            imgs_aug = nn.functional.interpolate(imgs_aug, size=(h, w), 
+                                            mode='bilinear', align_corners=False, antialias=True)
+                            masks_aug = nn.functional.interpolate(masks_aug, size=(h, w), 
+                                            mode='bilinear', align_corners=False, antialias=True)
+                    selected_aug = str(transform.__name__).lower() 
+                    selected_aug += f"_{strength}"
 
                     # extract watermark
                     preds = wam.detector(imgs_aug)

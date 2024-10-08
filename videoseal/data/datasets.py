@@ -62,8 +62,6 @@ class VideoDataset(Dataset):
         duration: Optional[float] = None,
         output_resolution: tuple = (256, 256),  # Desired output resolution
         num_workers: int = 1,  # numbers of cpu to run the preprocessing of each batch
-        # If True, flatten clips into individual frames
-        flatten_clips_to_frames: bool = True,
     ):
         self.folder_paths = folder_paths
         self.datasets_weights = datasets_weights
@@ -80,7 +78,6 @@ class VideoDataset(Dataset):
         self.duration = duration
         self.output_resolution = output_resolution
         self.num_workers = num_workers
-        self.flatten_clips_to_frames = flatten_clips_to_frames
 
         if VideoReader is None:
             raise ImportError(
@@ -156,17 +153,6 @@ class VideoDataset(Dataset):
 
             # Store the loaded video in the buffer
             self.video_buffer[video_file] = (buffer, frames_indices)
-            # print(
-            #     f" added {video_file} to video buffer now videobuffer == {len(self.video_buffer)}")
-
-        #     print(
-        #         f" added {video_file} to video buffer now videobuffer == {len(self.video_buffer)}",
-        #         f"Process ID: {os.getpid()}, Thread ID: {threading.current_thread().ident}",
-        #         f"Function: {inspect.stack()[1].function}, Line: {inspect.stack()[1].lineno}"
-        #     )
-        # else:
-        #     print(
-        #         f"FOUND {video_file} to video buffer now videobuffer == {len(self.video_buffer)}")
 
         # load directly from buffer here should be processed already
         buffer, frames_positions_in_clips = self.video_buffer[video_file]
@@ -287,10 +273,6 @@ class VideoDataset(Dataset):
         return buffer, clip_indices
 
     def __len__(self):
-        # if self.flatten_clips_to_frames:
-        #     return len(self.videofiles) * self.num_clips * self.frames_per_clip
-        # else:
-        #     return len(self.videofiles) * self.num_clips
         return len(self.videofiles) * self.num_clips
 
 
@@ -311,7 +293,6 @@ if __name__ == "__main__":
         num_clips=10,
         output_resolution=(1250, 1250),
         num_workers=50,
-        flatten_clips_to_frames=True,
         transform=train_transform
     )
 
