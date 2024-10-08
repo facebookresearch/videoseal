@@ -42,14 +42,14 @@
         "gres": "gpu:8",
         "nodes": "1",
         "tasks-per-node": "8",
-        "partition": "learnlab",
+        "partition": "learnfair",
         "cpus-per-task": "10",
         "time": 4320,
         "mem-per-cpu": "10G"
     },
     "meta": {
         "group": "",
-        "name": "1008_vseal_codec_wmfps",
+        "name": "1008_vseal_codec_wmfps_bis",
         "dest-arg": "yes",
         "dest-name": "output_dir"
     }
