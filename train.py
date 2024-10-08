@@ -479,7 +479,6 @@ def main(params):
         else:
             epoch_modality = params.modality
         return epoch_modality
-    
     modalities = [get_modality(epoch, params) for epoch in range(params.epochs)]
 
     # start training
@@ -696,6 +695,8 @@ def eval_one_epoch(
 
         if (epoch % params.saveimg_freq == 0) and (it == 0) and udist.is_main_process():
             base_name = os.path.join(params.output_dir, f'{epoch:03}_{it:03}_{epoch_modality}_val')
+        # if (epoch % params.saveimg_freq == 0) and (it == 0):
+        #     base_name = os.path.join(params.output_dir, f'{udist.get_rank()}_{epoch:03}_{it:03}_{epoch_modality}_val')
             ori_path = base_name + '_0_ori.png'
             wm_path = base_name + '_1_wm.png'
             diff_path = base_name + '_2_diff.png'
