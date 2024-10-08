@@ -127,7 +127,7 @@ def get_parser():
     aa("--nbits", type=int, default=32,
        help="Number of bits used to generate the message. If 0, no message is used.")
     aa("--img_size", type=int, default=256,
-       help="Size of the input images for data preprocessing")
+       help="Size of the input images for data preprocessing, at inference time the images are resized to this size")
     aa("--img_size_extractor", type=int,
        default=256, help="Images are resized to this size before being fed to the extractor")
     aa("--attenuation", type=str, default="None", help="Attenuation model to use")
@@ -138,8 +138,6 @@ def get_parser():
     aa("--scaling_i", type=float, default=1.0,
        help="Scaling factor for the image in the embedder model")
     # VideoWam parameters related how to do video watermarking inference
-    aa("--videowam_frame_intermediate_size", type=int, default=256,
-       help="The size of the frame to resize to intermediately while generating the watermark then upscale, the final video/image size is kept the same.")
     aa("--videowam_chunk_size", type=int, default=8,
        help="The number of frames to encode at a time.")
     aa("--videowam_step_size", type=int, default=4,
@@ -282,7 +280,7 @@ def main(params):
     # build the complete model
     wam = VideoWam(embedder, extractor, augmenter, attenuation,
                    params.scaling_w, params.scaling_i,
-                   frame_intermediate_size=params.videowam_frame_intermediate_size,
+                   img_size=params.img_size,
                    chunk_size=params.videowam_chunk_size,
                    step_size=params.videowam_step_size)
     wam.to(device)

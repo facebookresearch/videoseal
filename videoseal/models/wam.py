@@ -28,7 +28,7 @@ class Wam(nn.Module):
         attenuation: JND = None,
         scaling_w: float = 1.0,
         scaling_i: float = 1.0,
-        roll_probability: float = 0,
+        img_size: int = 256,
     ) -> None:
         """
         WAM (watermark-anything models) model that combines an embedder, a detector, and an augmenter.
@@ -41,6 +41,7 @@ class Wam(nn.Module):
             attenuation: The JND model to attenuate the watermark distortion
             scaling_w: The scaling factor for the watermark
             scaling_i: The scaling factor for the image
+            img_size: The size at which the images are processed
         """
         super().__init__()
         # modules
@@ -51,8 +52,8 @@ class Wam(nn.Module):
         # scalings
         self.scaling_w = scaling_w
         self.scaling_i = scaling_i
-        # rolling
-        self.roll_probability = roll_probability
+        # image format
+        self.img_size = img_size
 
     def get_random_msg(self, bsz: int = 1, nb_repetitions=1) -> torch.Tensor:
         return self.embedder.get_random_msg(bsz, nb_repetitions)  # b x k
@@ -104,10 +105,25 @@ class Wam(nn.Module):
         # optionally create message
         if msgs is None:
             msgs = self.get_random_msg(imgs.shape[0])  # b x k
-            msgs = msgs.to(imgs.device)
+
+        # interpolate
+        imgs_res = imgs.clone()
+        if imgs.shape[-2, -1] != (self.img_size, self.img_size):
+            imgs_res = F.interpolate(imgs, size=self.img_size, 
+                                     mode="bilinear", align_corners=False)
+
+        # to device
+        imgs_res = imgs_res.to(self.device)
+        msgs = msgs.to(self.device)
 
         # generate watermarked images
-        deltas_w = self.embedder(imgs, msgs)
+        deltas_w = self.embedder(imgs_res, msgs)
+
+        # interpolate back
+        if imgs.shape[-2, -1] != (self.img_size, self.img_size):
+            deltas_w = F.interpolate(deltas_w, size=imgs.shape[-2:], 
+                                    mode="bilinear", align_corners=False)
+        deltas_w = deltas_w.to(imgs.device)
         imgs_w = self.scaling_i * imgs + self.scaling_w * deltas_w
         if self.attenuation is not None:
             imgs_w = self.attenuation(imgs, imgs_w)
@@ -127,8 +143,15 @@ class Wam(nn.Module):
         Detect watermarks in the input images.
         """
 
+        # interpolate
+        imgs_res = imgs.clone()
+        if imgs.shape[-2, -1] != (self.img_size, self.img_size):
+            imgs_res = F.interpolate(imgs, size=self.img_size, 
+                                     mode="bilinear", align_corners=False)
+        imgs_res = imgs_res.to(self.device)
+
         # detect watermark
-        preds = self.detector(imgs)
+        preds = self.detector(imgs_res).to(imgs.device)
 
         outputs = {
             "preds": preds,  # predicted masks and/or messages: b (1+nbits) h w
