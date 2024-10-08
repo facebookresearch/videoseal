@@ -8,10 +8,10 @@ import random
 import torch
 from torch import nn
 from torch.nn import functional as F
+from torchvision import transforms
 
-from videoseal.augmentation.augmenter import Augmenter
-from videoseal.modules.jnd import JND
-
+from ..augmentation.augmenter import Augmenter
+from ..modules.jnd import JND
 from .embedder import Embedder
 from .extractor import Extractor
 
@@ -109,7 +109,7 @@ class Wam(nn.Module):
         # interpolate
         imgs_res = imgs.clone()
         if imgs.shape[-2, -1] != (self.img_size, self.img_size):
-            imgs_res = F.interpolate(imgs, size=self.img_size, 
+            imgs_res = F.interpolate(imgs, size=(self.img_size, self.img_size), 
                                      mode="bilinear", align_corners=False)
 
         # to device
@@ -146,7 +146,7 @@ class Wam(nn.Module):
         # interpolate
         imgs_res = imgs.clone()
         if imgs.shape[-2, -1] != (self.img_size, self.img_size):
-            imgs_res = F.interpolate(imgs, size=self.img_size, 
+            imgs_res = F.interpolate(imgs, size=(self.img_size, self.img_size),
                                      mode="bilinear", align_corners=False)
         imgs_res = imgs_res.to(self.device)
 

@@ -10,11 +10,11 @@ from torch import nn
 from torch.nn import functional as F
 from torchvision import transforms
 
-from videoseal.augmentation.augmenter import Augmenter
-from videoseal.models.embedder import Embedder
-from videoseal.models.extractor import Extractor
-from videoseal.models.wam import Wam
-from videoseal.modules.jnd import JND
+from ..augmentation.augmenter import Augmenter
+from ..models.embedder import Embedder
+from ..models.extractor import Extractor
+from ..models.wam import Wam
+from ..modules.jnd import JND
 
 
 class VideoWam(Wam):
@@ -42,7 +42,7 @@ class VideoWam(Wam):
         attenuation: JND = None,
         scaling_w: float = 1.0,
         scaling_i: float = 1.0,
-        frame_intermediate_size: int = 256,
+        img_size: int = 256,
         chunk_size: int = 8,
         step_size: int = 4,
     ) -> None:
@@ -55,7 +55,7 @@ class VideoWam(Wam):
             attenuation (JND, optional): The JND model to attenuate the watermark distortion. Defaults to None.
             scaling_w (float, optional): The scaling factor for the watermark. Defaults to 1.0.
             scaling_i (float, optional): The scaling factor for the image. Defaults to 1.0.
-            frame_intermediate_size (int, optional): The size of the frame to resize to intermediately while generating the watermark then upscale, the final video / image size is kept the same. Defaults to 256.
+            img_size (int, optional): The size of the frame to resize to intermediately while generating the watermark then upscale, the final video / image size is kept the same. Defaults to 256.
             chunk_size (int, optional): The number of frames/imgs to encode at a time. Defaults to 8.
             step_size (int, optional): The number of frames/imgs to propagate the watermark to. Defaults to 4.
         """
@@ -66,12 +66,11 @@ class VideoWam(Wam):
             attenuation=attenuation,
             scaling_w=scaling_w,
             scaling_i=scaling_i,
+            img_size=img_size,
         )
         # video settings
         self.chunk_size = chunk_size  # encode 8 frames/imgs at a time
         self.step_size = step_size  # propagate the wm to 4 next frame/img
-        self.resize_to = transforms.Resize(
-            (frame_intermediate_size, frame_intermediate_size), antialias=True)
 
     def forward(
         self,
@@ -168,48 +167,46 @@ class VideoWam(Wam):
         if msg is None:
             msg = self.get_random_msg()
 
-        # encode by chunk of 8 imgs, propagate the wm to 4 next imgs
-        chunk_size = self.chunk_size  # n
-        step_size = self.step_size
-        msg = msg.repeat(chunk_size, 1).to(imgs.device)  # 1 k -> n k
+        # encode by chunk of cksz imgs, propagate the wm to spsz next imgs
+        chunk_size = self.chunk_size  # n=cksz
+        step_size = self.step_size  # spsz
+        msg = msg.repeat(chunk_size, 1)  # 1 k -> n k
 
         # initialize watermarked imgs
         imgs_w = torch.zeros_like(imgs)  # f 3 h w
 
+        TODO TEST
+
+        # chunking is necessary to avoid memory issues (when too many frames)
         for ii in range(0, len(imgs[::step_size]), chunk_size):
             nimgs_in_ck = min(chunk_size, len(imgs[::step_size]) - ii)
-            start = ii*step_size
+            start = ii * step_size
             end = start + nimgs_in_ck * step_size
             all_imgs_in_ck = imgs[start: end, ...]  # f 3 h w
 
             # choose one frame every step_size
             imgs_in_ck = all_imgs_in_ck[::step_size]  # n 3 h w
-            # downsampling with fixed short edge
-            imgs_in_ck = self.resize_to(imgs_in_ck)  # n 3 wm_h wm_w
+
             # deal with last chunk that may have less than chunk_size imgs
             if nimgs_in_ck < chunk_size:
                 msg = msg[:nimgs_in_ck]
 
             # get deltas for the chunk, and repeat them for each frame in the chunk
-            deltas_in_ck = self.embedder(imgs_in_ck, msg)  # n 3 wm_h wm_w
+            outputs = self.embed(imgs_in_ck, msg)  # n 3 h w
+            deltas_in_ck = outputs["deltas_w"]  # n 3 h w
             deltas_in_ck = torch.repeat_interleave(
-                deltas_in_ck, step_size, dim=0)  # f 3 wm_h wm_w
+                deltas_in_ck, step_size, dim=0)  # f 3 h w
+            
             # at the end of video there might be more deltas than needed
             deltas_in_ck = deltas_in_ck[:len(all_imgs_in_ck)]
 
-            # upsampling
-            deltas_in_ck = nn.functional.interpolate(
-                deltas_in_ck, size=imgs.shape[-2:], mode='bilinear', align_corners=True)
-
             # create watermarked imgs
-            all_imgs_in_ck_w = self.scaling_i * \
-                all_imgs_in_ck + self.scaling_w * deltas_in_ck
+            all_imgs_in_ck_w = self.scaling_i * all_imgs_in_ck + self.scaling_w * deltas_in_ck
             if self.attenuation is not None:
-                all_imgs_in_ck_w = self.attenuation(
-                    all_imgs_in_ck, all_imgs_in_ck_w)
-            # all_imgs_in_ck = all_imgs_in_ck.cpu()  # move to cpu to save gpu memory
+                all_imgs_in_ck_w = self.attenuation(all_imgs_in_ck, all_imgs_in_ck_w)
+            
             imgs_w[start: end, ...] = all_imgs_in_ck_w  # n 3 h w
-
+            
         return imgs_w
 
     def video_detect(
