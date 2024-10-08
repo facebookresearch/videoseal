@@ -181,14 +181,14 @@ def get_parser():
        help='Number of layers for the discriminator')
 
     group = parser.add_argument_group('Loading parameters')
-    aa('--batch_size', default=16, type=int, help='Batch size')
+    aa('--batch_size', default=32, type=int, help='Batch size')
     aa('--batch_size_eval', default=64, type=int, help='Batch size for evaluation')
     aa('--workers', default=8, type=int, help='Number of data loading workers')
-    aa('--frames_per_clip', default=16, type=int,
+    aa('--frames_per_clip', default=32, type=int,
        help='Number of frames per clip for video datasets')
     aa('--frame_step', default=1, type=int,
        help='Step between frames for video datasets')
-    aa('--num_clips', default=8, type=int,
+    aa('--num_clips', default=2, type=int,
        help='Number of clips per video for video datasets')
 
     group = parser.add_argument_group('Misc.')
@@ -516,9 +516,9 @@ def main(params):
                                        epoch, augs, validation_masks, params)
             log_stats = {**log_stats, **{f'val_{k}': v for k, v in val_stats.items()}}
 
-            if udist.is_main_process():
-                with open(os.path.join(params.output_dir, 'log.txt'), 'a') as f:
-                    f.write(json.dumps(log_stats) + "\n")
+        if udist.is_main_process():
+            with open(os.path.join(params.output_dir, 'log.txt'), 'a') as f:
+                f.write(json.dumps(log_stats) + "\n")
 
         dist.barrier()  # Ensures all processes wait until the main node finishes validation
 
