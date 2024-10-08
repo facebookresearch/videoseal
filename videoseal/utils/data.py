@@ -6,9 +6,9 @@ import omegaconf
 
 
 class Modalities:
-    IMAGE = 'image'
-    VIDEO = 'video'
-    HYBRID = 'hybrid'
+    IMAGE = 'img'
+    VIDEO = 'vid'
+    HYBRID = 'hyb'
 
 
 class LRUDict(OrderedDict):

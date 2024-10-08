@@ -286,7 +286,7 @@ def main(params):
                    chunk_size=params.videowam_chunk_size,
                    step_size=params.videowam_step_size)
     wam.to(device)
-    print(wam)
+    # print(wam)
 
     # build losses
     image_detection_loss = LPIPSWithDiscriminator(
@@ -358,7 +358,8 @@ def main(params):
                                                        shuffle=False,
                                                        random_nb_object=False)
     if params.modality in [Modalities.VIDEO, Modalities.HYBRID]:
-        bsz_video = params.batch_size // params.frames_per_clip
+        bsz_video = 1
+        print(f"video batch size: {bsz_video}")
         video_train_loader = get_video_dataloader(params.video_dataset_config.train_dir,
                                                   batch_size=bsz_video,
                                                   num_workers=params.workers,
@@ -486,7 +487,9 @@ def main(params):
     start_time = time.time()
     for epoch in range(start_epoch, params.epochs):
         log_stats = {'epoch': epoch}
+
         epoch_modality = modalities[epoch]
+        assert epoch_modality in [Modalities.IMAGE, Modalities.VIDEO]
         epoch_train_loader = video_train_loader if epoch_modality == Modalities.VIDEO else image_train_loader
         epoch_val_loader = video_val_loader if epoch_modality == Modalities.VIDEO else image_val_loader
 
@@ -503,17 +506,21 @@ def main(params):
         log_stats = {**log_stats, **{f'train_{k}': v for k, v in train_stats.items()}}
 
         if epoch % params.eval_freq == 0:
-            if epoch % params.full_eval_freq == 0:
-                augs = validation_augs.copy() 
-                if epoch_modality == Modalities.VIDEO:
-                    augs.append((VideoCompressorAugmenter, [28, 32, 36]))
-            else: 
-                augs = validation_augs_subset.copy()
-                if epoch_modality == Modalities.VIDEO:
-                    augs.append((VideoCompressorAugmenter, [32]))
-            val_stats = eval_one_epoch(wam, epoch_val_loader, epoch_modality, image_detection_loss,
-                                       epoch, augs, validation_masks, params)
-            log_stats = {**log_stats, **{f'val_{k}': v for k, v in val_stats.items()}}
+            val_loaders = ((Modalities.IMAGE, image_val_loader),
+                            (Modalities.VIDEO, video_val_loader))
+            for epoch_modality, epoch_val_loader in val_loaders:
+                if epoch_val_loader is not None:
+                    if epoch % params.full_eval_freq == 0:
+                        augs = validation_augs.copy() 
+                        if epoch_modality == Modalities.VIDEO:
+                            augs.append((VideoCompressorAugmenter, [28, 32, 36]))
+                    else: 
+                        augs = validation_augs_subset.copy()
+                        if epoch_modality == Modalities.VIDEO:
+                            augs.append((VideoCompressorAugmenter, [32]))
+                    val_stats = eval_one_epoch(wam, epoch_val_loader, epoch_modality, image_detection_loss,
+                                            epoch, augs, validation_masks, params)
+                    log_stats = {**log_stats, **{f'val_{epoch_modality}_{k}': v for k, v in val_stats.items()}}
 
         if udist.is_main_process():
             with open(os.path.join(params.output_dir, 'log.txt'), 'a') as f:
@@ -549,8 +556,7 @@ def train_one_epoch(
     epoch: int,
     params: argparse.Namespace,
 ):
-    assert epoch_modality in [Modalities.IMAGE, Modalities.VIDEO]
-    is_video=(epoch_modality == Modalities.VIDEO)
+    is_video = (epoch_modality == Modalities.VIDEO)
 
     wam.train()
 
@@ -676,6 +682,9 @@ def eval_one_epoch(
     metric_logger = ulogger.MetricLogger(delimiter="  ")
 
     for it, batch_items in enumerate(metric_logger.log_every(val_loader, 10, header)):
+        if params.iter_per_valid is not None and it >= params.iter_per_valid:
+            break
+    
         if len(batch_items) == 3:
             imgs, masks, frames_positions = batch_items
         elif len(batch_items) == 2:

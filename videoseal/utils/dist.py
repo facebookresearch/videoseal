@@ -76,7 +76,6 @@ def setup_logging_for_distributed(is_master):
         # force = kwargs.pop('force', False)
         # if is_master or force:
         #     builtin_stderr_write(*args)
-    
     # sys.stderr.write = stderr_write
 
 def init_distributed_mode(params):
