@@ -182,7 +182,7 @@ def get_parser():
 
     group = parser.add_argument_group('Loading parameters')
     aa('--batch_size', default=32, type=int, help='Batch size')
-    aa('--batch_size_eval', default=64, type=int, help='Batch size for evaluation')
+    aa('--batch_size_eval', default=32, type=int, help='Batch size for evaluation')
     aa('--workers', default=8, type=int, help='Number of data loading workers')
     aa('--frames_per_clip', default=32, type=int,
        help='Number of frames per clip for video datasets')
