@@ -13,36 +13,17 @@ from PIL import Image
 
 from ..utils.image import jpeg_compress, median_filter
 
-# from compressai.zoo import bmshj2018_factorized
-
-# bmshj2018_factorized_networks = {i: bmshj2018_factorized(quality=i, pretrained=True) for i in [2,4,6,8]}
-
-# class bmshj2018(nn.Module):
-#     def __init__(self, min_quality=None, max_quality=None):
-#         super(bmshj2018, self).__init__()
-#         self.min_quality = min_quality
-#         self.max_quality = max_quality
-
-#     def forward(self, image: torch.tensor, mask, quality=None):
-#         if quality is None:
-#             if self.min_quality is None or self.max_quality is None:
-#                 raise ValueError("Quality range must be specified")
-#             quality = torch.randint(self.min_quality, self.max_quality + 1, size=(1, )).item()
-#         net = bmshj2018_factorized_networks[quality].to(image.device)
-#         for param in net.parameters():
-#             if param.grad is not None:
-#                 param.grad.zero_()
-#             image = image.clamp(0, 1)
-#         image = net(image)['x_hat']
-#         return image, mask
-
-
 class JPEG(nn.Module):
     def __init__(self, min_quality=None, max_quality=None, passthrough=True):
         super(JPEG, self).__init__()
         self.min_quality = min_quality
         self.max_quality = max_quality
         self.passthrough = passthrough
+
+    def get_random_quality(self):
+        if self.min_quality is None or self.max_quality is None:
+            raise ValueError("Quality range must be specified")
+        return torch.randint(self.min_quality, self.max_quality + 1, size=(1,)).item()
 
     def jpeg_single(self, image, quality):
         if self.passthrough:
@@ -51,11 +32,7 @@ class JPEG(nn.Module):
             return jpeg_compress(image, quality).to(image.device)
 
     def forward(self, image: torch.tensor, mask, quality=None):
-        if quality is None:
-            if self.min_quality is None or self.max_quality is None:
-                raise ValueError("Quality range must be specified")
-            quality = torch.randint(
-                self.min_quality, self.max_quality + 1, size=(1, )).item()
+        quality = quality or self.get_random_quality()
         image = image.clamp(0, 1)
         if len(image.shape) == 4:  # b c h w
             for ii in range(image.shape[0]):
@@ -71,13 +48,14 @@ class GaussianBlur(nn.Module):
         self.min_kernel_size = min_kernel_size
         self.max_kernel_size = max_kernel_size
 
+    def get_random_kernel_size(self):
+        if self.min_kernel_size is None or self.max_kernel_size is None:
+            raise ValueError("Kernel size range must be specified")
+        kernel_size = torch.randint(self.min_kernel_size, self.max_kernel_size + 1, size=(1,)).item()
+        return kernel_size + 1 if kernel_size % 2 == 0 else kernel_size
+
     def forward(self, image, mask, kernel_size=None):
-        if kernel_size is None:
-            if self.min_kernel_size is None or self.max_kernel_size is None:
-                raise ValueError("Kernel size range must be specified")
-            kernel_size = torch.randint(
-                self.min_kernel_size, self.max_kernel_size + 1, size=(1, )).item()
-            kernel_size = kernel_size + 1 if kernel_size % 2 == 0 else kernel_size
+        kernel_size = kernel_size or self.get_random_kernel_size()
         image = image.clamp(0, 1)
         image = F.gaussian_blur(image, kernel_size)
         return image, mask
@@ -90,17 +68,17 @@ class MedianFilter(nn.Module):
         self.max_kernel_size = max_kernel_size
         self.passthrough = passthrough
 
+    def get_random_kernel_size(self):
+        if self.min_kernel_size is None or self.max_kernel_size is None:
+            raise ValueError("Kernel size range must be specified")
+        kernel_size = torch.randint(self.min_kernel_size, self.max_kernel_size + 1, size=(1,)).item()
+        return kernel_size + 1 if kernel_size % 2 == 0 else kernel_size
+
     def forward(self, image, mask, kernel_size=None):
-        if kernel_size is None:
-            if self.min_kernel_size is None or self.max_kernel_size is None:
-                raise ValueError("Kernel size range must be specified")
-            kernel_size = torch.randint(
-                self.min_kernel_size, self.max_kernel_size + 1, size=(1, )).item()
-            kernel_size = kernel_size + 1 if kernel_size % 2 == 0 else kernel_size
+        kernel_size = kernel_size or self.get_random_kernel_size()
         image = image.clamp(0, 1)
         if self.passthrough:
-            image = (median_filter(image, kernel_size) -
-                     image).detach() + image
+            image = (median_filter(image, kernel_size) - image).detach() + image
         else:
             image = median_filter(image, kernel_size)
         return image, mask
@@ -112,12 +90,13 @@ class Brightness(nn.Module):
         self.min_factor = min_factor
         self.max_factor = max_factor
 
+    def get_random_factor(self):
+        if self.min_factor is None or self.max_factor is None:
+            raise ValueError("min_factor and max_factor must be provided")
+        return torch.rand(1).item() * (self.max_factor - self.min_factor) + self.min_factor
+
     def forward(self, image, mask, factor=None):
-        if factor is None:
-            if self.min_factor is None or self.max_factor is None:
-                raise ValueError("min_factor and max_factor must be provided")
-            factor = torch.rand(1).item() * (self.max_factor -
-                                             self.min_factor) + self.min_factor
+        factor = factor or self.get_random_factor()
         image = image.clamp(0, 1)
         image = F.adjust_brightness(image, factor)
         return image, mask
@@ -129,12 +108,13 @@ class Contrast(nn.Module):
         self.min_factor = min_factor
         self.max_factor = max_factor
 
+    def get_random_factor(self):
+        if self.min_factor is None or self.max_factor is None:
+            raise ValueError("min_factor and max_factor must be provided")
+        return torch.rand(1).item() * (self.max_factor - self.min_factor) + self.min_factor
+
     def forward(self, image, mask, factor=None):
-        if factor is None:
-            if self.min_factor is None or self.max_factor is None:
-                raise ValueError("min_factor and max_factor must be provided")
-            factor = torch.rand(1).item() * (self.max_factor -
-                                             self.min_factor) + self.min_factor
+        factor = factor or self.get_random_factor()
         image = image.clamp(0, 1)
         image = F.adjust_contrast(image, factor)
         return image, mask
@@ -146,12 +126,13 @@ class Saturation(nn.Module):
         self.min_factor = min_factor
         self.max_factor = max_factor
 
+    def get_random_factor(self):
+        if self.min_factor is None or self.max_factor is None:
+            raise ValueError("Factor range must be specified")
+        return torch.rand(1).item() * (self.max_factor - self.min_factor) + self.min_factor
+
     def forward(self, image, mask, factor=None):
-        if factor is None:
-            if self.min_factor is None or self.max_factor is None:
-                raise ValueError("Factor range must be specified")
-            factor = torch.rand(1).item() * (self.max_factor -
-                                             self.min_factor) + self.min_factor
+        factor = factor or self.get_random_factor()
         image = image.clamp(0, 1)
         image = F.adjust_saturation(image, factor)
         return image, mask
@@ -163,12 +144,13 @@ class Hue(nn.Module):
         self.min_factor = min_factor
         self.max_factor = max_factor
 
+    def get_random_factor(self):
+        if self.min_factor is None or self.max_factor is None:
+            raise ValueError("Factor range must be specified")
+        return torch.rand(1).item() * (self.max_factor - self.min_factor) + self.min_factor
+
     def forward(self, image, mask, factor=None):
-        if factor is None:
-            if self.min_factor is None or self.max_factor is None:
-                raise ValueError("Factor range must be specified")
-            factor = torch.rand(1).item() * (self.max_factor -
-                                             self.min_factor) + self.min_factor
+        factor = factor or self.get_random_factor()
         image = image.clamp(0, 1)
         image = F.adjust_hue(image, factor)
         return image, mask

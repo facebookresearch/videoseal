@@ -29,8 +29,7 @@ class Rotate(nn.Module):
         return torch.randint(self.min_angle, self.max_angle + 1, size=(1,)).item()
 
     def forward(self, image, mask, angle=None):
-        if angle is None:
-            angle = self.get_random_angle()
+        angle = angle or self.get_random_angle()
         image = F.rotate(image, angle)
         mask = F.rotate(mask, angle)
         return image, mask
@@ -109,10 +108,7 @@ class Perspective(nn.Module):
             (self.max_distortion_scale - self.min_distortion_scale)
 
     def forward(self, image, mask, distortion_scale=None):
-        if distortion_scale is None:
-            distortion_scale = self.get_random_distortion_scale()
-        else:
-            distortion_scale = distortion_scale
+        distortion_scale = distortion_scale or self.get_random_distortion_scale()
         width, height = image.shape[-1], image.shape[-2]
         startpoints, endpoints = self.get_perspective_params(
             width, height, distortion_scale)
