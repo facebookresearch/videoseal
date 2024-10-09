@@ -175,7 +175,7 @@ class VideoWam(Wam):
         # initialize watermarked imgs
         imgs_w = torch.zeros_like(imgs)  # f 3 h w
 
-        TODO TEST
+        # TODO TEST
 
         # chunking is necessary to avoid memory issues (when too many frames)
         for ii in range(0, len(imgs[::step_size]), chunk_size):
