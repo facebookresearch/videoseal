@@ -20,6 +20,11 @@ class Wam(nn.Module):
     wm_threshold: float = 0.0
     image_format: str = "RGB"
 
+    @property
+    def device(self):
+        """Return the device of the model."""
+        return next(self.parameters()).device
+
     def __init__(
         self,
         embedder: Embedder,
@@ -108,7 +113,7 @@ class Wam(nn.Module):
 
         # interpolate
         imgs_res = imgs.clone()
-        if imgs.shape[-2, -1] != (self.img_size, self.img_size):
+        if imgs.shape[-2:] != (self.img_size, self.img_size):
             imgs_res = F.interpolate(imgs, size=(self.img_size, self.img_size), 
                                      mode="bilinear", align_corners=False)
 
@@ -120,7 +125,7 @@ class Wam(nn.Module):
         deltas_w = self.embedder(imgs_res, msgs)
 
         # interpolate back
-        if imgs.shape[-2, -1] != (self.img_size, self.img_size):
+        if imgs.shape[-2:] != (self.img_size, self.img_size):
             deltas_w = F.interpolate(deltas_w, size=imgs.shape[-2:], 
                                     mode="bilinear", align_corners=False)
         deltas_w = deltas_w.to(imgs.device)
@@ -145,7 +150,7 @@ class Wam(nn.Module):
 
         # interpolate
         imgs_res = imgs.clone()
-        if imgs.shape[-2, -1] != (self.img_size, self.img_size):
+        if imgs.shape[-2:] != (self.img_size, self.img_size):
             imgs_res = F.interpolate(imgs, size=(self.img_size, self.img_size),
                                      mode="bilinear", align_corners=False)
         imgs_res = imgs_res.to(self.device)

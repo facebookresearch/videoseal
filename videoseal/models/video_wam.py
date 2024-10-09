@@ -225,14 +225,14 @@ class VideoWam(Wam):
                             the probability of the detection bit, and the remaining columns represent 
                             the probabilities of each bit in the message.
         """
-        imgs = self.resize_to(imgs)
         chunksize = 16  # n
         all_preds = []
         for ii in range(0, len(imgs), chunksize):
             nimgs_in_ck = min(chunksize, len(imgs) - ii)
-            preds = self.detector(
+            outputs = self.detect(
                 imgs[ii:ii+nimgs_in_ck]
             )
+            preds = outputs["preds"]
             all_preds.append(preds)  # n k ..
         preds = torch.cat(all_preds, dim=0)  # f k ..
         return preds
