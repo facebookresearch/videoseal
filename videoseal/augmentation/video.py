@@ -76,21 +76,24 @@ class VideoCompression(nn.Module):
                 output_frames.append(img)
         return output_frames
 
-    def forward(self, frames, mask=None) -> torch.Tensor:
+    def forward(self, frames, mask=None, crf=None) -> torch.Tensor:
         """
         Compress and decompress the input video frames.
         Parameters:
             frames (torch.Tensor): Video frames as a tensor with shape (T, C, H, W).
+            mask (torch.Tensor): Optional mask for the video frames.
+            crf (int): Constant Rate Factor for compression quality, if not provided, uses the self.crf value.
         Returns:
             torch.Tensor: Decompressed video frames as a tensor with shape (T, C, H, W).
         """
-        device = frames.device  # Get the device of the input frames
-        
+        self.crf = crf or self.crf
+
         input_frames = self._preprocess_frames(frames)
         with io.BytesIO() as buffer:
             buffer = self._compress_frames(buffer, input_frames)
             output_frames = self._decompress_frames(buffer)
         output_frames = self._postprocess_frames(output_frames)
+        output_frames = output_frames.to(frames.device)
 
         compressed_frames = frames + (frames - output_frames).detach()
         del frames  # Free memory
@@ -123,8 +126,25 @@ class VideoCompressorAugmenter(VideoCompression):
     def forward(self, frames, mask=None, *args, **kwargs) -> torch.Tensor:
         """Compress and decompress the input video frames with a randomly selected CRF value."""
         crf = self.get_random_crf()
-        self.crf = crf
-        output, mask = super().forward(frames, mask)
+        output, mask = super().forward(frames, mask, crf)
+        return output, mask
+
+
+class H264(VideoCompression):
+    def __init__(self, crf_min=None, crf_max=None, fps=24):
+        super(VideoCompressorAugmenter, self).__init__(
+            codec='libx264', fps=fps)
+        self.crf_min = crf_min
+        self.crf_max = crf_max
+
+    def get_random_crf(self):
+        if self.min_crf is None or self.max_crf is None:
+            raise ValueError("min_crf and max_crf must be provided")
+        return torch.randint(self.min_crf, self.max_crf + 1, size=(1,)).item()
+
+    def forward(self, frames, mask=None, crf=None) -> torch.Tensor:
+        crf = crf or self.get_random_crf()
+        output, mask = super().forward(frames, mask, crf)
         return output, mask
 
 
