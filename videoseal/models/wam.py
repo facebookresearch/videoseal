@@ -70,7 +70,10 @@ class Wam(nn.Module):
         msgs: torch.Tensor = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Generate watermarked images from the input images.
+        Does the full forward pass of the WAM model (used for training).
+        (1) Generates watermarked images from the input images and messages.
+        (2) Augments the watermarked images.
+        (3) Detects the watermark in the augmented images.
         """
         # optionally create message
         if msgs is None:
@@ -82,11 +85,11 @@ class Wam(nn.Module):
         if self.attenuation is not None:
             imgs_w = self.attenuation(imgs, imgs_w)
         # augment
-        imgs_aug, masks, selected_aug = self.augmenter(imgs_w, imgs, masks, is_video=False)
-
+        imgs_aug, masks, selected_aug = self.augmenter(
+            imgs_w, imgs, masks, is_video=False)
         # detect watermark
         preds = self.detector(imgs_aug)
-
+        # create and return outputs
         outputs = {
             "msgs": msgs,  # original messages: b k
             "masks": masks,  # augmented masks: b 1 h w
@@ -104,9 +107,14 @@ class Wam(nn.Module):
         msgs: torch.Tensor = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Generate watermarked images from the input images.
+        Generates watermarked images from the input images and messages (used for inference).
+        Images may be arbitrarily sized.
+        Args:
+            imgs (torch.Tensor): Batched images with shape BxCxHxW.
+            msgs (torch.Tensor): Optional messages with shape BxK.
+        Returns:
+            tuple[torch.Tensor, torch.Tensor]: Watermarked images and predicted watermarks.
         """
-
         # optionally create message
         if msgs is None:
             msgs = self.get_random_msg(imgs.shape[0])  # b x k
@@ -117,12 +125,9 @@ class Wam(nn.Module):
             imgs_res = F.interpolate(imgs, size=(self.img_size, self.img_size), 
                                      mode="bilinear", align_corners=False)
 
-        # to device
-        imgs_res = imgs_res.to(self.device)
-        msgs = msgs.to(self.device)
-
         # generate watermarked images
-        deltas_w = self.embedder(imgs_res, msgs)
+        deltas_w = self.embedder(
+            imgs_res.to(self.device), msgs.to(self.device))
 
         # interpolate back
         if imgs.shape[-2:] != (self.img_size, self.img_size):
@@ -145,7 +150,12 @@ class Wam(nn.Module):
         imgs: torch.Tensor,
     ) -> torch.Tensor:
         """
-        Detect watermarks in the input images.
+        Performs the forward pass of the detector only (used at inference).
+        Rescales the input images to 256x256 pixels and then computes the mask and the message.
+        Args:
+            imgs (torch.Tensor): Batched images with shape BxCxHxW.
+        Returns:
+            torch.Tensor: Predicted masks and/or messages with shape Bx(1+nbits)xHxW.
         """
 
         # interpolate

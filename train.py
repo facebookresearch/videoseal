@@ -138,7 +138,7 @@ def get_parser():
     aa("--scaling_i", type=float, default=1.0,
        help="Scaling factor for the image in the embedder model")
     # VideoWam parameters related how to do video watermarking inference
-    aa("--videowam_chunk_size", type=int, default=8,
+    aa("--videowam_chunk_size", type=int, default=32,
        help="The number of frames to encode at a time.")
     aa("--videowam_step_size", type=int, default=4,
        help="The number of frames to propagate the watermark to.")
@@ -553,7 +553,7 @@ def train_one_epoch(
     image_detection_loss: LPIPSWithDiscriminator,
     epoch: int,
     params: argparse.Namespace,
-):
+) -> dict:
     is_video = (epoch_modality == Modalities.VIDEO)
 
     wam.train()
@@ -671,6 +671,7 @@ def eval_one_epoch(
         validation_masks (torch.Tensor): the validation masks, full of ones for now
         params (argparse.Namespace): the parameters
     """
+    is_video = (epoch_modality == Modalities.VIDEO)
     if torch.is_tensor(validation_masks):
         validation_masks = list(torch.unbind(validation_masks, dim=0))
 
@@ -688,17 +689,27 @@ def eval_one_epoch(
         elif len(batch_items) == 2:
             imgs, masks = batch_items
 
-        # get imgs and random messages
-        imgs = imgs.to(device)
+        # # get imgs and random messages
+        # imgs = imgs.to(device)
+        # if len(imgs.shape) == 5:
+        #     imgs = imgs.flatten(0, 1)
+
+        # msgs = wam.get_random_msg(imgs.shape[0])  # b x k
+        # msgs = msgs.to(imgs.device)
+
+        # # generate watermarked images
+        # deltas_w = wam.embedder(imgs, msgs)
+        # imgs_w = wam.scaling_i * imgs + wam.scaling_w * deltas_w
+
+        # flatten video to batch
+        # TODO: support videos with bsz > 1
         if len(imgs.shape) == 5:
             imgs = imgs.flatten(0, 1)
 
-        msgs = wam.get_random_msg(imgs.shape[0])  # b x k
-        msgs = msgs.to(imgs.device)
-
-        # generate watermarked images
-        deltas_w = wam.embedder(imgs, msgs)
-        imgs_w = wam.scaling_i * imgs + wam.scaling_w * deltas_w
+        # forward embedder
+        outputs = wam.embed(imgs, is_video=is_video)
+        msgs = outputs["msgs"]  # b k
+        imgs_w = outputs["imgs_w"]  # b c h w
 
         # if (epoch % params.saveimg_freq == 0) and (it == 0):
         #     base_name = os.path.join(params.output_dir, f'{udist.get_rank()}_{epoch:03}_{it:03}_{epoch_modality}_val')
@@ -726,10 +737,6 @@ def eval_one_epoch(
         torch.cuda.synchronize()
         metric_logger.update(**metrics)
 
-        # attenuate
-        if wam.attenuation is not None:
-            imgs_w = wam.attenuation(imgs, imgs_w)
-
         for mask_id, masks in enumerate(validation_masks):
             # watermark masking
             masks = masks.to(imgs.device)  # 1 h w
@@ -743,7 +750,7 @@ def eval_one_epoch(
                 transform_instance = transform()
 
                 for strength in strengths:
-                    do_resize = True  # hardcode for now, might need to change
+                    do_resize = False  # hardcode for now, might need to change
                     if not do_resize:
                         imgs_aug, masks_aug = transform_instance(
                             imgs_masked, masks, strength)
@@ -761,7 +768,8 @@ def eval_one_epoch(
                     selected_aug += f"_{strength}"
 
                     # extract watermark
-                    preds = wam.detector(imgs_aug)
+                    outputs = wam.detect(imgs_aug, is_video=is_video)
+                    preds = outputs["preds"]
                     mask_preds = preds[:, 0:1]  # b 1 ...
                     bit_preds = preds[:, 1:]  # b k ...
 
