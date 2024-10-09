@@ -195,6 +195,24 @@ class VP9(VideoCompression):
         return output, mask
     
 
+class AV1(VideoCompression):
+    def __init__(self, crf_min=None, crf_max=None, fps=24):
+        super(VideoCompressorAugmenter, self).__init__(
+            codec='libaom-av1', fps=fps)
+        self.crf_min = crf_min
+        self.crf_max = crf_max
+
+    def get_random_crf(self):
+        if self.min_crf is None or self.max_crf is None:
+            raise ValueError("min_crf and max_crf must be provided")
+        return torch.randint(self.min_crf, self.max_crf + 1, size=(1,)).item()
+
+    def forward(self, frames, mask=None, crf=None) -> torch.Tensor:
+        crf = crf or self.get_random_crf()
+        output, mask = super().forward(frames, mask, crf)
+        return output, mask
+
+
 def compress_decompress(frames, codec='libx264', crf=28, fps=24) -> torch.Tensor:
     """
     Simulate video artifacts by compressing and decompressing a video using PyAV.
@@ -213,34 +231,23 @@ def compress_decompress(frames, codec='libx264', crf=28, fps=24) -> torch.Tensor
 
 
 if __name__ == "__main__":    
+    import time
     from videoseal.data.loader import load_video
     vid_o = 'assets/videos/sav_013754.mp4'
     print("> test compression")
-    
+
     vid_o = load_video(vid_o) / 255
     vid_o = vid_o[:60]  # Use only the first 60 frames
-    for codec in ['libx264', 'libx264rgb', 'libx265', 'libvpx-vp9']:
+    # h264, h264rgb, h265, vp9, av1 (slow)
+    for codec in ['libx264', 'libx264rgb', 'libx265', 'libvpx-vp9', 'libaom-av1']:
         crfs = [28, 34, 40, 46] if codec != 'libvpx-vp9' else [-1]
         for crf in crfs:
             try:
                 compressor = VideoCompression(codec=codec, crf=crf)
+                start = time.time()
                 compressed_frames, _ = compressor(vid_o)
+                end = time.time()
                 mse = torch.nn.functional.mse_loss(vid_o, compressed_frames)
-                print(f"Codec: {codec}, CRF: {crf} - MSE: {mse:.4f}")
+                print(f"Codec: {codec}, CRF: {crf} - MSE: {mse:.4f} - Time: {end - start:.2f}s")
             except Exception as e:
                 print(f":warning: An error occurred with {codec}: {str(e)}")
-
-    # should print
-    # Codec: libx264, CRF: 28 - MSE: 0.0005
-    # Codec: libx264, CRF: 34 - MSE: 0.0011
-    # Codec: libx264, CRF: 40 - MSE: 0.0025
-    # Codec: libx264, CRF: 46 - MSE: 0.0048
-    # Codec: libx264rgb, CRF: 28 - MSE: 0.0004
-    # Codec: libx264rgb, CRF: 34 - MSE: 0.0008
-    # Codec: libx264rgb, CRF: 40 - MSE: 0.0014
-    # Codec: libx264rgb, CRF: 46 - MSE: 0.0025
-    # Codec: libx265, CRF: 28 - MSE: 0.0004
-    # Codec: libx265, CRF: 34 - MSE: 0.0010
-    # Codec: libx265, CRF: 40 - MSE: 0.0021
-    # Codec: libx265, CRF: 46 - MSE: 0.0041
-    # Codec: libvpx-vp9, CRF: -1 - MSE: 0.0011
