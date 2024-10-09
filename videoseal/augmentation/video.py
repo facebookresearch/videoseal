@@ -148,6 +148,53 @@ class H264(VideoCompression):
         return output, mask
 
 
+class H264rgb(VideoCompression):
+    def __init__(self, crf_min=None, crf_max=None, fps=24):
+        super(VideoCompressorAugmenter, self).__init__(
+            codec='libx264rgb', fps=fps)
+        self.crf_min = crf_min
+        self.crf_max = crf_max
+
+    def get_random_crf(self):
+        if self.min_crf is None or self.max_crf is None:
+            raise ValueError("min_crf and max_crf must be provided")
+        return torch.randint(self.min_crf, self.max_crf + 1, size=(1,)).item()
+
+    def forward(self, frames, mask=None, crf=None) -> torch.Tensor:
+        crf = crf or self.get_random_crf()
+        output, mask = super().forward(frames, mask, crf)
+        return output, mask
+
+
+class H265(VideoCompression):
+    def __init__(self, crf_min=None, crf_max=None, fps=24):
+        super(VideoCompressorAugmenter, self).__init__(
+            codec='libx265', fps=fps)
+        self.crf_min = crf_min
+        self.crf_max = crf_max
+
+    def get_random_crf(self):
+        if self.min_crf is None or self.max_crf is None:
+            raise ValueError("min_crf and max_crf must be provided")
+        return torch.randint(self.min_crf, self.max_crf + 1, size=(1,)).item()
+
+    def forward(self, frames, mask=None, crf=None) -> torch.Tensor:
+        crf = crf or self.get_random_crf()
+        output, mask = super().forward(frames, mask, crf)
+        return output, mask
+
+
+class VP9(VideoCompression):
+    def __init__(self, fps=24):
+        super(VideoCompressorAugmenter, self).__init__(
+            codec='libvpx-vp9', fps=fps)
+        self.crf = -1
+
+    def forward(self, frames, mask=None) -> torch.Tensor:
+        output, mask = super().forward(frames, mask)
+        return output, mask
+    
+
 def compress_decompress(frames, codec='libx264', crf=28, fps=24) -> torch.Tensor:
     """
     Simulate video artifacts by compressing and decompressing a video using PyAV.
@@ -172,8 +219,7 @@ if __name__ == "__main__":
     
     vid_o = load_video(vid_o) / 255
     vid_o = vid_o[:60]  # Use only the first 60 frames
-    # for codec in ['libx264', 'libx264rgb', 'libx265', 'libvpx-vp9']:
-    for codec in ['libvpx-vp9']:
+    for codec in ['libx264', 'libx264rgb', 'libx265', 'libvpx-vp9']:
         crfs = [28, 34, 40, 46] if codec != 'libvpx-vp9' else [-1]
         for crf in crfs:
             try:
