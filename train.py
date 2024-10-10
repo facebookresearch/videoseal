@@ -130,6 +130,8 @@ def get_parser():
        help="Size of the input images for data preprocessing, at inference time the images are resized to this size")
     aa("--img_size_extractor", type=int,
        default=256, help="Images are resized to this size before being fed to the extractor")
+    aa("--img_size_val", type=int, default=256,
+         help="Size of the input images for data preprocessing, at inference time the images are resized to this size")
     aa("--attenuation", type=str, default="None", help="Attenuation model to use")
     aa("--scaling_w", type=float, default=0.2,
        help="Scaling factor for the watermark in the embedder model")
@@ -330,8 +332,8 @@ def main(params):
     print('optimizer_d: %s' % optimizer_d)
 
     # Data loaders
-    train_transform, train_mask_transform, val_transform, val_mask_transform = get_resize_transform(
-        params.img_size)
+    train_transform, train_mask_transform = get_resize_transform(params.img_size)
+    val_transform, val_mask_transform = get_resize_transform(params.img_size_val)
 
     image_train_loader = image_val_loader = video_train_loader = video_val_loader = None
 
@@ -439,7 +441,7 @@ def main(params):
         (Crop,              [0.75]),  # size ratio
         (JPEG,              [60]),
     ]  # augs evaluated every eval_freq
-    dummy_img = torch.ones(3, params.img_size, params.img_size)
+    dummy_img = torch.ones(3, params.img_size_val, params.img_size_val)
     validation_masks = augmenter.mask_embedder.sample_representative_masks(
         dummy_img)  # n 1 h w, full of ones or random masks depending on config
 
@@ -707,7 +709,9 @@ def eval_one_epoch(
             imgs = imgs.flatten(0, 1)
 
         # forward embedder
+        embed_time = time.time()
         outputs = wam.embed(imgs, is_video=is_video)
+        embed_time = time.time() - embed_time
         msgs = outputs["msgs"]  # b k
         imgs_w = outputs["imgs_w"]  # b c h w
 
@@ -768,7 +772,9 @@ def eval_one_epoch(
                     selected_aug += f"_{strength}"
 
                     # extract watermark
+                    extract_time = time.time()
                     outputs = wam.detect(imgs_aug, is_video=is_video)
+                    extract_time = time.time() - extract_time
                     preds = outputs["preds"]
                     mask_preds = preds[:, 0:1]  # b 1 ...
                     bit_preds = preds[:, 1:]  # b k ...
