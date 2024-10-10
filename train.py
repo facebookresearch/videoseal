@@ -724,7 +724,9 @@ def eval_one_epoch(
         if len(imgs.shape) == 5:
             imgs = imgs.flatten(0, 1)
 
-        msgs = wam.get_random_msg(imgs.shape[0])  # b x k
+        # nb_repetitions = bsz to use 1 message per batch necessary for videos but ok for images
+        msgs = wam.get_random_msg(
+            imgs.shape[0], nb_repetitions=imgs.shape[0])
         msgs = msgs.to(imgs.device)
 
         # generate watermarked images
