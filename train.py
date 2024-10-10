@@ -58,11 +58,7 @@ from videoseal.augmentation.valuemetric import (JPEG, Brightness, Contrast,
 from videoseal.augmentation.video import VideoCompressorAugmenter
 from videoseal.data.loader import (get_dataloader_segmentation,
                                    get_video_dataloader)
-
-from videoseal.evals.metrics import (accuracy, bit_accuracy,
-                                    bit_accuracy_inference, iou, psnr)
-
-from videoseal.data.transforms import (get_transforms, get_resize_transform,
+from videoseal.data.transforms import (get_resize_transform, get_transforms,
                                        get_transforms_segmentation)
 from videoseal.evals.metrics import (accuracy, bit_accuracy,
                                      bit_accuracy_inference, iou, psnr, ssim)
@@ -72,6 +68,7 @@ from videoseal.modules.jnd import JND
 from videoseal.utils.data import Modalities, parse_dataset_params
 from videoseal.utils.display import get_fps, save_vid
 from videoseal.utils.image import create_diff_img
+from videoseal.utils.tensorboard import CustomTensorboardWriter
 
 device = torch.device(
     'cuda') if torch.cuda.is_available() else torch.device('cpu')
@@ -211,6 +208,10 @@ def get_parser():
 
 def main(params):
 
+    # Set up TensorBoard writer, this custom one works only in main process
+    tensorboard = CustomTensorboardWriter(
+        log_dir=os.path.join(params.output_dir, "tensorboard"))
+
     # Load dataset params from config files
     parse_dataset_params(params)
 
@@ -230,10 +231,11 @@ def main(params):
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
 
-    # Print the arguments
+    # Print the arguments and add to tensorboard
     print("__git__:{}".format(utils.get_sha()))
-    print("__log__:{}".format(json.dumps(
-        omegaconf.OmegaConf.to_container(params, resolve=True))))
+    json_params = json.dumps(
+        omegaconf.OmegaConf.to_container(params, resolve=True))
+    print("__log__:{}".format(json_params))
 
     # Copy the config files to the output dir
     if udist.is_main_process():
@@ -411,7 +413,8 @@ def main(params):
 
     # specific thing to do if distributed training
     if params.distributed:
-        wam_ddp = nn.parallel.DistributedDataParallel(wam, device_ids=[params.local_rank])
+        wam_ddp = nn.parallel.DistributedDataParallel(
+            wam, device_ids=[params.local_rank])
         image_detection_loss.discriminator = nn.parallel.DistributedDataParallel(
             image_detection_loss.discriminator, device_ids=[params.local_rank]
         )
@@ -480,7 +483,8 @@ def main(params):
         else:
             epoch_modality = params.modality
         return epoch_modality
-    modalities = [get_modality(epoch, params) for epoch in range(params.epochs)]
+    modalities = [get_modality(epoch, params)
+                  for epoch in range(params.epochs)]
 
     # start training
     print('training...')
@@ -502,31 +506,41 @@ def main(params):
             epoch_train_loader.sampler.set_epoch(epoch)
             epoch_val_loader.sampler.set_epoch(epoch)
 
-        train_stats = train_one_epoch(wam_ddp, optimizers, epoch_train_loader, epoch_modality, image_detection_loss, epoch, params)
-        log_stats = {**log_stats, **{f'train_{k}': v for k, v in train_stats.items()}}
+        train_stats = train_one_epoch(
+            wam_ddp, optimizers, epoch_train_loader, epoch_modality, image_detection_loss, epoch, params, tensorboard=tensorboard)
+        log_stats = {**log_stats, **
+                     {f'train_{k}': v for k, v in train_stats.items()}}
 
         if epoch % params.eval_freq == 0:
             val_loaders = ((Modalities.IMAGE, image_val_loader),
-                            (Modalities.VIDEO, video_val_loader))
+                           (Modalities.VIDEO, video_val_loader))
             for epoch_modality, epoch_val_loader in val_loaders:
                 if epoch_val_loader is not None:
                     if epoch % params.full_eval_freq == 0:
-                        augs = validation_augs.copy() 
+                        augs = validation_augs.copy()
                         if epoch_modality == Modalities.VIDEO:
-                            augs.append((VideoCompressorAugmenter, [22, 32, 42]))
-                    else: 
+                            augs.append(
+                                (VideoCompressorAugmenter, [22, 32, 42]))
+                    else:
                         augs = validation_augs_subset.copy()
                         if epoch_modality == Modalities.VIDEO:
                             augs.append((VideoCompressorAugmenter, [32]))
                     val_stats = eval_one_epoch(wam, epoch_val_loader, epoch_modality, image_detection_loss,
-                                            epoch, augs, validation_masks, params)
-                    log_stats = {**log_stats, **{f'val_{epoch_modality}_{k}': v for k, v in val_stats.items()}}
+                                               epoch, augs, validation_masks, params, tensorboard=tensorboard)
+                    log_stats = {
+                        **log_stats, **{f'val_{epoch_modality}_{k}': v for k, v in val_stats.items()}}
+
+                    if epoch == params.epochs-1:  # log params in tensorboard @last epoch
+                        tensorboard.add_hparams(
+                            {k: str(v) for k, v in vars(params).items()},
+                            {f"VALID/{k}": v for k, v in log_stats.items()}
+                        )
 
         if udist.is_main_process():
             with open(os.path.join(params.output_dir, 'log.txt'), 'a') as f:
                 f.write(json.dumps(log_stats) + "\n")
-
-        dist.barrier()  # Ensures all processes wait until the main node finishes validation
+        if udist.is_dist_avail_and_initialized():
+            dist.barrier()  # Ensures all processes wait until the main node finishes validation
 
         print("Saving Checkpoint..")
         save_dict = {
@@ -555,6 +569,9 @@ def train_one_epoch(
     image_detection_loss: LPIPSWithDiscriminator,
     epoch: int,
     params: argparse.Namespace,
+    tensorboard: CustomTensorboardWriter
+
+
 ):
     is_video = (epoch_modality == Modalities.VIDEO)
 
@@ -581,7 +598,8 @@ def train_one_epoch(
         outputs["preds"] /= params.temperature
 
         # last layer is used for gradient scaling
-        last_layer = wam.embedder.get_last_layer() if not params.distributed else wam.module.embedder.get_last_layer()
+        last_layer = wam.embedder.get_last_layer(
+        ) if not params.distributed else wam.module.embedder.get_last_layer()
 
         # index 1 for discriminator, 0 for embedder/extractor
         for optimizer_idx in [1, 0]:
@@ -630,9 +648,9 @@ def train_one_epoch(
         torch.cuda.synchronize()
         for name, value in log_stats.items():
             metric_logger.update(**{name: value})
-        
-        # only save images if not in distributed mode, for debugging
-        if (epoch % params.saveimg_freq == 0) and (it % 50 == 0) and (params.master_port == -1):
+
+        # save images on training
+        if (epoch % params.saveimg_freq == 0) and (it == 0):
             ori_path = os.path.join(
                 params.output_dir, f'{epoch:03}_{it:03}_{epoch_modality}_train_0_ori.png')
             wm_path = os.path.join(
@@ -640,17 +658,27 @@ def train_one_epoch(
             diff_path = os.path.join(
                 params.output_dir, f'{epoch:03}_{it:03}_{epoch_modality}_train_2_diff.png')
             if udist.is_main_process():
-                save_image(imgs,ori_path, nrow=8)
+                save_image(imgs, ori_path, nrow=8)
+                tensorboard.add_images("TRAIN/IMAGES/orig", imgs, epoch)
                 save_image(outputs["imgs_w"], wm_path, nrow=8)
-                save_image(create_diff_img(imgs, outputs["imgs_w"]), diff_path, nrow=8)
+                tensorboard.add_images(
+                    "TRAIN/IMAGES/wmed", outputs["imgs_w"], epoch)
+                save_image(create_diff_img(
+                    imgs, outputs["imgs_w"]), diff_path, nrow=8)
+                tensorboard.add_images("TRAIN/IMAGES/diff", create_diff_img(
+                    imgs, outputs["imgs_w"]), epoch)
 
     metric_logger.synchronize_between_processes()
     print("Averaged {} stats:".format('train'), metric_logger)
+    train_logs = {k: meter.global_avg for k,
+                  meter in metric_logger.meters.items()}
 
-    return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
+    tensorboard.add_scalars("TRAIN", train_logs, epoch)
+
+    return train_logs
 
 
-@torch.no_grad()
+@ torch.no_grad()
 def eval_one_epoch(
     wam: Wam,
     val_loader: torch.utils.data.DataLoader,
@@ -660,6 +688,7 @@ def eval_one_epoch(
     validation_augs: List,
     validation_masks: torch.Tensor,
     params: argparse.Namespace,
+    tensorboard: CustomTensorboardWriter,
 ) -> dict:
     """
     Evaluate the model on the validation set, with different augmentations
@@ -677,14 +706,14 @@ def eval_one_epoch(
         validation_masks = list(torch.unbind(validation_masks, dim=0))
 
     wam.eval()
-    
+
     header = f'Val - Epoch: [{epoch}/{params.epochs}] - Modality: {epoch_modality}'
     metric_logger = ulogger.MetricLogger(delimiter="  ")
 
     for it, batch_items in enumerate(metric_logger.log_every(val_loader, 10, header)):
         if params.iter_per_valid is not None and it >= params.iter_per_valid:
             break
-    
+
         if len(batch_items) == 3:
             imgs, masks, frames_positions = batch_items
         elif len(batch_items) == 2:
@@ -705,13 +734,19 @@ def eval_one_epoch(
         # if (epoch % params.saveimg_freq == 0) and (it == 0):
         #     base_name = os.path.join(params.output_dir, f'{udist.get_rank()}_{epoch:03}_{it:03}_{epoch_modality}_val')
         if (epoch % params.saveimg_freq == 0) and (it == 0) and udist.is_main_process():
-            base_name = os.path.join(params.output_dir, f'{epoch:03}_{it:03}_{epoch_modality}_val')
+            base_name = os.path.join(
+                params.output_dir, f'{epoch:03}_{it:03}_{epoch_modality}_val')
             ori_path = base_name + '_0_ori.png'
             wm_path = base_name + '_1_wm.png'
             diff_path = base_name + '_2_diff.png'
-            save_image(imgs,ori_path, nrow=8)
+            save_image(imgs, ori_path, nrow=8)
             save_image(imgs_w, wm_path, nrow=8)
             save_image(create_diff_img(imgs, imgs_w), diff_path, nrow=8)
+            tensorboard.add_images("VALID/IMAGES/orig", imgs, it*epoch)
+            tensorboard.add_images("VALID/IMAGES/wmed", imgs_w, it*epoch)
+            tensorboard.add_images("VALID/IMAGES/diff",
+                                   create_diff_img(imgs, imgs_w), it*epoch)
+
             if epoch_modality == Modalities.VIDEO:
                 fps = 24 // 1
                 ori_path = ori_path.replace(".png", ".mp4")
@@ -720,6 +755,12 @@ def eval_one_epoch(
                 save_vid(imgs, ori_path, fps)
                 save_vid(imgs_w, wm_path, fps)
                 save_vid(imgs - imgs_w, diff_path, fps)
+                tensorboard.add_video(
+                    "VALID/VIDEOS/orig", imgs.unsqueeze(0), it*epoch, fps)
+                tensorboard.add_video(
+                    "VALID/VIDEOS/wmed", imgs_w.unsqueeze(0), it*epoch, fps)
+                tensorboard.add_video(
+                    "VALID/VIDEOS/diff", create_diff_img(imgs, imgs_w).unsqueeze(0), it*epoch, fps)
 
         # quality metrics
         metrics = {}
@@ -755,11 +796,11 @@ def eval_one_epoch(
                         imgs_aug, masks_aug = transform_instance(
                             imgs_masked, masks, strength)
                         if imgs_aug.shape[-2:] != (h, w):
-                            imgs_aug = nn.functional.interpolate(imgs_aug, size=(h, w), 
-                                            mode='bilinear', align_corners=False, antialias=True)
-                            masks_aug = nn.functional.interpolate(masks_aug, size=(h, w), 
-                                            mode='bilinear', align_corners=False, antialias=True)
-                    selected_aug = str(transform.__name__).lower() 
+                            imgs_aug = nn.functional.interpolate(imgs_aug, size=(h, w),
+                                                                 mode='bilinear', align_corners=False, antialias=True)
+                            masks_aug = nn.functional.interpolate(masks_aug, size=(h, w),
+                                                                  mode='bilinear', align_corners=False, antialias=True)
+                    selected_aug = str(transform.__name__).lower()
                     selected_aug += f"_{strength}"
 
                     # extract watermark
@@ -795,7 +836,10 @@ def eval_one_epoch(
 
     metric_logger.synchronize_between_processes()
     print("Averaged {} stats:".format('val'), metric_logger)
-    return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
+    valid_logs = {k: meter.global_avg for k,
+                  meter in metric_logger.meters.items()}
+    tensorboard.add_scalars("VALID", valid_logs, epoch)
+    return valid_logs
 
 
 if __name__ == '__main__':

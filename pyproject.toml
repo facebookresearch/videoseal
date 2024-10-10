@@ -29,6 +29,7 @@ dependencies = [
     "pandas",
     "tqdm",
     "pytorch_msssim",
+    "tensorboard",
 ]
 
 [project.optional-dependencies]
