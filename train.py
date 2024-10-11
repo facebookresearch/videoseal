@@ -486,8 +486,6 @@ def main(params):
     modalities = [get_modality(epoch, params)
                   for epoch in range(params.epochs)]
 
-    print(wam.clamp)
-
     # start training
     print('training...')
     start_time = time.time()
