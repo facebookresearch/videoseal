@@ -744,13 +744,10 @@ def eval_one_epoch(
         for acc_it in range(accumulation_steps):
             imgs, masks = batch_imgs[acc_it], batch_masks[acc_it]
 
-            # get imgs and random messages
-            imgs = imgs.to(device)
-
             # forward embedder
             embed_time = time.time()
             outputs = wam.embed(imgs, is_video=is_video)
-            embed_time = time.time() - embed_time
+            embed_time = (time.time() - embed_time) / imgs.shape[0]
             msgs = outputs["msgs"]  # b k
             imgs_w = outputs["imgs_w"]  # b c h w
 
@@ -785,78 +782,83 @@ def eval_one_epoch(
                     tensorboard.add_video(
                         "VALID/VIDEOS/diff", create_diff_img(imgs, imgs_w).unsqueeze(0), acc_it*it*epoch, fps)
 
-        # quality metrics
-        metrics = {}
-        metrics['psnr'] = psnr(imgs_w, imgs).mean().item()
-        metrics['ssim'] = ssim(imgs_w, imgs).mean().item()
-        torch.cuda.synchronize()
-        metric_logger.update(**metrics)
+            # quality metrics
+            metrics = {}
+            metrics['psnr'] = psnr(imgs_w, imgs).mean().item()
+            metrics['ssim'] = ssim(imgs_w, imgs).mean().item()
+            metrics['embed_time'] = embed_time
+            torch.cuda.synchronize()
+            metric_logger.update(**metrics)
 
-        extract_times = []
-        for mask_id, masks in enumerate(validation_masks):
-            # watermark masking
-            masks = masks.to(imgs.device)  # 1 h w
-            if len(masks.shape) < 4:
-                masks = masks.unsqueeze(0).repeat(
-                    imgs_w.shape[0], 1, 1, 1)  # b 1 h w
-            imgs_masked = imgs_w * masks + imgs * (1 - masks)
+            extract_times = []
+            for mask_id, masks in enumerate(validation_masks):
+                # watermark masking
+                masks = masks.to(imgs.device)  # 1 h w
+                if len(masks.shape) < 4:
+                    masks = masks.unsqueeze(0).repeat(
+                        imgs_w.shape[0], 1, 1, 1)  # b 1 h w
+                imgs_masked = imgs_w * masks + imgs * (1 - masks)
 
-            for transform, strengths in validation_augs:
-                # Create an instance of the transformation
-                transform_instance = transform()
+                for transform, strengths in validation_augs:
+                    # Create an instance of the transformation
+                    transform_instance = transform()
 
-                for strength in strengths:
-                    do_resize = False  # hardcode for now, might need to change
-                    if not do_resize:
-                        imgs_aug, masks_aug = transform_instance(
-                            imgs_masked, masks, strength)
-                    else:
-                        # h, w = imgs_w.shape[-2:]
-                        h, w = params.img_size_extractor, params.img_size_extractor
-                        imgs_aug, masks_aug = transform_instance(
-                            imgs_masked, masks, strength)
-                        if imgs_aug.shape[-2:] != (h, w):
-                            imgs_aug = nn.functional.interpolate(imgs_aug, size=(h, w),
-                                                                 mode='bilinear', align_corners=False, antialias=True)
-                            masks_aug = nn.functional.interpolate(masks_aug, size=(h, w),
-                                                                  mode='bilinear', align_corners=False, antialias=True)
-                    selected_aug = str(transform.__name__).lower()
-                    selected_aug += f"_{strength}"
+                    for strength in strengths:
+                        do_resize = False  # hardcode for now, might need to change
+                        if not do_resize:
+                            imgs_aug, masks_aug = transform_instance(
+                                imgs_masked, masks, strength)
+                        else:
+                            # h, w = imgs_w.shape[-2:]
+                            h, w = params.img_size_extractor, params.img_size_extractor
+                            imgs_aug, masks_aug = transform_instance(
+                                imgs_masked, masks, strength)
+                            if imgs_aug.shape[-2:] != (h, w):
+                                imgs_aug = nn.functional.interpolate(imgs_aug, size=(h, w),
+                                                                    mode='bilinear', align_corners=False, antialias=True)
+                                masks_aug = nn.functional.interpolate(masks_aug, size=(h, w),
+                                                                    mode='bilinear', align_corners=False, antialias=True)
+                        selected_aug = str(transform.__name__).lower()
+                        selected_aug += f"_{strength}"
 
-                    # extract watermark
-                    extract_time = time.time()
-                    outputs = wam.detect(imgs_aug, is_video=is_video)
-                    extract_time = time.time() - extract_time
-                    extract_times.append(extract_time)
-                    preds = outputs["preds"]
-                    mask_preds = preds[:, 0:1]  # b 1 ...
-                    bit_preds = preds[:, 1:]  # b k ...
+                        # extract watermark
+                        extract_time = time.time()
+                        outputs = wam.detect(imgs_aug, is_video=is_video)
+                        extract_time = time.time() - extract_time
+                        extract_times.append(extract_time / imgs_aug.shape[0])
+                        preds = outputs["preds"]
+                        mask_preds = preds[:, 0:1]  # b 1 ...
+                        bit_preds = preds[:, 1:]  # b k ...
 
-                    aug_log_stats = {}
-                    if params.nbits > 0:
-                        bit_accuracy_ = bit_accuracy(
-                            bit_preds,
-                            msgs,
-                            masks_aug
-                        ).nanmean().item()
+                        aug_log_stats = {}
+                        if params.nbits > 0:
+                            bit_accuracy_ = bit_accuracy(
+                                bit_preds,
+                                msgs,
+                                masks_aug
+                            ).nanmean().item()
 
-                    if params.nbits > 0:
-                        aug_log_stats[f'bit_acc'] = bit_accuracy_
+                        if params.nbits > 0:
+                            aug_log_stats[f'bit_acc'] = bit_accuracy_
 
-                    if params.lambda_det > 0:
-                        iou0 = iou(mask_preds, masks, label=0).mean().item()
-                        iou1 = iou(mask_preds, masks, label=1).mean().item()
-                        aug_log_stats.update({
-                            f'acc': accuracy(mask_preds, masks).mean().item(),
-                            f'miou': (iou0 + iou1) / 2,
-                        })
+                        if params.lambda_det > 0:
+                            iou0 = iou(mask_preds, masks, label=0).mean().item()
+                            iou1 = iou(mask_preds, masks, label=1).mean().item()
+                            aug_log_stats.update({
+                                f'acc': accuracy(mask_preds, masks).mean().item(),
+                                f'miou': (iou0 + iou1) / 2,
+                            })
 
-                    current_key = f"mask={mask_id}_aug={selected_aug}"
-                    aug_log_stats = {f"{k}_{current_key}": v for k,
-                                     v in aug_log_stats.items()}
+                        current_key = f"mask={mask_id}_aug={selected_aug}"
+                        aug_log_stats = {f"{k}_{current_key}": v for k,
+                                        v in aug_log_stats.items()}
 
-                    torch.cuda.synchronize()
-                    metric_logger.update(**aug_log_stats)
+                        torch.cuda.synchronize()
+                        metric_logger.update(**aug_log_stats)
+
+            metrics['extract_time'] = np.mean(extract_times)
+            torch.cuda.synchronize()
+            metric_logger.update(**metrics)
 
     metric_logger.synchronize_between_processes()
     print("Averaged {} stats:".format('val'), metric_logger)

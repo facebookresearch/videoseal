@@ -118,6 +118,7 @@ class Wam(nn.Module):
         # optionally create message
         if msgs is None:
             msgs = self.get_random_msg(imgs.shape[0])  # b x k
+            msgs = msgs.to(imgs.device)
 
         # interpolate
         imgs_res = imgs.clone()
