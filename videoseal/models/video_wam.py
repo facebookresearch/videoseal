@@ -82,7 +82,7 @@ class VideoWam(Wam):
         is_video: bool = True,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Generate watermarked images from the input images. 
+        Generate watermarked images from the input images.
         This model also supports batch of image watermarking and falls back on the normal Wam model
         """
         assert not (is_video and len(imgs.shape) not in [4, 5]), \
@@ -152,7 +152,7 @@ class VideoWam(Wam):
         imgs: torch.Tensor,
         msg: torch.Tensor = None,
     ) -> torch.Tensor:
-        """ 
+        """
         Does the forward pass of the encoder only.
         Rescale the watermark signal by a JND (just noticeable difference heatmap) that says where pixel can be changed without being noticed.
         The watermark signal is computed on the image downsampled to 256x... pixels, and then upsampled to the original size.
@@ -160,18 +160,25 @@ class VideoWam(Wam):
 
         Args:
             imgs: (torch.Tensor) Batched images with shape FxCxHxW
-            msg: (torch.Tensor) Batched messages with shape 1xL
+            msg: (torch.Tensor) Batched messages with shape 1xL or FxL
 
         Returns:
             imgs_w: (torch.Tensor) Batched watermarked images with shape FxCxHxW
         """
-        if msg is None:
-            msg = self.get_random_msg()
 
         # encode by chunk of 8 imgs, propagate the wm to 4 next imgs
         chunk_size = self.chunk_size  # n
+
+        if msg is None:
+            msg = self.get_random_msg()  # 1 x L
+        if msg.shape[0] > 1:
+            # Compare the first subtensor with all other subtensors
+            assert torch.all(torch.eq(msg, msg[0].unsqueeze(
+                0))), "video inference doesn't support multiple message per batch"
+            msg = msg[0:1]
+
         step_size = self.step_size
-        msg = msg.repeat(chunk_size, 1).to(imgs.device)  # 1 k -> n k
+        msg = msg.to(imgs.device)
 
         # initialize watermarked imgs
         imgs_w = torch.zeros_like(imgs)  # f 3 h w
@@ -186,10 +193,8 @@ class VideoWam(Wam):
             imgs_in_ck = all_imgs_in_ck[::step_size]  # n 3 h w
             # downsampling with fixed short edge
             imgs_in_ck = self.resize_to(imgs_in_ck)  # n 3 wm_h wm_w
-            # deal with last chunk that may have less than chunk_size imgs
-            if nimgs_in_ck < chunk_size:
-                msg = msg[:nimgs_in_ck]
-
+            # basically here msg should be 1XL , now repeat it for all imgs in chunk
+            msg = msg.repeat(nimgs_in_ck, 1)
             # get deltas for the chunk, and repeat them for each frame in the chunk
             deltas_in_ck = self.embedder(imgs_in_ck, msg)  # n 3 wm_h wm_w
             deltas_in_ck = torch.repeat_interleave(
@@ -220,12 +225,12 @@ class VideoWam(Wam):
         Performs the forward pass of the detector only.
         Rescales the input images to 256x... pixels and then computes the mask and the message.
         Args:
-            imgs (torch.Tensor): Batched images with shape FxCxHxW, where F is the number of frames, 
+            imgs (torch.Tensor): Batched images with shape FxCxHxW, where F is the number of frames,
                                     C is the number of channels, H is the height, and W is the width.
         Returns:
-            torch.Tensor: Predictions for each frame with shape Fx(K+1), 
-                            where K is the length of the binary message. The first column represents 
-                            the probability of the detection bit, and the remaining columns represent 
+            torch.Tensor: Predictions for each frame with shape Fx(K+1),
+                            where K is the length of the binary message. The first column represents
+                            the probability of the detection bit, and the remaining columns represent
                             the probabilities of each bit in the message.
         """
         imgs = self.resize_to(imgs)
@@ -247,15 +252,15 @@ class VideoWam(Wam):
     ) -> torch.Tensor:
         """
         Detects the message in a video and aggregates the predictions across frames.
-        This method is mainly used for downstream inference to simplify the interface. 
+        This method is mainly used for downstream inference to simplify the interface.
         If you want to obtain normal probabilities, use `video_detect` instead.
         Args:
-            imgs (torch.Tensor): Batched images with shape FxCxHxW, where F is the number of frames, 
+            imgs (torch.Tensor): Batched images with shape FxCxHxW, where F is the number of frames,
                     C is the number of channels, H is the height, and W is the width.
-            aggregation (str, optional): Aggregation method. Can be one of "avg", 
+            aggregation (str, optional): Aggregation method. Can be one of "avg",
                 "weighted_avg", or None. Defaults to "avg".
         Returns:
-            torch.Tensor: Aggregated binary message with shape K, 
+            torch.Tensor: Aggregated binary message with shape K,
                 where K is the length of the message.
         Note:
             If aggregation is None, returns the predictions for each frame without aggregation.
