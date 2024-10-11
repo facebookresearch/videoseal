@@ -1,4 +1,5 @@
 
+import logging
 import os
 import socket
 import subprocess
@@ -8,11 +9,7 @@ import torch
 import torch.distributed as dist
 
 def is_dist_avail_and_initialized():
-    if not dist.is_available():
-        return False
-    if not dist.is_initialized():
-        return False
-    return True
+    return dist.is_available() and dist.is_initialized()
 
 def get_rank():
     if not is_dist_avail_and_initialized():
@@ -38,28 +35,48 @@ def save_on_master(*args, **kwargs):
     if is_main_process():
         torch.save(*args, **kwargs)
 
-def setup_for_distributed(is_master):
+def setup_logging_for_distributed(is_master):
     """
     This function disables printing when not in master process
     """
     import sys
     import builtins as __builtin__
 
+    # Deactivate printing when not in master process
     builtin_print = __builtin__.print
     def print(*args, **kwargs):
         force = kwargs.pop('force', False)
         if is_master or force:
             builtin_print(*args, **kwargs)
-
     __builtin__.print = print
 
-    builtin_stderr_write = sys.stderr.write
-    def stderr_write(*args, **kwargs):
-        force = kwargs.pop('force', False)
-        if is_master or force:
-            builtin_stderr_write(*args)
+    # Remove all handlers associated with the root logger object
+    for handler in logging.root.handlers[:]:
+        logging.root.removeHandler(handler)
 
-    sys.stderr.write = stderr_write
+    class RankFormatter(logging.Formatter):
+        def format(self, record):
+            record.rank = dist.get_rank()
+            return super().format(record)
+
+    # Set up logging with rank
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.INFO)
+    handler = logging.StreamHandler()
+    formatter = RankFormatter('[rank%(rank)s]:%(asctime)s:%(levelname)s - %(message)s')
+    handler.setFormatter(formatter)
+    root_logger.addHandler(handler)
+    root_logger.propagate = False
+
+    # builtin_stderr_write = sys.stderr.write
+    # def stderr_write(*args, **kwargs):
+        # rank = get_rank()
+        # args = [f"[rank{rank}]: {a}" for a in args]
+        # builtin_stderr_write(*args, **kwargs)
+        # force = kwargs.pop('force', False)
+        # if is_master or force:
+        #     builtin_stderr_write(*args)
+    # sys.stderr.write = stderr_write
 
 def init_distributed_mode(params):
     """
@@ -115,9 +132,9 @@ def init_distributed_mode(params):
         params.master_addr = hostnames.split()[0].decode('utf-8')
         if params.master_port==-1:
             params.master_port = '19500'
-        assert 10001 <= params.master_port <= 20000 or params.world_size == 1
+        assert 10001 <= int(params.master_port) <= 20000 or params.world_size == 1
         print(PREFIX + "Master address: %s" % params.master_addr)
-        print(PREFIX + "Master port   : %i" % params.master_port)
+        print(PREFIX + "Master port   : %i" % int(params.master_port))
 
         # set environment variables for 'env://'
         os.environ['MASTER_ADDR'] = params.master_addr
@@ -194,7 +211,7 @@ def init_distributed_mode(params):
         # set GPU device
         torch.cuda.set_device(params.local_rank)
         dist.barrier()
-        setup_for_distributed(params.is_master)
+        setup_logging_for_distributed(params.is_master)
 
 
 

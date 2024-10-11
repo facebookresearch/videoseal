@@ -14,6 +14,8 @@ class Extractor(nn.Module):
 
     def __init__(self) -> None:
         super(Extractor, self).__init__()
+        self.preprocess = lambda x: x * 2 - 1
+        self.postprocess = lambda x: (x + 1) / 2
 
     def forward(
         self,
@@ -52,6 +54,7 @@ class SegmentationExtractor(Extractor):
         Returns:
             masks: (torch.Tensor) Batched masks with shape Bx(1+nbits)xHxW
         """
+        imgs = self.preprocess(imgs)  # put in [-1, 1]
         latents = self.image_encoder(imgs)
         masks = self.pixel_decoder(latents)
 
@@ -88,6 +91,7 @@ class DinoExtractor(Extractor):
         Returns:
             masks: (torch.Tensor) Batched masks with shape Bx(1+nbits)xHxW
         """
+        imgs = self.preprocess(imgs)  # put in [-1, 1]
         latents = self.image_encoder.get_intermediate_layers(
             imgs,
             reshape=True, n=self.hook_indices
@@ -120,6 +124,7 @@ class HiddenExtractor(Extractor):
         Returns:
             masks: (torch.Tensor) Batched masks with shape Bx(1+nbits)xHxW
         """
+        imgs = self.preprocess(imgs)  # put in [-1, 1]
         masks = self.hidden_decoder(imgs)
         return masks
 
@@ -148,6 +153,7 @@ class ConvnextExtractor(Extractor):
         Returns:
             masks: (torch.Tensor) Batched masks with shape Bx(1+nbits)xHxW
         """
+        imgs = self.preprocess(imgs)  # put in [-1, 1]
         latents = self.convnext(imgs)  # b c h/f w/f
         masks = self.pixel_decoder(latents)
         return masks

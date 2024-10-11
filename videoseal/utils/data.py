@@ -6,35 +6,42 @@ import omegaconf
 
 
 class Modalities:
-    IMAGE = 'image'
-    VIDEO = 'video'
-    HYBRID = 'hybrid'
+    IMAGE = 'img'
+    VIDEO = 'vid'
+    HYBRID = 'hyb'
 
 
 class LRUDict(OrderedDict):
     def __init__(self, maxsize=10):
         super().__init__()
         self.maxsize = maxsize
-        self.lock = threading.Lock()
+        self.lock = threading.RLock()  # Use a reentrant lock to avoid deadlocks
 
     def __setitem__(self, key, value):
         with self.lock:
+            # Insert the item in the dictionary
             super().__setitem__(key, value)
 
-        if len(self) >= self.maxsize:
-            # Clear 10% of the max size
-            num_to_clear = int(self.maxsize * 0.1)
-            keys_to_remove = list(self.keys())[:num_to_clear]
-            for key in keys_to_remove:
-                del self[key]
+            # If the dictionary exceeds max size, remove the least recently used items
+            if len(self) > self.maxsize:
+                self._cleanup()
 
     def __getitem__(self, key):
         with self.lock:
-            return super().__getitem__(key)
+            value = super().__getitem__(key)
+            # Move the accessed item to the end to mark it as recently used
+            return value
 
     def __delitem__(self, key):
         with self.lock:
-            return super().__delitem__(key)
+            super().__delitem__(key)
+
+    def _cleanup(self):
+        # Remove the least recently used items until we're back under the limit
+        # Clear 10% or at least 1
+        num_to_clear = max(1, int(0.1 * self.maxsize))
+        for _ in range(num_to_clear):
+            self.popitem(last=False)  # Remove from the start (LRU)
 
 
 def parse_dataset_params(params):

@@ -16,12 +16,17 @@ class Embedder(nn.Module):
 
     def __init__(self) -> None:
         super(Embedder, self).__init__()
+        self.preprocess = lambda x: x * 2 - 1
+        self.postprocess = lambda x: (x + 1) / 2
 
     def get_random_msg(self, bsz: int = 1, nb_repetitions=1) -> torch.Tensor:
         """
         Generate a random message
         """
-        return ...
+        return None
+
+    def get_last_layer(self) -> torch.Tensor:
+        return None
 
     def forward(
         self,
@@ -35,7 +40,7 @@ class Embedder(nn.Module):
         Returns:
             The watermarked images.
         """
-        return ...
+        return None
 
 
 class VAEEmbedder(Embedder):
@@ -59,6 +64,10 @@ class VAEEmbedder(Embedder):
     def get_random_msg(self, bsz: int = 1, nb_repetitions=1) -> torch.Tensor:
         return self.msg_processor.get_random_msg(bsz, nb_repetitions)  # b x k
 
+    def get_last_layer(self) -> torch.Tensor:
+        last_layer = self.decoder.conv_out.weight
+        return last_layer
+
     def forward(
         self,
         imgs: torch.Tensor,
@@ -71,13 +80,12 @@ class VAEEmbedder(Embedder):
         Returns:
             The watermarked images.
         """
-        if self.yuv:
-            imgs = rgb_to_yuv(imgs)
+        if self.yuv:  # only use the Y channel
+            imgs = rgb_to_yuv(imgs)[..., :1, :, :]
+        imgs = self.preprocess(imgs)  # put in [-1, 1]
         latents = self.encoder(imgs)
         latents_w = self.msg_processor(latents, msgs)
         imgs_w = self.decoder(latents_w)
-        if self.yuv:
-            imgs_w = yuv_to_rgb(imgs_w)
         return imgs_w
 
 
@@ -100,6 +108,10 @@ class UnetEmbedder(Embedder):
     def get_random_msg(self, bsz: int = 1, nb_repetitions=1) -> torch.Tensor:
         return self.msg_processor.get_random_msg(bsz, nb_repetitions)  # b x k
 
+    def get_last_layer(self) -> torch.Tensor:
+        last_layer = self.unet.outc.weight
+        return last_layer
+
     def forward(
         self,
         imgs: torch.Tensor,
@@ -112,11 +124,10 @@ class UnetEmbedder(Embedder):
         Returns:
             The watermarked images.
         """
-        if self.yuv:
-            imgs = rgb_to_yuv(imgs)
+        if self.yuv:  # only use the Y channel
+            imgs = rgb_to_yuv(imgs)[..., :1, :, :]
+        imgs = self.preprocess(imgs)  # put in [-1, 1]
         imgs_w = self.unet(imgs, msgs)
-        if self.yuv:
-            imgs_w = yuv_to_rgb(imgs_w)
         return imgs_w
 
 
@@ -128,13 +139,19 @@ class HiddenEmbedder(Embedder):
     def __init__(
         self,
         hidden_encoder: HiddenEncoder,
+        yuv: bool = False
     ) -> None:
         super(HiddenEmbedder, self).__init__()
         self.hidden_encoder = hidden_encoder
+        self.yuv = yuv
 
     def get_random_msg(self, bsz: int = 1, nb_repetitions=1) -> torch.Tensor:
         nbits = self.hidden_encoder.num_bits
         return torch.randint(0, 2, (bsz, nbits))
+
+    def get_last_layer(self) -> torch.Tensor:
+        last_layer = self.hidden_encoder.final_layer.weight
+        return last_layer
 
     def forward(
         self,
@@ -149,6 +166,9 @@ class HiddenEmbedder(Embedder):
             The watermarked images.
         """
         msgs = 2 * msgs.float() - 1
+        if self.yuv:  # only use the Y channel
+            imgs = rgb_to_yuv(imgs)[..., :1, :, :]
+        imgs = self.preprocess(imgs)
         return self.hidden_encoder(imgs, msgs)
 
 

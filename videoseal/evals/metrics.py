@@ -1,3 +1,7 @@
+"""
+To run
+    python -m videoseal.evals.metrics
+"""
 
 import io
 import math
@@ -10,18 +14,14 @@ import numpy as np
 import torch
 from pytorch_msssim import ssim as pytorch_ssim
 
-from videoseal.data.transforms import image_std, unnormalize_img, normalize_img
-
 def psnr(x, y):
     """ 
     Return PSNR 
     Args:
-        x: Image tensor with normalized values (≈ [-1,1])
-        y: Image tensor with normalized values (≈ [-1,1]), ex: original image
+        x: Image tensor with normalized values (≈ [0,1])
+        y: Image tensor with normalized values (≈ [0,1]), ex: original image
     """
-    delta = unnormalize_img(x) - unnormalize_img(y)
-    # delta = 255 * (delta * image_std.view(1, 3, 1, 1).to(x.device))
-    delta = 255 * delta
+    delta = 255 * (x - y)
     delta = delta.reshape(-1, x.shape[-3], x.shape[-2], x.shape[-1])  # BxCxHxW
     peak = 20 * math.log10(255.0)
     noise = torch.mean(delta**2, dim=(1,2,3))  # B
@@ -32,12 +32,11 @@ def ssim(x, y, data_range=1.0):
     """
     Return SSIM
     Args:
-        x: Image tensor with normalized values (≈ [-1,1])
-        y: Image tensor with normalized values (≈ [-1,1]), ex: original image
+        x: Image tensor with normalized values (≈ [0,1])
+        y: Image tensor with normalized values (≈ [0,1]), ex: original image
     """
-    x = unnormalize_img(x)
-    y = unnormalize_img(y)
     return pytorch_ssim(x, y, data_range=data_range, size_average=False)
+
 
 def iou(preds, targets, threshold=0.0, label=1):
     """
@@ -221,11 +220,12 @@ def bit_accuracy_mv(
 def vmaf_on_file(
     vid_o: str,
     vid_w: str,
-    ffmpeg_bin: str = 'ffmpeg',
+    ffmpeg_bin: str = '/private/home/pfz/09-videoseal/vmaf-dev/ffmpeg-git-20240629-amd64-static/ffmpeg',
 ) -> float:
     """
     Runs `ffmpeg -i vid_o.mp4 -i vid_w.mp4 -filter_complex libvmaf` and returns the score.
     """
+    # Execute the command and capture the output to get the VMAF score
     command = [
             ffmpeg_bin,
             '-i', vid_o,
@@ -233,35 +233,35 @@ def vmaf_on_file(
             '-filter_complex', 'libvmaf',
             '-f', 'null', '-'
         ]
-    # Execute the command and capture the output
     result = subprocess.run(command, text=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
+    vmaf_score = None
     for line in result.stderr.split('\n'):
         if "VMAF score:" in line:
             # numerical part of the VMAF score with regex
             match = re.search(r"VMAF score: ([0-9.]+)", line)
             if match:
-                return float(match.group(1))
-    return None
+                vmaf_score = float(match.group(1))
+                break
+    return vmaf_score
 
 def vmaf_on_tensor(
     vid_o: torch.Tensor,
     vid_w: torch.Tensor,
     codec='libx264', crf=23, fps=24, 
-    ffmpeg_bin: str = 'ffmpeg',
+    ffmpeg_bin: str = '/private/home/pfz/09-videoseal/vmaf-dev/ffmpeg-git-20240629-amd64-static/ffmpeg',
+    return_aux: bool = False
 ) -> float:
     """
     Computes the VMAF score between two videos represented as tensors, 
     and encoded using the specified codec.
 
     Args:
-        vid_o (torch.Tensor): Original video tensor with shape TxCxHxW with normalized values (≈ [-1,1])
-        vid_w (torch.Tensor): Watermarked video tensor with shape TxCxHxW with normalized values (≈ [-1,1])
+        vid_o (torch.Tensor): Original video tensor with shape TxCxHxW with normalized values (≈ [0,1])
+        vid_w (torch.Tensor): Watermarked video tensor with shape TxCxHxW with normalized values (≈ [0,1])
         codec (str): Codec to use for encoding the video
         crf (int): Constant Rate Factor for the codec
         fps (int): Frames per second of the video
     """
-    # Normalize
-    vid_o = unnormalize_img(vid_o)
     vid_o = vid_o.clamp(0, 1).permute(0, 2, 3, 1)  # t c h w -> t w h c
     vid_o = (vid_o * 255).to(torch.uint8).numpy()
     # Create an in-memory bytes buffer
@@ -284,8 +284,6 @@ def vmaf_on_tensor(
         container.mux(packet)
     container.close()
     
-    # Normalize
-    vid_w = unnormalize_img(vid_w)
     vid_w = vid_w.clamp(0, 1).permute(0, 2, 3, 1)  # t c h w -> t w h c
     vid_w = (vid_w * 255).to(torch.uint8).numpy()
     # Create an in-memory bytes buffer
@@ -319,7 +317,26 @@ def vmaf_on_tensor(
         tmp_file_o.flush()
         tmp_file_w.flush()
         # Compute VMAF score using the temporary files
-        return vmaf_on_file(tmp_file_o.name, tmp_file_w.name, ffmpeg_bin)
+        vmaf_score = vmaf_on_file(tmp_file_o.name, tmp_file_w.name, ffmpeg_bin)
+        if return_aux:
+            MB = 1024 * 1024
+            filesize_o = tmp_file_o.tell() / MB
+            duration_o = len(vid_o) / fps
+            bps_o = filesize_o / duration_o
+            filesize_w = tmp_file_w.tell() / MB
+            duration_w = len(vid_w) / fps
+            bps_w = filesize_w / duration_w
+            aux = {
+                'filesize_o': filesize_o,
+                'filesize_w': filesize_w,
+                'duration_o': duration_o,
+                'duration_w': duration_w,
+                'bps_o': bps_o,
+                'bps_w': bps_w
+            }
+            return vmaf_score, aux
+    return vmaf_score
+
     
 
 if __name__ == '__main__':
@@ -350,7 +367,7 @@ if __name__ == '__main__':
     except Exception as e:
         print(f"An error occurred: {str(e)}")
 
-    # # Test the vmaf function
+    # # # Test the vmaf function
     vid_o = 'assets/videos/sav_013754.mp4'
     vid_w = 'assets/videos/sav_013754.mp4'
     print("> test vmaf")
@@ -369,10 +386,10 @@ if __name__ == '__main__':
     from videoseal.data.loader import load_video
     vid_o = load_video(vid_o)
     vid_w = load_video(vid_w)
-    vid_o = normalize_img( vid_o / 255)
-    vid_w = normalize_img( vid_w / 255)
+    vid_o = vid_o / 255
+    vid_w = vid_w / 255
     try:
-        result = vmaf_on_tensor(vid_o, vid_w)
+        result = vmaf_on_tensor(vid_o, vid_w, return_aux=True)
         if result is not None:
             print("OK!", result)
         else:

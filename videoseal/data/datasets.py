@@ -26,7 +26,8 @@ from torch.utils.data import Dataset
 from torchvision import transforms
 from tqdm import tqdm
 
-from videoseal.data.transforms import get_transforms_segmentation
+from videoseal.data.transforms import (get_resize_transform,
+                                       get_transforms_segmentation)
 from videoseal.utils.data import LRUDict
 
 # Configure logging
@@ -61,8 +62,6 @@ class VideoDataset(Dataset):
         duration: Optional[float] = None,
         output_resolution: tuple = (256, 256),  # Desired output resolution
         num_workers: int = 1,  # numbers of cpu to run the preprocessing of each batch
-        # If True, flatten clips into individual frames
-        flatten_clips_to_frames: bool = True,
     ):
         self.folder_paths = folder_paths
         self.datasets_weights = datasets_weights
@@ -79,7 +78,6 @@ class VideoDataset(Dataset):
         self.duration = duration
         self.output_resolution = output_resolution
         self.num_workers = num_workers
-        self.flatten_clips_to_frames = flatten_clips_to_frames
 
         if VideoReader is None:
             raise ImportError(
@@ -111,19 +109,11 @@ class VideoDataset(Dataset):
 
         # Initialize video buffer
         # Set the maximum size of the buffer
-        self.video_buffer = LRUDict(maxsize=4)
+        self.video_buffer = LRUDict(maxsize=150)
 
     def __getitem__(self, index):
-        if self.flatten_clips_to_frames:
-            # Calculate the index of the videofile, clip, and frame
-            videofile_index = index // (self.num_clips * self.frames_per_clip)
-            clip_index = (index % (self.num_clips *
-                          self.frames_per_clip)) // self.frames_per_clip
-            frame_index = index % self.frames_per_clip
-        else:
-            # Calculate the index of the sample and clip
-            videofile_index = index // self.num_clips
-            clip_index = index % self.num_clips
+        videofile_index = index // self.num_clips
+        clip_index = index % self.num_clips
 
         video_file = self.videofiles[videofile_index]
 
@@ -163,55 +153,26 @@ class VideoDataset(Dataset):
 
             # Store the loaded video in the buffer
             self.video_buffer[video_file] = (buffer, frames_indices)
-            # print(
-            #     f" added {video_file} to video buffer now videobuffer == {len(self.video_buffer)}")
-
-        #     print(
-        #         f" added {video_file} to video buffer now videobuffer == {len(self.video_buffer)}",
-        #         f"Process ID: {os.getpid()}, Thread ID: {threading.current_thread().ident}",
-        #         f"Function: {inspect.stack()[1].function}, Line: {inspect.stack()[1].lineno}"
-        #     )
-        # else:
-        #     print(
-        #         f"FOUND {video_file} to video buffer now videobuffer == {len(self.video_buffer)}")
 
         # load directly from buffer here should be processed already
         buffer, frames_positions_in_clips = self.video_buffer[video_file]
 
-        if self.flatten_clips_to_frames:
-            # Return a single frame and its index
-            frame = buffer[clip_index, frame_index]
-            frame_index_in_video = frames_positions_in_clips[clip_index][frame_index]
+        # Return a clip and its frame indices
+        clip = buffer[clip_index]
+        clip_frame_indices = frames_positions_in_clips[clip_index]
 
-            if self.transform is not None:
-                frame = self.apply_transform_safe(self.transform, frame)
+        if self.transform is not None:
+            clip = torch.stack([self.transform(frame) for frame in clip])
 
-            # Get MASKS
-            # TODO: Dummy mask of 1s
-            # TODO: implement mask transforms
-            mask = torch.ones_like(frame[0:1, ...])
-            if self.mask_transform is not None:
-                mask = self.apply_transform_safe(self.mask_transform, mask)
+        # Get MASKS
+        # TODO: Dummy mask of 1s
+        # TODO: implement mask transforms
+        mask = torch.ones_like(clip[:, 0:1, ...])
+        if self.mask_transform is not None:
+            mask = torch.stack([self.mask_transform(one_mask)
+                                for one_mask in mask])
 
-            return frame, mask, frame_index_in_video
-        else:
-            # Return a clip and its frame indices
-            clip = buffer[clip_index]
-            clip_frame_indices = frames_positions_in_clips[clip_index]
-
-            if self.transform is not None:
-                clip = torch.stack([self.apply_transform_safe(
-                    self.transform, frame) for frame in clip])
-
-            # Get MASKS
-            # TODO: Dummy mask of 1s
-            # TODO: implement mask transforms
-            mask = torch.ones_like(clip[:, 0:1, ...])
-            if self.mask_transform is not None:
-                mask = torch.stack([self.apply_transform_safe(self.mask_transform, one_mask)
-                                    for one_mask in mask])
-
-            return clip, mask, clip_frame_indices
+        return clip, mask, clip_frame_indices
 
     def loadvideo_decord(self, sample):
         """ Load video content using Decord """
@@ -311,40 +272,8 @@ class VideoDataset(Dataset):
 
         return buffer, clip_indices
 
-    # Before applying the transformation, we need to ensure that the input frame is in the correct format.
-    # Some transformations require PIL images, while others require tensors.
-    def apply_transform_safe(self, my_transform, frame):
-        """
-        Applies the transformation to the input frame and ensures that the output is a tensor.
-
-        Args:
-            frame: The input frame to be transformed.
-
-        Returns:
-            The transformed frame as a tensor.
-        """
-
-        # Check if transform requires PIL image
-        if any(isinstance(t, (transforms.Resize, transforms.CenterCrop, transforms.ColorJitter)) for t in self.transform.transforms):
-            # Convert frame to PIL image
-            frame = transforms.ToPILImage()(frame)  # Convert to PIL image
-
-        # Apply transformation
-        frame = my_transform(frame)
-
-        # After applying the transformation, we need to ensure that the output is a tensor.
-        # If the output is not a tensor, we convert it to a tensor using ToTensor().
-        if not isinstance(frame, torch.Tensor):
-            # Convert to tensor
-            frame = transforms.ToTensor()(frame)  # Convert to tensor
-
-        return frame
-
     def __len__(self):
-        if self.flatten_clips_to_frames:
-            return len(self.videofiles) * self.num_clips * self.frames_per_clip
-        else:
-            return len(self.videofiles) * self.num_clips
+        return len(self.videofiles) * self.num_clips
 
 
 if __name__ == "__main__":
@@ -353,7 +282,7 @@ if __name__ == "__main__":
     # Specify the path to the folder containing the MP4 files
     video_folder_path = "./assets/videos"
 
-    train_transform, train_mask_transform, val_transform, val_mask_transform = get_transforms_segmentation(
+    train_transform, train_mask_transform, val_transform, val_mask_transform = get_resize_transform(
         img_size=256)
 
    # Create an instance of the VideoDataset
@@ -364,7 +293,6 @@ if __name__ == "__main__":
         num_clips=10,
         output_resolution=(1250, 1250),
         num_workers=50,
-        flatten_clips_to_frames=True,
         transform=train_transform
     )
 

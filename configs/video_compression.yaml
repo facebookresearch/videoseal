@@ -4,20 +4,20 @@ masks:
 
 # The probability of applying the augmentation.
 augs:
-  identity:           1
-  jpeg:               1
-  resize:             1
-  crop:               1
-  rotate:             1
-  hflip:              1
-  perspective:        1
-  gaussian_blur:      1
-  median_filter:      1
-  brightness:         1
-  contrast:           1
-  saturation:         1
-  hue:                1
-  video_compression:  0.5
+  identity:       0
+  jpeg:           0
+  resize:         0
+  crop:           0
+  video_compression: 1
+  rotate:         0
+  hflip:          0
+  perspective:    0
+  gaussian_blur:  0
+  median_filter:  0
+  brightness:     0
+  contrast:       0
+  saturation:     0
+  hue:            0
 
 augs_params:
   resize:

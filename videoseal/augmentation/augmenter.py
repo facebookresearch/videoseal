@@ -10,14 +10,13 @@ from PIL import Image
 from torch import nn
 from torchvision.utils import save_image
 
-from videoseal.utils.data import Modalities
-
-from ..data.transforms import default_transform, unnormalize_img
+from ..data.transforms import default_transform
 from .geometric import (Crop, HorizontalFlip, Identity, Perspective, Resize,
                         Rotate)
 from .masks import get_mask_embedder
 from .valuemetric import (JPEG, Brightness, Contrast, GaussianBlur, Hue,
                           MedianFilter, Saturation)
+from .video import VideoCompressorAugmenter
 
 name2aug = {
     'rotate': Rotate,
@@ -33,6 +32,7 @@ name2aug = {
     'contrast': Contrast,
     'saturation': Saturation,
     'hue': Hue,
+    'video_compression': VideoCompressorAugmenter,
     # 'bmshj2018': bmshj2018,
 }
 
@@ -57,13 +57,10 @@ class Augmenter(nn.Module):
         )
 
         # create augs
-        self.post_augs, self.post_probs = self.parse_augmentations(
+        self.augs, self.aug_probs = self.parse_augmentations(
             augs=augs,
             augs_params=augs_params
         )
-
-        # default all augmentations work with video and images
-        self.modality = Modalities.HYBRID
 
     def parse_augmentations(
         self,
@@ -97,9 +94,14 @@ class Augmenter(nn.Module):
         probs = [prob / total_prob for prob in probs]
         return augmentations, torch.tensor(probs)
 
-    def post_augment(self, image, mask, do_resize=True):
-        index = torch.multinomial(self.post_probs, 1).item()
-        selected_aug = self.post_augs[index]
+    def augment(self, image, mask, is_video, do_resize=True):
+        
+        if not is_video:  # replace video compression with identity
+            augs = [aug if aug.__class__.__name__ != 'VideoCompressorAugmenter' else Identity() for aug in self.augs]
+        else:
+            augs = self.augs
+        index = torch.multinomial(self.aug_probs, 1).item()
+        selected_aug = augs[index]
         if not do_resize:
             image, mask = selected_aug(image, mask)
         else:
@@ -117,6 +119,7 @@ class Augmenter(nn.Module):
         imgs_w: torch.Tensor,
         imgs: torch.Tensor,
         masks: torch.Tensor,
+        is_video=True
     ) -> torch.Tensor:
         """
         Args:
@@ -134,21 +137,21 @@ class Augmenter(nn.Module):
             # watermark masking
             imgs_aug = imgs_w * mask_targets + imgs * (1 - mask_targets)
             # image augmentations
-            imgs_aug, mask_targets, selected_aug = self.post_augment(
-                imgs_aug, mask_targets)
+            imgs_aug, mask_targets, selected_aug = self.augment(
+                imgs_aug, mask_targets, is_video)
             return imgs_aug, mask_targets, selected_aug
         else:
-            ### TOM CODE ###
+            # no mask
             mask_targets = torch.ones_like(imgs_w)[:, 0:1, :, :]
-            imgs_aug, mask_targets, selected_aug = self.post_augment(
-                imgs_w, mask_targets)
+            imgs_aug, mask_targets, selected_aug = self.augment(
+                imgs_w, mask_targets, is_video)
             # imgs_aug = imgs_w
             return imgs_aug, mask_targets, selected_aug
 
     def __repr__(self) -> str:
         # print the augmentations and their probabilities
-        augs = [aug.__class__.__name__ for aug in self.post_augs]
-        return f"Augmenter(augs={augs}, probs={self.post_probs})"
+        augs = [aug.__class__.__name__ for aug in self.augs]
+        return f"Augmenter(augs={augs}, probs={self.aug_probs})"
 
 
 if __name__ == "__main__":
@@ -201,7 +204,7 @@ if __name__ == "__main__":
     os.makedirs(output_dir, exist_ok=True)
     for ii in range(10):
         imgs_aug, mask_targets, selected_aug = augmenter(imgs_w, imgs)
-        save_image(unnormalize_img(imgs_aug).clamp(0, 1),
+        save_image(imgs_aug.clamp(0, 1),
                    os.path.join(output_dir, f"imgs_aug_{ii}.png"), nrow=2)
         save_image(mask_targets, os.path.join(
             output_dir, f"mask_targets_{ii}.png"), nrow=2)

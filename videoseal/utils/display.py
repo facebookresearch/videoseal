@@ -2,15 +2,12 @@ import os
 from typing import Union
 
 import cv2
-import numpy as np
 import torch
 import torchvision
 from torch import Tensor
 
-from videoseal.data.transforms import normalize_img, unnormalize_img
 
-
-def save_vid(vid: Tensor, out_path: str, fps: int, normalize: bool = True) -> None:
+def save_vid(vid: Tensor, out_path: str, fps: int) -> None:
     """
     Saves a video tensor to a file.
 
@@ -31,10 +28,6 @@ def save_vid(vid: Tensor, out_path: str, fps: int, normalize: bool = True) -> No
     assert vid.dim() == 4, "Input video tensor must have 4 dimensions (T, C, H, W)"
     assert vid.size(1) == 3, "Video tensor's channel size must be 3"
 
-    # Normalize the video tensor if required
-    if normalize:
-        vid = unnormalize_img(vid)
-
     # Clamp the values and convert to numpy
     vid = vid.clamp(0, 1)
 
@@ -43,8 +36,7 @@ def save_vid(vid: Tensor, out_path: str, fps: int, normalize: bool = True) -> No
     vid = vid.to(torch.uint8).cpu()
 
     # Write the video file
-    torchvision.io.write_video(
-        out_path, vid, fps=fps, video_codec='libx264', options={'crf': '21'})
+    torchvision.io.write_video(out_path, vid, fps=fps)
 
 
 def get_fps(video_path: Union[str, os.PathLike]) -> tuple:

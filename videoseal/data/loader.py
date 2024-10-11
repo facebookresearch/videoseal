@@ -100,7 +100,7 @@ class CocoImageIDWrapper(CocoDetection):
         self.max_nb_masks = max_nb_masks
         self.multi_w = multi_w
 
-    def __getitem__(self, index: int) -> tuple[torch.Tensor, np.ndarray]:
+    def __getitem__(self, index: int) -> tuple[torch.Tensor, torch.Tensor]:
         if not isinstance(index, int):
             raise ValueError(
                 f"Index must be of type integer, got {type(index)} instead.")
@@ -110,6 +110,9 @@ class CocoImageIDWrapper(CocoDetection):
         mask = self._load_mask(id)
         if mask is None:
             return None  # Skip this image if no valid mask is available
+
+        # convert PIL to tensor
+        img = ToTensor()(img)
 
         img, mask = self.transforms(img, mask)
         return img, mask

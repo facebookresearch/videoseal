@@ -10,11 +10,11 @@ from torch import nn
 from torch.nn import functional as F
 from torchvision import transforms
 
-from videoseal.augmentation.augmenter import Augmenter
-from videoseal.models.embedder import Embedder
-from videoseal.models.extractor import Extractor
-from videoseal.models.wam import Wam
-from videoseal.modules.jnd import JND
+from ..augmentation.augmenter import Augmenter
+from ..models.embedder import Embedder
+from ..models.extractor import Extractor
+from ..models.wam import Wam
+from ..modules.jnd import JND
 
 
 class VideoWam(Wam):
@@ -42,7 +42,8 @@ class VideoWam(Wam):
         attenuation: JND = None,
         scaling_w: float = 1.0,
         scaling_i: float = 1.0,
-        frame_intermediate_size: int = 256,
+        img_size: int = 256,
+        clamp: bool = True,
         chunk_size: int = 8,
         step_size: int = 4,
     ) -> None:
@@ -55,7 +56,7 @@ class VideoWam(Wam):
             attenuation (JND, optional): The JND model to attenuate the watermark distortion. Defaults to None.
             scaling_w (float, optional): The scaling factor for the watermark. Defaults to 1.0.
             scaling_i (float, optional): The scaling factor for the image. Defaults to 1.0.
-            frame_intermediate_size (int, optional): The size of the frame to resize to intermediately while generating the watermark then upscale, the final video / image size is kept the same. Defaults to 256.
+            img_size (int, optional): The size of the frame to resize to intermediately while generating the watermark then upscale, the final video / image size is kept the same. Defaults to 256.
             chunk_size (int, optional): The number of frames/imgs to encode at a time. Defaults to 8.
             step_size (int, optional): The number of frames/imgs to propagate the watermark to. Defaults to 4.
         """
@@ -66,12 +67,12 @@ class VideoWam(Wam):
             attenuation=attenuation,
             scaling_w=scaling_w,
             scaling_i=scaling_i,
+            img_size=img_size,
+            clamp=clamp,
         )
         # video settings
         self.chunk_size = chunk_size  # encode 8 frames/imgs at a time
         self.step_size = step_size  # propagate the wm to 4 next frame/img
-        self.resize_to = transforms.Resize(
-            (frame_intermediate_size, frame_intermediate_size), antialias=True)
 
     def forward(
         self,
@@ -82,8 +83,11 @@ class VideoWam(Wam):
         is_video: bool = True,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Generate watermarked images from the input images. 
-        This model also supports batch of image watermarking and falls back on the normal Wam model
+        Does the full forward pass of the WAM model (used for training).
+        (1) Generates watermarked images from the input images and messages.
+        (2) Augments the watermarked images.
+        (3) Detects the watermark in the augmented images.
+        Falls back to the parent class for batch of images.
         """
         assert not (is_video and len(imgs.shape) not in [4, 5]), \
             "If is_video is True, input shape should be [b, frames, c, h, w] or [frames, c, h, w]"
@@ -102,43 +106,64 @@ class VideoWam(Wam):
                 video_frames = imgs[i]  # [frames, c, h, w]
                 video_masks = masks[i] if masks is not None else None
                 video_msgs = msgs[i] if msgs is not None else None
-                output = self._video_forward(
+                output = self.video_forward(
                     video_frames, video_masks, video_msgs)
                 outputs.append(output)
             return outputs
         elif len(imgs.shape) == 4:
             # single video, represented as a sequence of frames (images)
             # imgs shape: [frames, c, h, w], where frames is the number of frames in the video
-            return self._video_forward(imgs, masks, msgs)
+            return self.video_forward(imgs, masks, msgs)
         else:
             raise ValueError("Invalid input shape")
 
-    def _video_forward(
+    def video_embedder(
+        self,
+        imgs: torch.Tensor,
+        msg: torch.Tensor,
+    ) -> torch.Tensor:
+        """
+        Generates deltas one every step_size frames, then repeats for the next step_size frames.
+        """
+        # TODO: deal with the case where the embedder predicts images instead of deltas
+        msg = msg.repeat(len(imgs) // self.step_size, 1)  # n k
+        deltas_w = self.embedder(imgs[::self.step_size], msg)  # n 3 h w
+        deltas_w = torch.repeat_interleave(
+            deltas_w, self.step_size, dim=0)
+        return deltas_w[:len(imgs)]  # f 3 h w
+
+    def video_forward(
         self,
         imgs: torch.Tensor,  # [frames, c, h, w] for a single video
         masks: torch.Tensor,
-        msg: torch.Tensor = None,  # 1 message per video
+        msgs: torch.Tensor = None,  # 1 message per video
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Generate watermarked video from the input video imgs.
         """
         # create message 1 message per video but repeat for all frames
         # we need this to calcualte the loss
-        if msg is None:
-            msg = self.get_random_msg()  # 1 x k
-            msg = msg.to(imgs.device)
-
-        # embed watermark
-        imgs_w = self.video_embed(imgs, msg)
+        if msgs is None:
+            msgs = self.get_random_msg()  # 1 x k
+        else:
+            assert msgs.shape[0] == 1, "Message should be unique"
+        msgs = msgs.to(imgs.device)
+        # generate watermarked images
+        deltas_w = self.video_embedder(imgs, msgs)  # frames c h w
+        imgs_w = self.scaling_i * imgs + self.scaling_w * deltas_w
+        if self.attenuation is not None:
+            imgs_w = self.attenuation(imgs, imgs_w)
+        if self.clamp:
+            imgs_w = imgs_w.clamp(0, 1)
         # augment
         imgs_aug, masks, selected_aug = self.augmenter(
-            imgs_w, imgs, masks)
+            imgs_w, imgs, masks, is_video=True)
         # detect watermark
-        preds = self.video_detect(imgs_aug)
-
+        preds = self.detector(imgs_aug)
+        # create and return outputs
         outputs = {
             # message per video but repeated for batchsize: b x k
-            "msgs": msg.expand(imgs.shape[0], -1),
+            "msgs": msgs.expand(imgs.shape[0], -1),
             "masks": masks,  # augmented masks: frames 1 h w
             "imgs_w": imgs_w,  # watermarked imgs: frames c h w
             "imgs_aug": imgs_aug,  # augmented imgs: frames c h w
@@ -147,120 +172,126 @@ class VideoWam(Wam):
         }
         return outputs
 
-    def video_embed(
+    def embed(
         self,
         imgs: torch.Tensor,
-        msg: torch.Tensor = None,
+        msgs: torch.Tensor = None,
+        is_video: bool = True,
     ) -> torch.Tensor:
         """ 
-        Does the forward pass of the encoder only.
-        Rescale the watermark signal by a JND (just noticeable difference heatmap) that says where pixel can be changed without being noticed.
-        The watermark signal is computed on the image downsampled to 256x... pixels, and then upsampled to the original size.
-        The watermark signal is computed every step_size imgs and propagated to the next step_size imgs.
-
-        Args:
-            imgs: (torch.Tensor) Batched images with shape FxCxHxW
-            msg: (torch.Tensor) Batched messages with shape 1xL
-
-        Returns:
-            imgs_w: (torch.Tensor) Batched watermarked images with shape FxCxHxW
+        Generates watermarked videos from the input images and messages (used for inference).
+        Videos may be arbitrarily sized.
         """
-        if msg is None:
-            msg = self.get_random_msg()
+        if not is_video:
+            # fallback on parent class for batch of images
+            return super().embed(imgs, msgs)
+        if msgs is None:
+            msgs = self.get_random_msg()  # 1 x k
+        else:
+            assert msgs.shape[0] == 1, "Message should be unique"
+        msgs = msgs.repeat(self.chunk_size, 1)  # 1 k -> n k
 
-        # encode by chunk of 8 imgs, propagate the wm to 4 next imgs
-        chunk_size = self.chunk_size  # n
-        step_size = self.step_size
-        msg = msg.repeat(chunk_size, 1).to(imgs.device)  # 1 k -> n k
+        # encode by chunk of cksz imgs, propagate the wm to spsz next imgs
+        chunk_size = self.chunk_size  # n=cksz
+        step_size = self.step_size  # spsz
 
         # initialize watermarked imgs
         imgs_w = torch.zeros_like(imgs)  # f 3 h w
 
+        # chunking is necessary to avoid memory issues (when too many frames)
         for ii in range(0, len(imgs[::step_size]), chunk_size):
             nimgs_in_ck = min(chunk_size, len(imgs[::step_size]) - ii)
-            start = ii*step_size
+            start = ii * step_size
             end = start + nimgs_in_ck * step_size
             all_imgs_in_ck = imgs[start: end, ...]  # f 3 h w
 
             # choose one frame every step_size
             imgs_in_ck = all_imgs_in_ck[::step_size]  # n 3 h w
-            # downsampling with fixed short edge
-            imgs_in_ck = self.resize_to(imgs_in_ck)  # n 3 wm_h wm_w
+
             # deal with last chunk that may have less than chunk_size imgs
             if nimgs_in_ck < chunk_size:
-                msg = msg[:nimgs_in_ck]
+                msgs = msgs[:nimgs_in_ck]
 
             # get deltas for the chunk, and repeat them for each frame in the chunk
-            deltas_in_ck = self.embedder(imgs_in_ck, msg)  # n 3 wm_h wm_w
+            outputs = super().embed(imgs_in_ck, msgs)  # n 3 h w
+            deltas_in_ck = outputs["deltas_w"]  # n 3 h w
             deltas_in_ck = torch.repeat_interleave(
-                deltas_in_ck, step_size, dim=0)  # f 3 wm_h wm_w
+                deltas_in_ck, step_size, dim=0)  # f 3 h w
+            
             # at the end of video there might be more deltas than needed
             deltas_in_ck = deltas_in_ck[:len(all_imgs_in_ck)]
 
-            # upsampling
-            deltas_in_ck = nn.functional.interpolate(
-                deltas_in_ck, size=imgs.shape[-2:], mode='bilinear', align_corners=True)
-
             # create watermarked imgs
-            all_imgs_in_ck_w = self.scaling_i * \
-                all_imgs_in_ck + self.scaling_w * deltas_in_ck
+            all_imgs_in_ck_w = self.scaling_i * all_imgs_in_ck + self.scaling_w * deltas_in_ck
             if self.attenuation is not None:
-                all_imgs_in_ck_w = self.attenuation(
-                    all_imgs_in_ck, all_imgs_in_ck_w)
-            # all_imgs_in_ck = all_imgs_in_ck.cpu()  # move to cpu to save gpu memory
+                all_imgs_in_ck_w = self.attenuation(all_imgs_in_ck, all_imgs_in_ck_w)
+            if self.clamp:
+                all_imgs_in_ck_w = all_imgs_in_ck_w.clamp(0, 1)
+            
             imgs_w[start: end, ...] = all_imgs_in_ck_w  # n 3 h w
+            
+        outputs = {
+            "imgs_w": imgs_w,  # watermarked imgs: f 3 h w
+            "msgs": msgs[0:1].repeat(len(imgs), 1),  # original messages: f k
+        }
+        return outputs
 
-        return imgs_w
-
-    def video_detect(
+    def detect(
         self,
         imgs: torch.Tensor,
+        is_video: bool = True,
     ) -> torch.Tensor:
         """
         Performs the forward pass of the detector only.
         Rescales the input images to 256x... pixels and then computes the mask and the message.
         Args:
-            imgs (torch.Tensor): Batched images with shape FxCxHxW, where F is the number of frames, 
+            imgs (torch.Tensor): Batched images with shape FxCxHxW, where F is the number of frames,
                                     C is the number of channels, H is the height, and W is the width.
         Returns:
-            torch.Tensor: Predictions for each frame with shape Fx(K+1), 
-                            where K is the length of the binary message. The first column represents 
-                            the probability of the detection bit, and the remaining columns represent 
+            torch.Tensor: Predictions for each frame with shape Fx(K+1),
+                            where K is the length of the binary message. The first column represents
+                            the probability of the detection bit, and the remaining columns represent
                             the probabilities of each bit in the message.
         """
-        imgs = self.resize_to(imgs)
-        chunksize = 16  # n
+        if not is_video:
+            # fallback on parent class for batch of images
+            return super().detect(imgs)
         all_preds = []
-        for ii in range(0, len(imgs), chunksize):
-            nimgs_in_ck = min(chunksize, len(imgs) - ii)
-            preds = self.detector(
+        for ii in range(0, len(imgs), self.chunk_size):
+            nimgs_in_ck = min(self.chunk_size, len(imgs) - ii)
+            outputs = super().detect(
                 imgs[ii:ii+nimgs_in_ck]
             )
+            preds = outputs["preds"]
             all_preds.append(preds)  # n k ..
         preds = torch.cat(all_preds, dim=0)  # f k ..
-        return preds
+        outputs = {
+            "preds": preds,  # predicted masks and/or messages: f (1+nbits) h w
+        }
+        return outputs
 
-    def video_detect_and_aggregate(
+    def detect_and_aggregate(
         self,
         imgs: torch.Tensor,
         aggregation: str = "avg",
     ) -> torch.Tensor:
         """
         Detects the message in a video and aggregates the predictions across frames.
-        This method is mainly used for downstream inference to simplify the interface. 
+        This method is mainly used for downstream inference to simplify the interface.
         If you want to obtain normal probabilities, use `video_detect` instead.
         Args:
-            imgs (torch.Tensor): Batched images with shape FxCxHxW, where F is the number of frames, 
+            imgs (torch.Tensor): Batched images with shape FxCxHxW, where F is the number of frames,
                     C is the number of channels, H is the height, and W is the width.
-            aggregation (str, optional): Aggregation method. Can be one of "avg", 
+            aggregation (str, optional): Aggregation method. Can be one of "avg",
                 "weighted_avg", or None. Defaults to "avg".
         Returns:
-            torch.Tensor: Aggregated binary message with shape K, 
+            torch.Tensor: Aggregated binary message with shape K,
                 where K is the length of the message.
         Note:
             If aggregation is None, returns the predictions for each frame without aggregation.
         """
-        preds = self.video_detect(imgs)
+        outputs = self.detect(imgs)
+        preds = outputs["preds"]
         mask_preds = preds[:, 0:1]  # binary detection bit (not used for now)
         bit_preds = preds[:, 1:]  # b k ..
         if aggregation is None:
