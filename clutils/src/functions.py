@@ -1,4 +1,5 @@
-import os, subprocess
+import os
+import subprocess
 import textwrap
 import random
 import argparse
@@ -6,7 +7,7 @@ from math import ceil
 dirname = os.path.dirname
 
 IS_FAIR_CLUSTER = os.path.exists("/checkpoint")
-IS_AWS_CLUSTER = os.path.exists("/checkpoints")
+IS_AWS_CLUSTER = os.path.exists("/fsx-checkpoints")
 IS_NEW_CLUSTER = IS_FAIR_CLUSTER or IS_AWS_CLUSTER
 
 FALSY_STRINGS = ['off', 'false', '0']
@@ -36,7 +37,8 @@ def replaceMacros(params):
             a, b = [int(x) for x in v[pos_begin:pos_end].split(",")]
             new_params[k] = random.randint(a, b)
         elif type(v) is str and v == '__SEED__()':
-            new_params[k] = int.from_bytes(os.urandom(8), byteorder="big", signed=True)
+            new_params[k] = int.from_bytes(
+                os.urandom(8), byteorder="big", signed=True)
         else:
             new_params[k] = v
 
@@ -53,9 +55,11 @@ def getuser():
 
 
 def getName(jobid):
-    r = subprocess.check_output(["sacct --format=jobname%%200 -j %d" % jobid], shell=True)
+    r = subprocess.check_output(
+        ["sacct --format=jobname%%200 -j %d" % jobid], shell=True)
 
     return r.split("\n")[2].rstrip().lstrip()
+
 
 def getStatus(jobid):
     r = subprocess.check_output(["sacct -j %d" % jobid], shell=True)
@@ -69,6 +73,7 @@ def savelist(fname, x):
         for val in x:
             f.write("%s\n" % val)
 
+
 def loadlist(fname):
     l = []
     with open(fname) as f:
@@ -76,6 +81,7 @@ def loadlist(fname):
             l.append(line.rstrip())
 
     return l
+
 
 def ensure_dir(path):
     if not os.path.exists(path):
@@ -91,8 +97,8 @@ def cmdPre(config, params, name, log_stdout, log_stderr, run_filename, pooling=1
 
 def cmdPreOld(config, params, name, log_stdout, log_stderr, run_filename):
     s = ""
-    s +='LOG_STDOUT="%s"\n' % log_stdout
-    s +='LOG_STDERR="%s"\n' % log_stderr
+    s += 'LOG_STDOUT="%s"\n' % log_stdout
+    s += 'LOG_STDERR="%s"\n' % log_stderr
     s += textwrap.dedent("""\
     code_dir=$(mktemp -d)
     cd $code_dir
@@ -112,12 +118,12 @@ def cmdPreOld(config, params, name, log_stdout, log_stderr, run_filename):
 
     if "cat" in config:
         for catfile in config["cat"]:
-            s +="cat %s >> $LOG_STDOUT\n" % catfile
+            s += "cat %s >> $LOG_STDOUT\n" % catfile
     if "precmd" in config:
         for cmd in config["precmd"]:
-            s +="%s\n" % cmd
+            s += "%s\n" % cmd
     s += "which python >> $LOG_STDOUT\n"
-    s +='echo "---Beginning program ---" >> $LOG_STDOUT\n'
+    s += 'echo "---Beginning program ---" >> $LOG_STDOUT\n'
     s += "PYTHONUNBUFFERED=yes "
     if "preload" in config:
         s += config["preload"] + " "
@@ -154,7 +160,6 @@ def linearize_params(params):
                 s += f"--{k} {v} "
 
     return s
-
 
 
 def cmdPreNew(config, params, name, log_stdout, log_stderr, run_filename, pooling=1, num_expes=-1):
@@ -227,7 +232,7 @@ def cmdPreNew(config, params, name, log_stdout, log_stderr, run_filename, poolin
     echo "Git hash:" >> $LOG_STDOUT
     echo $(git rev-parse HEAD 2> /dev/null) >> $LOG_STDOUT
 
-    """)#.format(run_filename=run_filename)
+    """)  # .format(run_filename=run_filename)
 
     if "cat" in config:
         for catfile in config["cat"]:
@@ -238,7 +243,7 @@ def cmdPreNew(config, params, name, log_stdout, log_stderr, run_filename, poolin
             s += f"{cmd}\n"
 
     s += "which python >> $LOG_STDOUT\n"
-    s +='echo "---Beginning program ---" >> $LOG_STDOUT\n'
+    s += 'echo "---Beginning program ---" >> $LOG_STDOUT\n'
     s += 'start_time=$SECONDS'
     s += "PYTHONUNBUFFERED=yes "
     if "preload" in config:

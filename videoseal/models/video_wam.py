@@ -239,12 +239,12 @@ class VideoWam(Wam):
         Performs the forward pass of the detector only.
         Rescales the input images to 256x... pixels and then computes the mask and the message.
         Args:
-            imgs (torch.Tensor): Batched images with shape FxCxHxW, where F is the number of frames, 
+            imgs (torch.Tensor): Batched images with shape FxCxHxW, where F is the number of frames,
                                     C is the number of channels, H is the height, and W is the width.
         Returns:
-            torch.Tensor: Predictions for each frame with shape Fx(K+1), 
-                            where K is the length of the binary message. The first column represents 
-                            the probability of the detection bit, and the remaining columns represent 
+            torch.Tensor: Predictions for each frame with shape Fx(K+1),
+                            where K is the length of the binary message. The first column represents
+                            the probability of the detection bit, and the remaining columns represent
                             the probabilities of each bit in the message.
         """
         if not is_video:
@@ -271,15 +271,15 @@ class VideoWam(Wam):
     ) -> torch.Tensor:
         """
         Detects the message in a video and aggregates the predictions across frames.
-        This method is mainly used for downstream inference to simplify the interface. 
+        This method is mainly used for downstream inference to simplify the interface.
         If you want to obtain normal probabilities, use `video_detect` instead.
         Args:
-            imgs (torch.Tensor): Batched images with shape FxCxHxW, where F is the number of frames, 
+            imgs (torch.Tensor): Batched images with shape FxCxHxW, where F is the number of frames,
                     C is the number of channels, H is the height, and W is the width.
-            aggregation (str, optional): Aggregation method. Can be one of "avg", 
+            aggregation (str, optional): Aggregation method. Can be one of "avg",
                 "weighted_avg", or None. Defaults to "avg".
         Returns:
-            torch.Tensor: Aggregated binary message with shape K, 
+            torch.Tensor: Aggregated binary message with shape K,
                 where K is the length of the message.
         Note:
             If aggregation is None, returns the predictions for each frame without aggregation.
