@@ -55,7 +55,7 @@ from videoseal.augmentation.geometric import (Crop, HorizontalFlip, Identity,
 from videoseal.augmentation.valuemetric import (JPEG, Brightness, Contrast,
                                                 GaussianBlur, Hue,
                                                 MedianFilter, Saturation)
-from videoseal.augmentation.video import VideoCompressorAugmenter
+from videoseal.augmentation.video import H264, VideoCompressorAugmenter
 from videoseal.data.loader import (get_dataloader_segmentation,
                                    get_video_dataloader)
 from videoseal.data.transforms import (get_resize_transform, get_transforms,
@@ -124,9 +124,11 @@ def get_parser():
     aa("--nbits", type=int, default=32,
        help="Number of bits used to generate the message. If 0, no message is used.")
     aa("--img_size", type=int, default=256,
-       help="Size of the input images for data preprocessing")
+       help="Size of the input images for data preprocessing, at inference time the images are resized to this size")
     aa("--img_size_extractor", type=int,
        default=256, help="Images are resized to this size before being fed to the extractor")
+    aa("--img_size_val", type=int, default=256,
+         help="Size of the input images for data preprocessing, at inference time the images are resized to this size")
     aa("--attenuation", type=str, default="None", help="Attenuation model to use")
     aa("--scaling_w", type=float, default=0.2,
        help="Scaling factor for the watermark in the embedder model")
@@ -135,9 +137,7 @@ def get_parser():
     aa("--scaling_i", type=float, default=1.0,
        help="Scaling factor for the image in the embedder model")
     # VideoWam parameters related how to do video watermarking inference
-    aa("--videowam_frame_intermediate_size", type=int, default=256,
-       help="The size of the frame to resize to intermediately while generating the watermark then upscale, the final video/image size is kept the same.")
-    aa("--videowam_chunk_size", type=int, default=8,
+    aa("--videowam_chunk_size", type=int, default=32,
        help="The number of frames to encode at a time.")
     aa("--videowam_step_size", type=int, default=4,
        help="The number of frames to propagate the watermark to.")
@@ -284,7 +284,7 @@ def main(params):
     # build the complete model
     wam = VideoWam(embedder, extractor, augmenter, attenuation,
                    params.scaling_w, params.scaling_i,
-                   frame_intermediate_size=params.videowam_frame_intermediate_size,
+                   img_size=params.img_size,
                    chunk_size=params.videowam_chunk_size,
                    step_size=params.videowam_step_size)
     wam.to(device)
@@ -334,8 +334,8 @@ def main(params):
     print('optimizer_d: %s' % optimizer_d)
 
     # Data loaders
-    train_transform, train_mask_transform, val_transform, val_mask_transform = get_resize_transform(
-        params.img_size)
+    train_transform, train_mask_transform = get_resize_transform(params.img_size)
+    val_transform, val_mask_transform = get_resize_transform(params.img_size_val)
 
     image_train_loader = image_val_loader = video_train_loader = video_val_loader = None
 
@@ -444,7 +444,7 @@ def main(params):
         (Crop,              [0.75]),  # size ratio
         (JPEG,              [60]),
     ]  # augs evaluated every eval_freq
-    dummy_img = torch.ones(3, params.img_size, params.img_size)
+    dummy_img = torch.ones(3, params.img_size_val, params.img_size_val)
     validation_masks = augmenter.mask_embedder.sample_representative_masks(
         dummy_img)  # n 1 h w, full of ones or random masks depending on config
 
@@ -461,7 +461,7 @@ def main(params):
             if val_loader is not None:
 
                 if modality == Modalities.VIDEO:
-                    augs.append((VideoCompressorAugmenter, [22, 32, 42]))
+                    augs.append((H264, [32, 40, 46]))
 
                 print(f"running eval on {modality} dataset.")
                 val_stats = eval_one_epoch(wam, val_loader, modality, image_detection_loss,
@@ -519,12 +519,11 @@ def main(params):
                     if epoch % params.full_eval_freq == 0:
                         augs = validation_augs.copy()
                         if epoch_modality == Modalities.VIDEO:
-                            augs.append(
-                                (VideoCompressorAugmenter, [22, 32, 42]))
-                    else:
+                            augs.append((H264, [32, 40, 46]))
+                    else: 
                         augs = validation_augs_subset.copy()
                         if epoch_modality == Modalities.VIDEO:
-                            augs.append((VideoCompressorAugmenter, [32]))
+                            augs.append((H264, [32]))
                     val_stats = eval_one_epoch(wam, epoch_val_loader, epoch_modality, image_detection_loss,
                                                epoch, augs, validation_masks, params, tensorboard=tensorboard)
                     log_stats = {
@@ -570,7 +569,7 @@ def train_one_epoch(
     epoch: int,
     params: argparse.Namespace,
     tensorboard: CustomTensorboardWriter
-):
+) -> dict:
     is_video = (epoch_modality == Modalities.VIDEO)
 
     wam.train()
@@ -597,6 +596,7 @@ def train_one_epoch(
         # reset the optimizer gradients before accum gradients
         for optimizer in optimizers:
             optimizer.zero_grad()
+
         # accumulate gradients
         for acc_it in range(accumulation_steps):
 
@@ -716,6 +716,7 @@ def eval_one_epoch(
         validation_masks (torch.Tensor): the validation masks, full of ones for now
         params (argparse.Namespace): the parameters
     """
+    is_video = (epoch_modality == Modalities.VIDEO)
     if torch.is_tensor(validation_masks):
         validation_masks = list(torch.unbind(validation_masks, dim=0))
 
@@ -733,28 +734,22 @@ def eval_one_epoch(
 
         # videos are too big to have a batch of them
         # so we do batch accumulation with bsz = 1
-        if len(batch_imgs.shape) == 5:  # [N, frames , C , H  , W]
+        if len(batch_imgs.shape) == 5:  # b f c h w
             accumulation_steps = batch_imgs.shape[0]
-        elif len(batch_imgs.shape) == 4:  # [frames, C , H  , W]
+        elif len(batch_imgs.shape) == 4:  # b c h w
             accumulation_steps = 1
-            batch_masks = batch_masks.unsqueeze(0)
-            batch_imgs = batch_imgs.unsqueeze(0)
+            batch_masks = batch_masks.unsqueeze(0)  # 1 b 1 h w
+            batch_imgs = batch_imgs.unsqueeze(0)  # 1 b c h w
 
         for acc_it in range(accumulation_steps):
             imgs, masks = batch_imgs[acc_it], batch_masks[acc_it]
 
-            # get imgs and random messages
-            imgs = imgs.to(device)
-
-            # use 1 message repeated across the input
-            # 1 message is necessary for video since 1 batch = 1 video
-            msgs = wam.get_random_msg()
-            msgs = msgs.repeat(imgs.shape[0], 1)
-            msgs = msgs.to(imgs.device)
-
-            # generate watermarked images
-            deltas_w = wam.embedder(imgs, msgs)
-            imgs_w = wam.scaling_i * imgs + wam.scaling_w * deltas_w
+            # forward embedder
+            embed_time = time.time()
+            outputs = wam.embed(imgs, is_video=is_video)
+            embed_time = (time.time() - embed_time) / imgs.shape[0]
+            msgs = outputs["msgs"]  # b k
+            imgs_w = outputs["imgs_w"]  # b c h w
 
             if (epoch % params.saveimg_freq == 0) and it == acc_it == 0 and udist.is_main_process():
                 base_name = os.path.join(
@@ -769,8 +764,8 @@ def eval_one_epoch(
                     "VALID/IMAGES/orig", imgs, acc_it*it*epoch)
                 tensorboard.add_images(
                     "VALID/IMAGES/wmed", imgs_w, acc_it*it*epoch)
-                tensorboard.add_images("VALID/IMAGES/diff",
-                                       create_diff_img(imgs, imgs_w), acc_it*it*epoch)
+                tensorboard.add_images(
+                    "VALID/IMAGES/diff", create_diff_img(imgs, imgs_w), acc_it*it*epoch)
 
                 if epoch_modality == Modalities.VIDEO:
                     fps = 24 // 1
@@ -787,77 +782,83 @@ def eval_one_epoch(
                     tensorboard.add_video(
                         "VALID/VIDEOS/diff", create_diff_img(imgs, imgs_w).unsqueeze(0), acc_it*it*epoch, fps)
 
-        # quality metrics
-        metrics = {}
-        metrics['psnr'] = psnr(imgs_w, imgs).mean().item()
-        metrics['ssim'] = ssim(imgs_w, imgs).mean().item()
-        torch.cuda.synchronize()
-        metric_logger.update(**metrics)
+            # quality metrics
+            metrics = {}
+            metrics['psnr'] = psnr(imgs_w, imgs).mean().item()
+            metrics['ssim'] = ssim(imgs_w, imgs).mean().item()
+            metrics['embed_time'] = embed_time
+            torch.cuda.synchronize()
+            metric_logger.update(**metrics)
 
-        # attenuate
-        if wam.attenuation is not None:
-            imgs_w = wam.attenuation(imgs, imgs_w)
+            extract_times = []
+            for mask_id, masks in enumerate(validation_masks):
+                # watermark masking
+                masks = masks.to(imgs.device)  # 1 h w
+                if len(masks.shape) < 4:
+                    masks = masks.unsqueeze(0).repeat(
+                        imgs_w.shape[0], 1, 1, 1)  # b 1 h w
+                imgs_masked = imgs_w * masks + imgs * (1 - masks)
 
-        for mask_id, masks in enumerate(validation_masks):
-            # watermark masking
-            masks = masks.to(imgs.device)  # 1 h w
-            if len(masks.shape) < 4:
-                masks = masks.unsqueeze(0).repeat(
-                    imgs_w.shape[0], 1, 1, 1)  # b 1 h w
-            imgs_masked = imgs_w * masks + imgs * (1 - masks)
+                for transform, strengths in validation_augs:
+                    # Create an instance of the transformation
+                    transform_instance = transform()
 
-            for transform, strengths in validation_augs:
-                # Create an instance of the transformation
-                transform_instance = transform()
+                    for strength in strengths:
+                        do_resize = False  # hardcode for now, might need to change
+                        if not do_resize:
+                            imgs_aug, masks_aug = transform_instance(
+                                imgs_masked, masks, strength)
+                        else:
+                            # h, w = imgs_w.shape[-2:]
+                            h, w = params.img_size_extractor, params.img_size_extractor
+                            imgs_aug, masks_aug = transform_instance(
+                                imgs_masked, masks, strength)
+                            if imgs_aug.shape[-2:] != (h, w):
+                                imgs_aug = nn.functional.interpolate(imgs_aug, size=(h, w),
+                                                                    mode='bilinear', align_corners=False, antialias=True)
+                                masks_aug = nn.functional.interpolate(masks_aug, size=(h, w),
+                                                                    mode='bilinear', align_corners=False, antialias=True)
+                        selected_aug = str(transform.__name__).lower()
+                        selected_aug += f"_{strength}"
 
-                for strength in strengths:
-                    do_resize = True  # hardcode for now, might need to change
-                    if not do_resize:
-                        imgs_aug, masks_aug = transform_instance(
-                            imgs_masked, masks, strength)
-                    else:
-                        # h, w = imgs_w.shape[-2:]
-                        h, w = params.img_size_extractor, params.img_size_extractor
-                        imgs_aug, masks_aug = transform_instance(
-                            imgs_masked, masks, strength)
-                        if imgs_aug.shape[-2:] != (h, w):
-                            imgs_aug = nn.functional.interpolate(imgs_aug, size=(h, w),
-                                                                 mode='bilinear', align_corners=False, antialias=True)
-                            masks_aug = nn.functional.interpolate(masks_aug, size=(h, w),
-                                                                  mode='bilinear', align_corners=False, antialias=True)
-                    selected_aug = str(transform.__name__).lower()
-                    selected_aug += f"_{strength}"
+                        # extract watermark
+                        extract_time = time.time()
+                        outputs = wam.detect(imgs_aug, is_video=is_video)
+                        extract_time = time.time() - extract_time
+                        extract_times.append(extract_time / imgs_aug.shape[0])
+                        preds = outputs["preds"]
+                        mask_preds = preds[:, 0:1]  # b 1 ...
+                        bit_preds = preds[:, 1:]  # b k ...
 
-                    # extract watermark
-                    preds = wam.detector(imgs_aug)
-                    mask_preds = preds[:, 0:1]  # b 1 ...
-                    bit_preds = preds[:, 1:]  # b k ...
+                        aug_log_stats = {}
+                        if params.nbits > 0:
+                            bit_accuracy_ = bit_accuracy(
+                                bit_preds,
+                                msgs,
+                                masks_aug
+                            ).nanmean().item()
 
-                    aug_log_stats = {}
-                    if params.nbits > 0:
-                        bit_accuracy_ = bit_accuracy(
-                            bit_preds,
-                            msgs,
-                            masks_aug
-                        ).nanmean().item()
+                        if params.nbits > 0:
+                            aug_log_stats[f'bit_acc'] = bit_accuracy_
 
-                    if params.nbits > 0:
-                        aug_log_stats[f'bit_acc'] = bit_accuracy_
+                        if params.lambda_det > 0:
+                            iou0 = iou(mask_preds, masks, label=0).mean().item()
+                            iou1 = iou(mask_preds, masks, label=1).mean().item()
+                            aug_log_stats.update({
+                                f'acc': accuracy(mask_preds, masks).mean().item(),
+                                f'miou': (iou0 + iou1) / 2,
+                            })
 
-                    if params.lambda_det > 0:
-                        iou0 = iou(mask_preds, masks, label=0).mean().item()
-                        iou1 = iou(mask_preds, masks, label=1).mean().item()
-                        aug_log_stats.update({
-                            f'acc': accuracy(mask_preds, masks).mean().item(),
-                            f'miou': (iou0 + iou1) / 2,
-                        })
+                        current_key = f"mask={mask_id}_aug={selected_aug}"
+                        aug_log_stats = {f"{k}_{current_key}": v for k,
+                                        v in aug_log_stats.items()}
 
-                    current_key = f"mask={mask_id}_aug={selected_aug}"
-                    aug_log_stats = {f"{k}_{current_key}": v for k,
-                                     v in aug_log_stats.items()}
+                        torch.cuda.synchronize()
+                        metric_logger.update(**aug_log_stats)
 
-                    torch.cuda.synchronize()
-                    metric_logger.update(**aug_log_stats)
+            metrics['extract_time'] = np.mean(extract_times)
+            torch.cuda.synchronize()
+            metric_logger.update(**metrics)
 
     metric_logger.synchronize_between_processes()
     print("Averaged {} stats:".format('val'), metric_logger)

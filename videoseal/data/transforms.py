@@ -55,7 +55,7 @@ def get_resize_transform(img_size):
         transforms.Resize(img_size),
         transforms.CenterCrop(img_size),
     ])
-    return transform, transform, transform, transform
+    return transform, transform
 
 
 def get_transforms_segmentation(

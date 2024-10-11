@@ -1,4 +1,7 @@
 
+import contextlib
+import io
+import sys
 import os
 import subprocess
 
@@ -30,3 +33,21 @@ def get_sha():
         pass
     message = f"sha: {sha}, status: {diff}, branch: {branch}"
     return message
+
+
+@contextlib.contextmanager
+def suppress_output():
+    """
+    Suppress the print output within a context.
+    """
+    devnull = open(os.devnull, 'w')
+    old_stdout = sys.stdout
+    old_stderr = sys.stderr
+    sys.stdout = devnull
+    sys.stderr = devnull
+    try:
+        yield
+    finally:
+        sys.stdout = old_stdout
+        sys.stderr = old_stderr
+        devnull.close()
