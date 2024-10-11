@@ -226,7 +226,7 @@ class VideoWam(Wam):
             if self.attenuation is not None:
                 all_imgs_in_ck_w = self.attenuation(all_imgs_in_ck, all_imgs_in_ck_w)
             if self.clamp:
-                imgs_w = imgs_w.clamp(0, 1)
+                all_imgs_in_ck_w = all_imgs_in_ck_w.clamp(0, 1)
             
             imgs_w[start: end, ...] = all_imgs_in_ck_w  # n 3 h w
             

@@ -381,7 +381,7 @@ def main(params):
                                                 transform=val_transform,
                                                 mask_transform=val_mask_transform,
                                                 output_resolution=(
-                                                    params.img_size, params.img_size),
+                                                    params.img_size_val, params.img_size_val),
                                                 frames_per_clip=params.frames_per_clip,
                                                 # TODO: Find a smart way to shuffle while making cache efficient
                                                 shuffle=False,
@@ -486,6 +486,8 @@ def main(params):
     modalities = [get_modality(epoch, params)
                   for epoch in range(params.epochs)]
 
+    print(wam.clamp)
+
     # start training
     print('training...')
     start_time = time.time()
@@ -516,7 +518,7 @@ def main(params):
                            (Modalities.VIDEO, video_val_loader))
             for epoch_modality, epoch_val_loader in val_loaders:
                 if epoch_val_loader is not None:
-                    if epoch % params.full_eval_freq == 0:
+                    if epoch % params.full_eval_freq == 0 and epoch > 0:
                         augs = validation_augs.copy()
                         if epoch_modality == Modalities.VIDEO:
                             augs.append((H264, [32, 40, 46]))
