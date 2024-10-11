@@ -55,7 +55,7 @@ from videoseal.augmentation.geometric import (Crop, HorizontalFlip, Identity,
 from videoseal.augmentation.valuemetric import (JPEG, Brightness, Contrast,
                                                 GaussianBlur, Hue,
                                                 MedianFilter, Saturation)
-from videoseal.augmentation.video import VideoCompressorAugmenter
+from videoseal.augmentation.video import H264, VideoCompressorAugmenter
 from videoseal.data.loader import (get_dataloader_segmentation,
                                    get_video_dataloader)
 
@@ -458,7 +458,7 @@ def main(params):
             if val_loader is not None:
 
                 if modality == Modalities.VIDEO:
-                    augs.append((VideoCompressorAugmenter, [22, 32, 42]))
+                    augs.append((H264, [32, 40, 46]))
 
                 print(f"running eval on {modality} dataset.")
                 val_stats = eval_one_epoch(wam, val_loader, modality, image_detection_loss,
@@ -513,11 +513,11 @@ def main(params):
                     if epoch % params.full_eval_freq == 0:
                         augs = validation_augs.copy() 
                         if epoch_modality == Modalities.VIDEO:
-                            augs.append((VideoCompressorAugmenter, [22, 32, 42]))
+                            augs.append((H264, [32, 40, 46]))
                     else: 
                         augs = validation_augs_subset.copy()
                         if epoch_modality == Modalities.VIDEO:
-                            augs.append((VideoCompressorAugmenter, [32]))
+                            augs.append((H264, [32]))
                     val_stats = eval_one_epoch(wam, epoch_val_loader, epoch_modality, image_detection_loss,
                                             epoch, augs, validation_masks, params)
                     log_stats = {**log_stats, **{f'val_{epoch_modality}_{k}': v for k, v in val_stats.items()}}
@@ -741,6 +741,7 @@ def eval_one_epoch(
         torch.cuda.synchronize()
         metric_logger.update(**metrics)
 
+        extract_times = []
         for mask_id, masks in enumerate(validation_masks):
             # watermark masking
             masks = masks.to(imgs.device)  # 1 h w
@@ -775,6 +776,7 @@ def eval_one_epoch(
                     extract_time = time.time()
                     outputs = wam.detect(imgs_aug, is_video=is_video)
                     extract_time = time.time() - extract_time
+                    extract_times.append(extract_time)
                     preds = outputs["preds"]
                     mask_preds = preds[:, 0:1]  # b 1 ...
                     bit_preds = preds[:, 1:]  # b k ...

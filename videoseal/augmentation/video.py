@@ -132,7 +132,7 @@ class VideoCompressorAugmenter(VideoCompression):
 
 class H264(VideoCompression):
     def __init__(self, crf_min=None, crf_max=None, fps=24):
-        super(VideoCompressorAugmenter, self).__init__(
+        super(H264, self).__init__(
             codec='libx264', fps=fps)
         self.crf_min = crf_min
         self.crf_max = crf_max
@@ -150,7 +150,7 @@ class H264(VideoCompression):
 
 class H264rgb(VideoCompression):
     def __init__(self, crf_min=None, crf_max=None, fps=24):
-        super(VideoCompressorAugmenter, self).__init__(
+        super(H264rgb, self).__init__(
             codec='libx264rgb', fps=fps)
         self.crf_min = crf_min
         self.crf_max = crf_max
@@ -168,7 +168,7 @@ class H264rgb(VideoCompression):
 
 class H265(VideoCompression):
     def __init__(self, crf_min=None, crf_max=None, fps=24):
-        super(VideoCompressorAugmenter, self).__init__(
+        super(H265, self).__init__(
             codec='libx265', fps=fps)
         self.crf_min = crf_min
         self.crf_max = crf_max
@@ -186,7 +186,7 @@ class H265(VideoCompression):
 
 class VP9(VideoCompression):
     def __init__(self, fps=24):
-        super(VideoCompressorAugmenter, self).__init__(
+        super(VP9, self).__init__(
             codec='libvpx-vp9', fps=fps)
         self.crf = -1
 
@@ -197,7 +197,7 @@ class VP9(VideoCompression):
 
 class AV1(VideoCompression):
     def __init__(self, crf_min=None, crf_max=None, fps=24):
-        super(VideoCompressorAugmenter, self).__init__(
+        super(AV1, self).__init__(
             codec='libaom-av1', fps=fps)
         self.crf_min = crf_min
         self.crf_max = crf_max
