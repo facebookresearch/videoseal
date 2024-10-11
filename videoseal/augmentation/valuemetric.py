@@ -33,7 +33,6 @@ class JPEG(nn.Module):
 
     def forward(self, image: torch.tensor, mask, quality=None):
         quality = quality or self.get_random_quality()
-        image = image.clamp(0, 1)
         if len(image.shape) == 4:  # b c h w
             for ii in range(image.shape[0]):
                 image[ii] = self.jpeg_single(image[ii], quality)
@@ -56,7 +55,6 @@ class GaussianBlur(nn.Module):
 
     def forward(self, image, mask, kernel_size=None):
         kernel_size = kernel_size or self.get_random_kernel_size()
-        image = image.clamp(0, 1)
         image = F.gaussian_blur(image, kernel_size)
         return image, mask
 
@@ -76,7 +74,6 @@ class MedianFilter(nn.Module):
 
     def forward(self, image, mask, kernel_size=None):
         kernel_size = kernel_size or self.get_random_kernel_size()
-        image = image.clamp(0, 1)
         if self.passthrough:
             image = (median_filter(image, kernel_size) - image).detach() + image
         else:
@@ -97,7 +94,6 @@ class Brightness(nn.Module):
 
     def forward(self, image, mask, factor=None):
         factor = factor or self.get_random_factor()
-        image = image.clamp(0, 1)
         image = F.adjust_brightness(image, factor)
         return image, mask
 
@@ -115,7 +111,6 @@ class Contrast(nn.Module):
 
     def forward(self, image, mask, factor=None):
         factor = factor or self.get_random_factor()
-        image = image.clamp(0, 1)
         image = F.adjust_contrast(image, factor)
         return image, mask
 
@@ -133,7 +128,6 @@ class Saturation(nn.Module):
 
     def forward(self, image, mask, factor=None):
         factor = factor or self.get_random_factor()
-        image = image.clamp(0, 1)
         image = F.adjust_saturation(image, factor)
         return image, mask
 
@@ -151,7 +145,6 @@ class Hue(nn.Module):
 
     def forward(self, image, mask, factor=None):
         factor = factor or self.get_random_factor()
-        image = image.clamp(0, 1)
         image = F.adjust_hue(image, factor)
         return image, mask
 

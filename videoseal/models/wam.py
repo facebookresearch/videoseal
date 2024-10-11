@@ -34,6 +34,7 @@ class Wam(nn.Module):
         scaling_w: float = 1.0,
         scaling_i: float = 1.0,
         img_size: int = 256,
+        clamp: bool = True,
     ) -> None:
         """
         WAM (watermark-anything models) model that combines an embedder, a detector, and an augmenter.
@@ -55,6 +56,7 @@ class Wam(nn.Module):
         self.augmenter = augmenter
         self.attenuation = attenuation
         # scalings
+        self.clamp = clamp
         self.scaling_w = scaling_w
         self.scaling_i = scaling_i
         # image format
@@ -84,6 +86,8 @@ class Wam(nn.Module):
         imgs_w = self.scaling_i * imgs + self.scaling_w * deltas_w
         if self.attenuation is not None:
             imgs_w = self.attenuation(imgs, imgs_w)
+        if self.clamp:
+            imgs_w = imgs_w.clamp(0, 1)
         # augment
         imgs_aug, masks, selected_aug = self.augmenter(
             imgs_w, imgs, masks, is_video=False)
@@ -138,6 +142,8 @@ class Wam(nn.Module):
         imgs_w = self.scaling_i * imgs + self.scaling_w * deltas_w
         if self.attenuation is not None:
             imgs_w = self.attenuation(imgs, imgs_w)
+        if self.clamp:
+            imgs_w = imgs_w.clamp(0, 1)
         
         outputs = {
             "msgs": msgs,  # original messages: b k

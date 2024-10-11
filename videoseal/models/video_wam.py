@@ -43,6 +43,7 @@ class VideoWam(Wam):
         scaling_w: float = 1.0,
         scaling_i: float = 1.0,
         img_size: int = 256,
+        clamp: bool = True,
         chunk_size: int = 8,
         step_size: int = 4,
     ) -> None:
@@ -67,6 +68,7 @@ class VideoWam(Wam):
             scaling_w=scaling_w,
             scaling_i=scaling_i,
             img_size=img_size,
+            clamp=clamp,
         )
         # video settings
         self.chunk_size = chunk_size  # encode 8 frames/imgs at a time
@@ -151,6 +153,8 @@ class VideoWam(Wam):
         imgs_w = self.scaling_i * imgs + self.scaling_w * deltas_w
         if self.attenuation is not None:
             imgs_w = self.attenuation(imgs, imgs_w)
+        if self.clamp:
+            imgs_w = imgs_w.clamp(0, 1)
         # augment
         imgs_aug, masks, selected_aug = self.augmenter(
             imgs_w, imgs, masks, is_video=True)
@@ -221,6 +225,8 @@ class VideoWam(Wam):
             all_imgs_in_ck_w = self.scaling_i * all_imgs_in_ck + self.scaling_w * deltas_in_ck
             if self.attenuation is not None:
                 all_imgs_in_ck_w = self.attenuation(all_imgs_in_ck, all_imgs_in_ck_w)
+            if self.clamp:
+                imgs_w = imgs_w.clamp(0, 1)
             
             imgs_w[start: end, ...] = all_imgs_in_ck_w  # n 3 h w
             
