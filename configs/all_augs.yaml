@@ -17,7 +17,7 @@ augs:
   contrast:           1
   saturation:         1
   hue:                1
-  video_compression:  0.5
+  video_compression:  1
 
 augs_params:
   resize:
