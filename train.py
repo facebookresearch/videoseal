@@ -367,8 +367,7 @@ def main(params):
                                                   num_workers=params.workers,
                                                   transform=train_transform,
                                                   mask_transform=train_mask_transform,
-                                                  output_resolution=(
-                                                      params.img_size, params.img_size),
+                                                  output_resolution=params.img_size,
                                                   frames_per_clip=params.frames_per_clip,
                                                   frame_step=params.frame_step,
                                                   # TODO: Find a smart way to shuffle while making cache efficient
@@ -380,8 +379,7 @@ def main(params):
                                                 num_workers=params.workers,
                                                 transform=val_transform,
                                                 mask_transform=val_mask_transform,
-                                                output_resolution=(
-                                                    params.img_size_val, params.img_size_val),
+                                                output_resolution=params.img_size_val,
                                                 frames_per_clip=params.frames_per_clip,
                                                 # TODO: Find a smart way to shuffle while making cache efficient
                                                 shuffle=False,

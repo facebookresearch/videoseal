@@ -37,6 +37,17 @@ name2aug = {
 }
 
 
+def get_dummy_augmenter():
+    """
+    An augmenter that does nothing.
+    """
+    
+    return Augmenter(
+        augs = {'identity': 1},
+        augs_params = {},
+        masks = {'kind': None}
+    )
+
 class Augmenter(nn.Module):
     """
     Augments the watermarked image.
@@ -185,16 +196,10 @@ if __name__ == "__main__":
     imgs_w = imgs.clone()
 
     # Create an instance of the Augmenter class
-    # augmenter = Augmenter(
-    #     mask_kind='full',
-    #     augs=augs,
-    #     augs_params=augs_params,
-    #     invert_proba=1.0
-    # )
     augmenter = Augmenter(
-        mask_kind='mixed',
         augs=augs,
         augs_params=augs_params,
+        kind='mixed',
         invert_proba=0.5
     )
     print("Augmenter:", augmenter)

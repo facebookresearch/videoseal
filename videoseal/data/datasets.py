@@ -60,7 +60,7 @@ class VideoDataset(Dataset):
         filter_long_videos: Union[int, float] = int(10**9),
         # Optional, specific duration in seconds for each clip
         duration: Optional[float] = None,
-        output_resolution: tuple = (256, 256),  # Desired output resolution
+        output_resolution: tuple | int = (256, 256),  # Desired output resolution
         num_workers: int = 1,  # numbers of cpu to run the preprocessing of each batch
     ):
         self.folder_paths = folder_paths
@@ -191,8 +191,20 @@ class VideoDataset(Dataset):
             return [], None
 
         try:
-            vr = VideoReader(
-                fname, num_threads=self.num_workers, ctx=cpu(0), width=self.output_resolution[1], height=self.output_resolution[0])
+            vr = VideoReader(fname, num_threads=self.num_workers, ctx=cpu(0))
+            ori_height, ori_width = vr[0].shape[:2]
+            if isinstance(self.output_resolution, int):
+                if self.output_resolution == -1:  # keep original resolution
+                    height = -1
+                    width = -1
+                else:  # keep aspect ratio
+                    scale = self.output_resolution / min(ori_height, ori_width)
+                    height = int(ori_height * scale)
+                    width = int(ori_width * scale)
+            else:
+                width = self.output_resolution[1]
+                height = self.output_resolution[0]
+            vr = VideoReader(fname, width=width, height=height, num_threads=self.num_workers, ctx=cpu(0))
         except Exception:
             return [], None
 
@@ -282,8 +294,8 @@ if __name__ == "__main__":
     # Specify the path to the folder containing the MP4 files
     video_folder_path = "./assets/videos"
 
-    train_transform, train_mask_transform, val_transform, val_mask_transform = get_resize_transform(
-        img_size=256)
+    train_transform, train_mask_transform = get_resize_transform(img_size=256)
+    val_transform, val_mask_transform = get_resize_transform(img_size=256)
 
    # Create an instance of the VideoDataset
     dataset = VideoDataset(

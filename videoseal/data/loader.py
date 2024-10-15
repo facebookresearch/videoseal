@@ -27,23 +27,6 @@ from videoseal.utils.dist import is_dist_avail_and_initialized
 from .transforms import default_transform
 
 
-def load_video(fname):
-    """ Load video content using Decord """
-    if not os.path.exists(fname):
-        warnings.warn(f'video path not found {fname=}')
-        return []
-    _fsize = os.path.getsize(fname)
-    if _fsize < 1 * 1024:  # avoid hanging issue
-        warnings.warn(f'video too short {fname=}')
-        return []
-    try:
-        vr = VideoReader(fname, num_threads=1, ctx=cpu(0))
-    except Exception:
-        return []
-
-    vid_np = vr.get_batch(range(len(vr))).asnumpy().transpose(0, 3, 1, 2)
-    return torch.from_numpy(vid_np)
-
 @functools.lru_cache()
 def get_image_paths(path):
     paths = []
@@ -236,6 +219,24 @@ def get_dataloader_segmentation(
                                 num_workers=num_workers, pin_memory=True, drop_last=True, collate_fn=custom_collate)
 
     return dataloader
+
+
+def load_video(fname):
+    """ Load video content using Decord """
+    if not os.path.exists(fname):
+        warnings.warn(f'video path not found {fname=}')
+        return []
+    _fsize = os.path.getsize(fname)
+    if _fsize < 1 * 1024:  # avoid hanging issue
+        warnings.warn(f'video too short {fname=}')
+        return []
+    try:
+        vr = VideoReader(fname, num_threads=1, ctx=cpu(0))
+    except Exception:
+        return []
+
+    vid_np = vr.get_batch(range(len(vr))).asnumpy().transpose(0, 3, 1, 2)
+    return torch.from_numpy(vid_np)
 
 
 def get_video_dataloader(
