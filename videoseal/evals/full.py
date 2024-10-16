@@ -276,10 +276,14 @@ def main():
     group = parser.add_argument_group('Dataset')
     group.add_argument("--dataset", type=str, 
                        choices=["coco", "coco-stuff-blurred", "sa-v"], help="Name of the dataset.")
-    group.add_argument('--is_video', type=utils.bool_inst, default=False, help='Whether the data is video')
-    group.add_argument('--short_edge_size', type=int, default=-1, help='Short edge size for resizing, -1 for no resizing')
-    group.add_argument('--videowam_chunk_size', type=int, default=64, help='Number of frames to chunk during forward pass')
-    group.add_argument('--num_frames', type=int, default=24*3, help='Number of frames to evaluate for video quality')
+    group.add_argument('--is_video', type=utils.bool_inst, default=False, 
+                       help='Whether the data is video')
+    group.add_argument('--short_edge_size', type=int, default=-1, 
+                       help='Resizes the short edge of the image to this size, and keep the aspect ratio. If -1, no resizing.')
+    group.add_argument('--videowam_chunk_size', type=int, default=64, 
+                       help='Number of frames to chunk during forward pass')
+    group.add_argument('--num_frames', type=int, default=24*3, 
+                       help='Number of frames to evaluate for video quality')
 
     group = parser.add_argument_group('Experiment')
     group.add_argument("--output_dir", type=str, default="output/", help="Output directory for logs and images (Default: /output)")
