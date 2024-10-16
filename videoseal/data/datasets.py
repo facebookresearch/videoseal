@@ -17,6 +17,7 @@ from torchvision.transforms import ToTensor
 from torchvision.datasets import CocoDetection
 from torchvision.datasets.folder import default_loader, is_image_file
 
+from ..utils import suppress_output
 from ..utils.data import LRUDict
 
 
@@ -45,6 +46,7 @@ class ImageFolder:
     def __getitem__(self, idx: int):
         assert 0 <= idx < len(self)
         img = self.loader(self.samples[idx])
+        img = ToTensor()(img)
         if self.transform:
             return self.transform(img), 0
         return img, 0
@@ -54,8 +56,22 @@ class ImageFolder:
 
 
 class CocoImageIDWrapper(CocoDetection):
-    def __init__(self, root, annFile, transform=None, mask_transform=None, random_nb_object=True, max_nb_masks=4, multi_w=False):
-        super().__init__(root, annFile, transform=transform, target_transform=mask_transform)
+    def __init__(
+        self, root, annFile, transform=None, mask_transform=None, 
+        random_nb_object=True, max_nb_masks=4, multi_w=False
+    ) -> None:
+        """
+        Args:
+            root (str): Root directory where images are saved.
+            annFile (str): Path to json annotation file.
+            transform (callable, optional): A function/transform that takes in an PIL image and returns a transformed version.
+            mask_transform (callable, optional): The same as transform but for the mask.
+            random_nb_object (bool, optional): If True, randomly sample the number of objects in the image. Defaults to True.
+            max_nb_masks (int, optional): Maximum number of masks to return. Defaults to 4.
+            multi_w (bool, optional): If True, return multiple masks as a single tensor. Defaults to False.
+        """
+        with suppress_output():
+            super().__init__(root, annFile, transform=transform, target_transform=mask_transform)
         self.random_nb_object = random_nb_object
         self.max_nb_masks = max_nb_masks
         self.multi_w = multi_w
@@ -74,7 +90,9 @@ class CocoImageIDWrapper(CocoDetection):
         # convert PIL to tensor
         img = ToTensor()(img)
 
-        img, mask = self.transforms(img, mask)
+        if self.transforms is not None:
+            img, mask = self.transforms(img, mask)
+
         return img, mask
 
     def _load_mask(self, id):

@@ -1,9 +1,9 @@
 """
 python -m videoseal.evals.full \
     --checkpoint /checkpoint/pfz/2024_logs/1011_vseal_video_yesno/_lambda_d=0.0_video_start=50/checkpoint.pth \
-    --data_dir /datasets01/COCO/060817/val2014/
+    --dataset coco
 
-    --data_dir /large_experiments/meres/sa-v/sav_val_videos/
+    --dataset sa-v
 
     /private/home/hadyelsahar/work/code/videoseal/2024_logs/1013-hybrid-large-sweep-allaugs/_lambda_d=0.5_lambda_i=0.5_optimizer=AdamW,lr=5e-5_prop_img_vid=0.9_videowam_step_size=4_video_start=500_embedder_model=vae_small_bw/checkpoint.pth
 """
@@ -17,12 +17,14 @@ import os
 import torch
 from torch.utils.data import Dataset
 from torchvision.utils import save_image
+from torchvision.transforms import Resize
 
 from .metrics import vmaf_on_tensor
-from ..data.datasets import VideoDataset, CocoImageIDWrapper
+from ..data.datasets import ImageFolder, VideoDataset, CocoImageIDWrapper
 from ..models import VideoWam, build_embedder, build_extractor
 from ..augmentation.augmenter import get_dummy_augmenter
 from ..evals.metrics import psnr, ssim
+from ..utils.data import parse_dataset_params, Modalities
 
 import videoseal.utils as utils
 
@@ -87,9 +89,14 @@ def setup_model_from_checkpoint(ckpt_path):
 
 
 def setup_dataset(args):
+    try:
+        dataset_config = omegaconf.OmegaConf.load(f"configs/datasets/{args.dataset}.yaml")
+    except FileNotFoundError:
+        raise FileNotFoundError(f"Dataset configuration not found: {args.dataset}")
     if args.is_video:
+        # Video dataset, with optional masks
         dataset = VideoDataset(
-            folder_paths = [args.data_dir],
+            folder_paths = [dataset_config.val_dir],
             transform = None,
             frames_per_clip = args.frames_per_clip,
             frame_step = args.frame_step,
@@ -97,22 +104,34 @@ def setup_dataset(args):
             output_resolution = args.short_edge_size,
             num_workers = 0,
         )
+        print(f"Video dataset loaded from {dataset_config.val_dir}")
     else:
-        dataset = CocoImageIDWrapper(
-            root=args.data_dir, 
-            annFile=ann_file, 
-            transform=transform, 
-            mask_transform=mask_transform,
-            random_nb_object=random_nb_object, 
-            multi_w=multi_w, 
-            max_nb_masks=max_nb_masks
-        )
+        # Image dataset
+        resize_short_edge = None
+        if args.short_edge_size > 0:
+            resize_short_edge = Resize(args.short_edge_size)
+        print(dataset_config.val_annotation_file)
+        if dataset_config.val_annotation_file:
+            # COCO dataset, with masks
+            dataset = CocoImageIDWrapper(
+                root = dataset_config.val_dir,
+                annFile = dataset_config.val_annotation_file,
+                transform = resize_short_edge, 
+                mask_transform = resize_short_edge
+            )
+        else:
+            # ImageFolder dataset
+            dataset = ImageFolder(
+                path = dataset_config.val_dir,
+                transform = resize_short_edge
+            )  
+        print(f"Image dataset loaded from {dataset_config.val_dir}")
     return dataset
 
 
 @torch.no_grad()
 def evaluate(
-    model: VideoWam,
+    wam: VideoWam,
     dataset: Dataset, 
     output_dir: str,
 ):
@@ -124,6 +143,7 @@ def evaluate(
     metrics = []
 
     for it, batch_items in enumerate(dataset):
+        print(it, batch_items)
 
         # some data loaders return batch_data, masks, frames_positions as well
         batch_imgs, batch_masks = batch_items[0], batch_items[1]
@@ -270,9 +290,9 @@ def main():
     parser.add_argument('--device', type=str, default='cuda', help='Device to use for evaluation')
     
     group = parser.add_argument_group('Dataset')
-    parser.add_argument('--data_dir', type=str, required=True, help='Directory containing the data')
-    parser.add_argument('--short_edge_size', type=int, default=-1, help='Short edge size for resizing, -1 for no resizing')
-    parser.add_argument('--is_video', type=utils.bool_inst, default=False, help='Whether the data is video')
+    group.add_argument("--dataset", type=str, help="Name of the dataset.")
+    group.add_argument('--is_video', type=utils.bool_inst, default=False, help='Whether the data is video')
+    group.add_argument('--short_edge_size', type=int, default=-1, help='Short edge size for resizing, -1 for no resizing')
     group.add_argument('--frames_per_clip', default=32, type=int, help='Number of frames per clip for video datasets')
     group.add_argument('--frame_step', default=1, type=int, help='Step between frames for video datasets')
     group.add_argument('--num_clips', default=2, type=int, help='Number of clips per video for video datasets')
@@ -291,7 +311,7 @@ def main():
     # Setup the dataset    
     dataset = setup_dataset(args)
 
-    eval(model, dataset, device, args.output_dir)
+    evaluate(model, dataset, args.output_dir)
 
 if __name__ == '__main__':
     main()
