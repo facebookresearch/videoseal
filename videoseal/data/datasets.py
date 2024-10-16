@@ -172,7 +172,7 @@ class VideoDataset(Dataset):
         duration: float = None,
         output_resolution: tuple | int = (256, 256),  # Desired output resolution
         num_workers: int = 1,  # numbers of cpu to run the preprocessing of each batch
-        mode: str = "train",
+        subsample_frames: bool = True # if set to false return full video
     ):
         self.folder_paths = folder_paths
         self.datasets_weights = datasets_weights
@@ -189,7 +189,7 @@ class VideoDataset(Dataset):
         self.duration = duration
         self.output_resolution = output_resolution
         self.num_workers = num_workers
-        self.mode = mode
+        self.subsample_frames = subsample_frames
 
         if VideoReader is None:
             raise ImportError(
@@ -224,12 +224,12 @@ class VideoDataset(Dataset):
         self.video_buffer = LRUDict(maxsize=150)
 
     def __getitem__(self, index):
-        if self.mode == "val":
-            return self.getitem_val(index)
+        if self.subsample_frames:
+            return self.get_clip(index)
         else:
-            return self.getitem_train(index)
+            return self.get_vid(index)
     
-    def getitem_val(self, index):
+    def get_vid(self, index):
         video_file = self.videofiles[index]
         video, mask = self.load_full_video_decord(
             video_file, 
@@ -241,7 +241,7 @@ class VideoDataset(Dataset):
             mask = torch.stack([self.mask_transform(one_mask) for one_mask in mask])
         return video, mask
 
-    def getitem_train(self, index):
+    def get_clip(self, index):
         videofile_index = index // self.num_clips
         clip_index = index % self.num_clips
 

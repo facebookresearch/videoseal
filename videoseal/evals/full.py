@@ -109,7 +109,7 @@ def setup_dataset(args):
             transform = None,
             output_resolution = args.short_edge_size,
             num_workers = 0,
-            mode = 'val'
+            subsample_frames = False,
         )
         print(f"Video dataset loaded from {dataset_config.val_dir}")
     else:
@@ -147,9 +147,7 @@ def evaluate(
     detection: bool = False,
 ):
     """
-    QQs: eval only quality? eval only bit accuracy?
-        augs?
-        one by one or batched?
+    Gives detailed evaluation metrics for a model on a given dataset.
     Args:
         wam (VideoWam): The model to evaluate
         dataset (Dataset): The dataset to evaluate on
@@ -276,7 +274,8 @@ def main():
     parser.add_argument('--device', type=str, default='cuda', help='Device to use for evaluation')
 
     group = parser.add_argument_group('Dataset')
-    group.add_argument("--dataset", type=str, help="Name of the dataset.")
+    group.add_argument("--dataset", type=str, 
+                       choices=["coco", "coco-stuff-blurred", "sa-v"], help="Name of the dataset.")
     group.add_argument('--is_video', type=utils.bool_inst, default=False, help='Whether the data is video')
     group.add_argument('--short_edge_size', type=int, default=-1, help='Short edge size for resizing, -1 for no resizing')
     group.add_argument('--videowam_chunk_size', type=int, default=64, help='Number of frames to chunk during forward pass')
