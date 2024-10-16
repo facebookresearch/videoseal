@@ -27,11 +27,7 @@ Args inventory:
 import argparse
 import datetime
 import json
-import math
 import os
-import random
-import sys
-import threading
 import time
 from typing import List
 
@@ -60,8 +56,7 @@ from videoseal.data.loader import (get_dataloader_segmentation,
                                    get_video_dataloader)
 from videoseal.data.transforms import (get_resize_transform, get_transforms,
                                        get_transforms_segmentation)
-from videoseal.evals.metrics import (accuracy, bit_accuracy,
-                                     bit_accuracy_inference, iou, psnr, ssim)
+from videoseal.evals.metrics import accuracy, bit_accuracy, iou, psnr, ssim
 from videoseal.losses.detperceptual import LPIPSWithDiscriminator
 from videoseal.models import VideoWam, Wam, build_embedder, build_extractor
 from videoseal.modules.jnd import JND

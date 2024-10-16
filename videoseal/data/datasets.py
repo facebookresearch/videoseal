@@ -172,6 +172,7 @@ class VideoDataset(Dataset):
         duration: float = None,
         output_resolution: tuple | int = (256, 256),  # Desired output resolution
         num_workers: int = 1,  # numbers of cpu to run the preprocessing of each batch
+        mode: str = "train",
     ):
         self.folder_paths = folder_paths
         self.datasets_weights = datasets_weights
@@ -188,6 +189,7 @@ class VideoDataset(Dataset):
         self.duration = duration
         self.output_resolution = output_resolution
         self.num_workers = num_workers
+        self.mode = mode
 
         if VideoReader is None:
             raise ImportError(
@@ -222,6 +224,24 @@ class VideoDataset(Dataset):
         self.video_buffer = LRUDict(maxsize=150)
 
     def __getitem__(self, index):
+        if self.mode == "val":
+            return self.getitem_val(index)
+        else:
+            return self.getitem_train(index)
+    
+    def getitem_val(self, index):
+        video_file = self.videofiles[index]
+        video, mask = self.load_full_video_decord(
+            video_file, 
+            num_workers=self.num_workers
+        )
+        if self.transform is not None:
+            video = torch.stack([self.transform(frame) for frame in video])
+        if self.mask_transform is not None:
+            mask = torch.stack([self.mask_transform(one_mask) for one_mask in mask])
+        return video, mask
+
+    def getitem_train(self, index):
         videofile_index = index // self.num_clips
         clip_index = index % self.num_clips
 
@@ -283,6 +303,37 @@ class VideoDataset(Dataset):
                                 for one_mask in mask])
 
         return clip, mask, clip_frame_indices
+
+    @staticmethod
+    def load_full_video_decord(fname, num_workers=8):
+        """
+        Load full video content using Decord.
+        Args:
+            fname (str): The path to the video file.
+            num_workers (int): The number of worker threads to use for video loading. Defaults to 8.
+        Returns:
+            tuple: A tuple containing the loaded video frames as a PyTorch tensor (Frames, H, W , C) and a mask tensor.
+        Raises:
+            warnings.warn: If the video file is not found or is too short.
+        """
+        if not os.path.exists(fname):
+            warnings.warn(f'video path not found {fname=}')
+            return [], None
+        _fsize = os.path.getsize(fname)
+        if _fsize < 1 * 1024:  # avoid hanging issue
+            warnings.warn(f'video too short {fname=}')
+            return [], None
+        try:
+            vr = VideoReader(
+                fname, num_threads=num_workers, ctx=cpu(0))
+        except Exception:
+            return [], None
+        vid_np = vr.get_batch(range(len(vr))).asnumpy()
+        vid_np = vid_np.transpose(0, 3, 1, 2) / 255.0  # normalize to 0 - 1
+        vid_pt = torch.from_numpy(vid_np).float()
+        mask = torch.ones_like(vid_pt[:, 0:1, ...])
+        return vid_pt, mask
+
 
     def loadvideo_decord(self, sample):
         """ Load video content using Decord """

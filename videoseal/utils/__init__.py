@@ -55,7 +55,7 @@ def suppress_output():
         sys.stderr = old_stderr
         devnull.close()
 
-def timer(func, *args, **kwargs):
+def timer_wrapper(func, *args, **kwargs):
     """
     Timer function to measure the execution time of a function.
     """
@@ -65,3 +65,34 @@ def timer(func, *args, **kwargs):
         torch.cuda.synchronize()
     end = time.time()
     return result, end - start
+
+class Timer:
+    def __init__(self):
+        self.start_time = None
+        self.end_time = None
+        self.steps = []
+
+    def reset(self):
+        self.start_time = None
+        self.end_time = None
+        self.steps = []
+
+    def begin(self):
+        self.start_time = time.time()
+    def start(self):
+        self.begin()
+    def restart(self):
+        self.begin()
+
+    def step(self):
+        step_time = time.time() - self.start_time
+        self.steps.append(step_time)
+    def avg_step(self):
+        return sum(self.steps) / len(self.steps)
+
+    def end(self):
+        self.end_time = time.time()
+        return self.end_time - self.start_time
+    def stop(self):
+        return self.end()
+        

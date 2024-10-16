@@ -20,14 +20,15 @@ import time
 import torch
 from torch.utils.data import Dataset
 from torchvision.utils import save_image
-from torchvision.transforms import Resize
+import torchvision.transforms as transforms
 
-from .metrics import vmaf_on_tensor
+from .metrics import vmaf_on_tensor, bit_accuracy, iou, accuracy
 from ..data.datasets import ImageFolder, VideoDataset, CocoImageIDWrapper
 from ..models import VideoWam, build_embedder, build_extractor
+from ..augmentation import get_validation_augs
 from ..augmentation.augmenter import get_dummy_augmenter
 from ..evals.metrics import psnr, ssim
-from ..utils import timer
+from ..utils import Timer
 from ..utils.data import parse_dataset_params, Modalities
 from ..utils.image import create_diff_img
 from ..utils.display import save_vid
@@ -56,7 +57,6 @@ def setup_model_from_checkpoint(ckpt_path):
 
     # Create an argparse Namespace object from the parameters
     args = argparse.Namespace(**params)
-    # print(args)
     
     # Load configurations
     for path in [args.embedder_config, args.extractor_config, args.augmentation_config]:
@@ -79,8 +79,11 @@ def setup_model_from_checkpoint(ckpt_path):
     
     # Build the complete model
     wam = VideoWam(embedder, extractor, augmenter, 
-                   scaling_w=args.scaling_w, scaling_i=args.scaling_i, 
-                   img_size=args.img_size)
+                scaling_w=args.scaling_w, scaling_i=args.scaling_i, 
+                img_size=args.img_size,
+                chunk_size=args.videowam_chunk_size,
+                step_size=args.videowam_step_size
+            )
     
     # Load the model weights
     if os.path.exists(ckpt_path):
@@ -104,18 +107,16 @@ def setup_dataset(args):
         dataset = VideoDataset(
             folder_paths = [dataset_config.val_dir],
             transform = None,
-            frames_per_clip = args.frames_per_clip,
-            frame_step = args.frame_step,
-            num_clips = args.num_clips,
             output_resolution = args.short_edge_size,
             num_workers = 0,
+            mode = 'val'
         )
         print(f"Video dataset loaded from {dataset_config.val_dir}")
     else:
         # Image dataset
         resize_short_edge = None
         if args.short_edge_size > 0:
-            resize_short_edge = Resize(args.short_edge_size)
+            resize_short_edge = transforms.Resize(args.short_edge_size)
         if dataset_config.val_annotation_file:
             # COCO dataset, with masks
             dataset = CocoImageIDWrapper(
@@ -140,135 +141,131 @@ def evaluate(
     dataset: Dataset, 
     is_video: bool,
     output_dir: str,
+    save_first: int = -1,
+    num_frames: int = 24*3,
+    decoding: bool = True,
+    detection: bool = False,
 ):
     """
-    
-    eval only quality? eval only bit accuracy?
-    augs?
-    one by one or batched?
+    QQs: eval only quality? eval only bit accuracy?
+        augs?
+        one by one or batched?
+    Args:
+        wam (VideoWam): The model to evaluate
+        dataset (Dataset): The dataset to evaluate on
+        is_video (bool): Whether the data is video
+        output_dir (str): Directory to save the output images
+        num_frames (int): Number of frames to evaluate for video quality
     """
-    metrics = []
+    all_metrics = []
+    validation_augs = get_validation_augs(is_video)
+    timer = Timer()
 
     for it, batch_items in enumerate(dataset):
+        # initialize metrics
+        metrics = {}
+
         # some data loaders return batch_data, masks, frames_positions as well
         imgs, masks = batch_items[0], batch_items[1]
         if not is_video:
             imgs = imgs.unsqueeze(0)  # c h w -> 1 c h w
             masks = masks.unsqueeze(0) if isinstance(masks, torch.Tensor) else masks
+        metrics['iteration'] = it
+        metrics['t'] = imgs.shape[-4]
+        metrics['h'] = imgs.shape[-2]
+        metrics['w'] = imgs.shape[-1]
 
         # forward embedder, at any resolution
         # does cpu -> gpu -> cpu when gpu is available
-        outputs, embed_time = timer(wam.embed, imgs, is_video=is_video)
+        timer.start()
+        outputs = wam.embed(imgs, is_video=is_video)
+        metrics['embed_time'] = timer.end()
         msgs = outputs["msgs"]  # b k
         imgs_w = outputs["imgs_w"]  # b c h w
 
-        base_name = os.path.join(output_dir, f'val')
-        ori_path = base_name + '_0_ori.png'
-        wm_path = base_name + '_1_wm.png'
-        diff_path = base_name + '_2_diff.png'
-        save_image(imgs, ori_path, nrow=8)
-        save_image(imgs_w, wm_path, nrow=8)
-        save_image(create_diff_img(imgs, imgs_w), diff_path, nrow=8)
+        # compute qualitative metrics
+        metrics['psnr'] = psnr(
+            imgs_w[:num_frames], 
+            imgs[:num_frames]).mean().item()
+        metrics['ssim'] = ssim(
+            imgs_w[:num_frames], 
+            imgs[:num_frames]).mean().item()
         if is_video:
+            timer.start()
+            metrics['vmaf'] = vmaf_on_tensor(
+                imgs_w[:num_frames], imgs[:num_frames])
+            metrics['vmaf_time'] = timer.end()
+
+        # save images and videos
+        if it < save_first:
+            base_name = os.path.join(output_dir, f'val')
+            ori_path = base_name + '_0_ori.png'
+            wm_path = base_name + '_1_wm.png'
+            diff_path = base_name + '_2_diff.png'
+            save_image(imgs[:8], ori_path, nrow=8)
+            save_image(imgs_w[:8], wm_path, nrow=8)
+            save_image(create_diff_img(imgs[:8], imgs_w[:8]), diff_path, nrow=8)
+            if is_video:
                 fps = 24 // 1
                 ori_path = ori_path.replace(".png", ".mp4")
                 wm_path = wm_path.replace(".png", ".mp4")
                 diff_path = diff_path.replace(".png", ".mp4")
+                timer.start()
                 save_vid(imgs, ori_path, fps)
                 save_vid(imgs_w, wm_path, fps)
                 save_vid(imgs - imgs_w, diff_path, fps)
-                
-        # quality metrics
-        metrics = {}
-        metrics['psnr'] = psnr(imgs_w, imgs).mean().item()
-        metrics['ssim'] = ssim(imgs_w, imgs).mean().item()
-        metrics['embed_time'] = embed_time
-        metrics['h'] = imgs.shape[-2]
-        metrics['w'] = imgs.shape[-1]
-        if is_video:
-            metrics['t'] = imgs.shape[-4]
-            metrics['vmaf'], metrics['vmaf_time'] = timer(vmaf_on_tensor, imgs_w, imgs)
+                metrics['save_vid_time'] = timer.end()
+
+        # masks, for now, are all ones
+        masks = torch.ones_like(imgs[:, :1])  # b 1 h w
+        imgs_masked = imgs_w * masks + imgs * (1 - masks)
+
+        # extraction for different augmentations
+        for transform, strengths in validation_augs:
+            # Create an instance of the transformation
+            transform_instance = transform()
+
+            for strength in strengths:
+                imgs_aug, masks_aug = transform_instance(
+                    imgs_masked, masks, strength)
+                selected_aug = str(transform.__name__).lower()
+                selected_aug += f"_{strength}"
+
+                # extract watermark
+                timer.start()
+                outputs = wam.detect(imgs_aug, is_video=is_video)
+                timer.step()
+                preds = outputs["preds"]
+                mask_preds = preds[:, 0:1]  # b 1 ...
+                bit_preds = preds[:, 1:]  # b k ...
+
+                aug_log_stats = {}
+                if decoding:
+                    bit_accuracy_ = bit_accuracy(
+                        bit_preds,
+                        msgs,
+                        masks_aug
+                    ).nanmean().item()
+                    aug_log_stats[f'bit_acc'] = bit_accuracy_
+
+                if detection:
+                    iou0 = iou(mask_preds, masks, label=0).mean().item()
+                    iou1 = iou(mask_preds, masks, label=1).mean().item()
+                    aug_log_stats.update({
+                        f'acc': accuracy(mask_preds, masks).mean().item(),
+                        f'miou': (iou0 + iou1) / 2,
+                    })
+
+                current_key = f"{selected_aug}"
+                aug_log_stats = {f"{k}_{current_key}": v for k,
+                                v in aug_log_stats.items()}
+                metrics.update(aug_log_stats)
+        metrics['extract_time'] = timer.avg_step()
 
         print(metrics)
+        all_metrics.append(metrics)
 
-        extract_times = []
-        for mask_id, masks in enumerate(validation_masks):
-            # watermark masking
-            masks = masks.to(imgs.device)  # 1 h w
-            if len(masks.shape) < 4:
-                masks = masks.unsqueeze(0).repeat(
-                    imgs_w.shape[0], 1, 1, 1)  # b 1 h w
-            imgs_masked = imgs_w * masks + imgs * (1 - masks)
-
-            for transform, strengths in validation_augs:
-                # Create an instance of the transformation
-                transform_instance = transform()
-
-                for strength in strengths:
-                    do_resize = False  # hardcode for now, might need to change
-                    if not do_resize:
-                        imgs_aug, masks_aug = transform_instance(
-                            imgs_masked, masks, strength)
-                    else:
-                        # h, w = imgs_w.shape[-2:]
-                        h, w = params.img_size_extractor, params.img_size_extractor
-                        imgs_aug, masks_aug = transform_instance(
-                            imgs_masked, masks, strength)
-                        if imgs_aug.shape[-2:] != (h, w):
-                            imgs_aug = nn.functional.interpolate(imgs_aug, size=(h, w),
-                                                                mode='bilinear', align_corners=False, antialias=True)
-                            masks_aug = nn.functional.interpolate(masks_aug, size=(h, w),
-                                                                mode='bilinear', align_corners=False, antialias=True)
-                    selected_aug = str(transform.__name__).lower()
-                    selected_aug += f"_{strength}"
-
-                    # extract watermark
-                    extract_time = time.time()
-                    outputs = wam.detect(imgs_aug, is_video=is_video)
-                    extract_time = time.time() - extract_time
-                    extract_times.append(extract_time / imgs_aug.shape[0])
-                    preds = outputs["preds"]
-                    mask_preds = preds[:, 0:1]  # b 1 ...
-                    bit_preds = preds[:, 1:]  # b k ...
-
-                    aug_log_stats = {}
-                    if params.nbits > 0:
-                        bit_accuracy_ = bit_accuracy(
-                            bit_preds,
-                            msgs,
-                            masks_aug
-                        ).nanmean().item()
-
-                    if params.nbits > 0:
-                        aug_log_stats[f'bit_acc'] = bit_accuracy_
-
-                    if params.lambda_det > 0:
-                        iou0 = iou(mask_preds, masks, label=0).mean().item()
-                        iou1 = iou(mask_preds, masks, label=1).mean().item()
-                        aug_log_stats.update({
-                            f'acc': accuracy(mask_preds, masks).mean().item(),
-                            f'miou': (iou0 + iou1) / 2,
-                        })
-
-                    current_key = f"mask={mask_id}_aug={selected_aug}"
-                    aug_log_stats = {f"{k}_{current_key}": v for k,
-                                    v in aug_log_stats.items()}
-
-                    torch.cuda.synchronize()
-                    metric_logger.update(**aug_log_stats)
-
-            metrics['extract_time'] = np.mean(extract_times)
-            torch.cuda.synchronize()
-            metric_logger.update(**metrics)
-
-    metric_logger.synchronize_between_processes()
-    print("Averaged {} stats:".format('val'), metric_logger)
-    valid_logs = {k: meter.global_avg for k,
-                  meter in metric_logger.meters.items()}
-    tensorboard.add_scalars("VALID", valid_logs, epoch)
-    return valid_logs
-
-    return metrics
+    return all_metrics
 
 
 
@@ -282,13 +279,12 @@ def main():
     group.add_argument("--dataset", type=str, help="Name of the dataset.")
     group.add_argument('--is_video', type=utils.bool_inst, default=False, help='Whether the data is video')
     group.add_argument('--short_edge_size', type=int, default=-1, help='Short edge size for resizing, -1 for no resizing')
-    group.add_argument('--frames_per_clip', default=32, type=int, help='Number of frames per clip for video datasets')
-    group.add_argument('--frame_step', default=1, type=int, help='Step between frames for video datasets')
-    group.add_argument('--num_clips', default=2, type=int, help='Number of clips per video for video datasets')
+    group.add_argument('--videowam_chunk_size', type=int, default=64, help='Number of frames to chunk during forward pass')
+    group.add_argument('--num_frames', type=int, default=24*3, help='Number of frames to evaluate for video quality')
 
     group = parser.add_argument_group('Experiment')
     group.add_argument("--output_dir", type=str, default="output/", help="Output directory for logs and images (Default: /output)")
-    group.add_argument('--save_first', type=int, default=10, help='Number of images/videos to save')
+    group.add_argument('--save_first', type=int, default=-1, help='Number of images/videos to save')
 
     args = parser.parse_args()
 
@@ -300,13 +296,20 @@ def main():
     avail_device = 'cuda' if torch.cuda.is_available() else 'cpu'
     device = args.device or avail_device
     model.to(device)
+    model.chunk_size = args.videowam_chunk_size
 
     # Setup the dataset    
     dataset = setup_dataset(args)
 
     # Evaluate the model
     os.makedirs(args.output_dir, exist_ok=True)
-    evaluate(model, dataset, args.is_video, args.output_dir)
+    metrics = evaluate(
+        wam = model, 
+        dataset = dataset, 
+        is_video = args.is_video, 
+        output_dir = args.output_dir,
+        save_first = args.save_first,
+    )
 
 if __name__ == '__main__':
     main()

@@ -104,24 +104,6 @@ def get_dataloader_segmentation(
     return dataloader
 
 
-def load_video(fname):
-    """ Load video content using Decord """
-    if not os.path.exists(fname):
-        warnings.warn(f'video path not found {fname=}')
-        return []
-    _fsize = os.path.getsize(fname)
-    if _fsize < 1 * 1024:  # avoid hanging issue
-        warnings.warn(f'video too short {fname=}')
-        return []
-    try:
-        vr = VideoReader(fname, num_threads=1, ctx=cpu(0))
-    except Exception:
-        return []
-
-    vid_np = vr.get_batch(range(len(vr))).asnumpy().transpose(0, 3, 1, 2)
-    return torch.from_numpy(vid_np)
-
-
 def get_video_dataloader(
     data_dir: str,
     transform: callable = None,
