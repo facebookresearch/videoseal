@@ -1,9 +1,12 @@
 
 import contextlib
 import io
+import time
 import sys
 import os
 import subprocess
+
+import torch
 
 def bool_inst(v):
     if isinstance(v, bool):
@@ -51,3 +54,14 @@ def suppress_output():
         sys.stdout = old_stdout
         sys.stderr = old_stderr
         devnull.close()
+
+def timer(func, *args, **kwargs):
+    """
+    Timer function to measure the execution time of a function.
+    """
+    start = time.time()
+    result = func(*args, **kwargs)
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+    end = time.time()
+    return result, end - start
