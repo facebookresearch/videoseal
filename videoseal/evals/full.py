@@ -10,12 +10,12 @@ python -m videoseal.evals.full \
 
 
 import json
-
 import omegaconf
-
 import argparse
 import os
+
 import torch
+from torch.utils.data import Dataset
 from torchvision.utils import save_image
 
 
@@ -113,7 +113,11 @@ def setup_dataset(args):
 
 
 @torch.no_grad()
-def evaluate(model, dataset, output_dir):
+def evaluate(
+    model: VideoWam,
+    dataset: Dataset, 
+    output_dir: str,
+):
     """
     
     eval only quality? eval only bit accuracy?
@@ -278,10 +282,13 @@ def main():
     args = parser.parse_args()
 
     # Setup the model
-    device = torch.device(args.device if torch.cuda.is_available() else 'cpu')
     model = setup_model_from_checkpoint(args.checkpoint)
-    model.to(device)
     model.eval()
+
+    # Setup the device
+    avail_device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    device = args.device or avail_device
+    model.to(device)
 
     # Setup the dataset    
     dataset = setup_dataset(args)
