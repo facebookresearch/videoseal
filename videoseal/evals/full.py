@@ -18,10 +18,8 @@ import torch
 from torch.utils.data import Dataset
 from torchvision.utils import save_image
 
-
 from .metrics import vmaf_on_tensor
-from ..data.loader import get_dataloader_segmentation, get_video_dataloader
-from ..data.datasets import VideoDataset
+from ..data.datasets import VideoDataset, CocoImageIDWrapper
 from ..models import VideoWam, build_embedder, build_extractor
 from ..augmentation.augmenter import get_dummy_augmenter
 from ..evals.metrics import psnr, ssim
@@ -101,7 +99,7 @@ def setup_dataset(args):
         )
     else:
         dataset = CocoImageIDWrapper(
-            root=data_dir, 
+            root=args.data_dir, 
             annFile=ann_file, 
             transform=transform, 
             mask_transform=mask_transform,

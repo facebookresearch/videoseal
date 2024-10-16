@@ -53,7 +53,7 @@ def get_transforms(
 def get_resize_transform(img_size, resize_only=True):
     if resize_only:  # makes more sense for pre-training
         transform = transforms.Compose([
-            transforms.Resize(img_size, img_size)
+            transforms.Resize((img_size, img_size))
         ])
     else:
         transform = transforms.Compose([

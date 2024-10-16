@@ -82,7 +82,7 @@ def get_dataset_parser(parser):
     """
     group = parser.add_argument_group('Dataset parameters')
     group.add_argument("--image_dataset", type=str,
-                       choices=["coco"], help="Name of the image dataset.")
+                       choices=["coco", "coco-stuff-blurred"], help="Name of the image dataset.")
     group.add_argument("--video_dataset", type=str,
                        choices=["sa-v"], help="Name of the video dataset.")
     group.add_argument("--prop_img_vid", type=float, default=0.5,

@@ -1,0 +1,5 @@
+train_dir: /datasets01/COCO-Stuff/042623/face_blurred/train_img/
+train_annotation_file: /datasets01/COCO-Stuff/072318/stuff_train2017.json
+val_dir: /datasets01/COCO-Stuff/042623/face_blurred/val_img/
+val_annotation_file: /datasets01/COCO-Stuff/072318/stuff_val2017.json
+
