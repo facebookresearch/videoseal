@@ -25,9 +25,9 @@ def get_validation_augs(
     ]
     if is_video:
         comps = [
-            (H264, [32, 40, 48]),
-            (H264rgb, [32, 40, 48]),
-            (H265, [32, 40, 48])
+            (H264, [30, 40, 60]),
+            (H264rgb, [30, 40, 60]),
+            (H265, [30, 40])
         ]
         augs.extend(comps)
     return augs

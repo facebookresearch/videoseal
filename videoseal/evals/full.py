@@ -181,6 +181,12 @@ def evaluate(
         msgs = outputs["msgs"]  # b k
         imgs_w = outputs["imgs_w"]  # b c h w
 
+        # cut frames
+        imgs = imgs[:num_frames]  # f c h w
+        msgs = msgs[:num_frames]  # f k
+        imgs_w = imgs_w[:num_frames]  # f c h w
+        masks = masks[:num_frames]  # f 1 h w
+
         # compute qualitative metrics
         metrics['psnr'] = psnr(
             imgs_w[:num_frames], 
