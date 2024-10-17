@@ -15,12 +15,13 @@ import json
 import omegaconf
 import argparse
 import os
-import time
+import pandas as pd
 
 import torch
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, Subset
 from torchvision.utils import save_image
 import torchvision.transforms as transforms
+import tqdm
 
 from .metrics import vmaf_on_tensor, bit_accuracy, iou, accuracy
 from ..data.datasets import ImageFolder, VideoDataset, CocoImageIDWrapper
@@ -153,13 +154,15 @@ def evaluate(
         dataset (Dataset): The dataset to evaluate on
         is_video (bool): Whether the data is video
         output_dir (str): Directory to save the output images
-        num_frames (int): Number of frames to evaluate for video quality
+        num_frames (int): Number of frames to evaluate for video quality and extraction (default: 24*3 i.e. 3seconds)
+        decoding (bool): Whether to evaluate decoding metrics (default: True)
+        detection (bool): Whether to evaluate detection metrics (default: False)
     """
     all_metrics = []
     validation_augs = get_validation_augs(is_video)
     timer = Timer()
 
-    for it, batch_items in enumerate(dataset):
+    for it, batch_items in enumerate(tqdm.tqdm(dataset)):
         # initialize metrics
         metrics = {}
 
@@ -265,8 +268,6 @@ def evaluate(
                                 v in aug_log_stats.items()}
                 metrics.update(aug_log_stats)
         metrics['extract_time'] = timer.avg_step()
-
-        print(metrics)
         all_metrics.append(metrics)
 
     return all_metrics
@@ -285,11 +286,19 @@ def main():
     group.add_argument('--is_video', type=utils.bool_inst, default=False, 
                        help='Whether the data is video')
     group.add_argument('--short_edge_size', type=int, default=-1, 
-                       help='Resizes the short edge of the image to this size, and keep the aspect ratio. If -1, no resizing.')
-    group.add_argument('--videowam_chunk_size', type=int, default=64, 
-                       help='Number of frames to chunk during forward pass')
+                       help='Resizes the short edge of the image to this size at loading time, and keep the aspect ratio. If -1, no resizing.')
     group.add_argument('--num_frames', type=int, default=24*3, 
                        help='Number of frames to evaluate for video quality')
+    group.add_argument('--num_samples', type=int, default=100, 
+                          help='Number of samples to evaluate')
+    
+    group = parser.add_argument_group('Model parameters to override. If not provided, the checkpoint values are used.')
+    group.add_argument("--scaling_w", type=float, default=None,
+                        help="Scaling factor for the watermark in the embedder model")
+    group.add_argument('--videowam_chunk_size', type=int, default=None, 
+                        help='Number of frames to chunk during forward pass')
+    group.add_argument('--videowam_step_size', type=int, default=None,
+                        help='The number of frames to propagate the watermark to')
 
     group = parser.add_argument_group('Experiment')
     group.add_argument("--output_dir", type=str, default="output/", help="Output directory for logs and images (Default: /output)")
@@ -300,15 +309,18 @@ def main():
     # Setup the model
     model = setup_model_from_checkpoint(args.checkpoint)
     model.eval()
+    model.scaling_w = args.scaling_w or model.scaling_w
+    model.chunk_size = args.videowam_chunk_size or model.chunk_size
+    model.step_size = args.videowam_step_size or model.step_size
 
     # Setup the device
     avail_device = 'cuda' if torch.cuda.is_available() else 'cpu'
     device = args.device or avail_device
     model.to(device)
-    model.chunk_size = args.videowam_chunk_size
 
     # Setup the dataset    
     dataset = setup_dataset(args)
+    dataset = Subset(dataset, range(args.num_samples))
 
     # Evaluate the model
     os.makedirs(args.output_dir, exist_ok=True)
@@ -319,6 +331,18 @@ def main():
         output_dir = args.output_dir,
         save_first = args.save_first,
     )
+
+    # Save the metrics as csv
+    metrics_path = os.path.join(args.output_dir, "metrics.csv")
+    with open(metrics_path, 'w') as f:
+        f.write(','.join(metrics[0].keys()) + '\n')
+        for metric in metrics:
+            f.write(','.join(map(str, metric.values())) + '\n')
+    print(f"Metrics saved to {metrics_path}")
+
+    # Print mean
+    pd.set_option('display.max_rows', None)
+    print(pd.DataFrame(metrics).mean())
 
 if __name__ == '__main__':
     main()
