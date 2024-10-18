@@ -61,6 +61,7 @@ class VideoCompression(nn.Module):
 
         buffer.seek(0)
         # file_size = buffer.getbuffer().nbytes
+        # print(f"Compressed video size - crf:{self.crf} - {file_size / 1e6:.2f} MB")
         return buffer
 
     def _decompress_frames(self, buffer) -> list:

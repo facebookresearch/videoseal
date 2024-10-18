@@ -1,38 +1,148 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-# All rights reserved.
-#
-# This source code is licensed under the license found in the
-# LICENSE file in the root directory of this source tree.
-
-# adapted from https://github.com/facebookresearch/jepa/blob/main/src/datasets/video_dataset.py
+# Video dataset adapted from https://github.com/facebookresearch/jepa/blob/main/src/datasets/video_dataset.py
 
 import glob
-# import inspect
 import logging
 import os
-import pathlib
-# import threading
 import warnings
-from logging import getLogger
-from typing import Callable, List, Optional, Union
-
-import cv2
+import tqdm
+import functools
+import random
 import numpy as np
-import pandas as pd
-import torch
 from decord import VideoReader, cpu
-from PIL import Image
-from torch.utils.data import Dataset
-from torchvision import transforms
-from tqdm import tqdm
+from pycocotools import mask as maskUtils
 
-from videoseal.data.transforms import (get_resize_transform,
-                                       get_transforms_segmentation)
-from videoseal.utils.data import LRUDict
+import torch
+from torch.utils.data import Dataset
+from torchvision.transforms import ToTensor
+from torchvision.datasets import CocoDetection
+from torchvision.datasets.folder import default_loader, is_image_file
+
+from ..utils import suppress_output
+from ..utils.data import LRUDict
+
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+@functools.lru_cache()
+def get_image_paths(path):
+    paths = []
+    for path, _, files in os.walk(path):
+        for filename in files:
+            paths.append(os.path.join(path, filename))
+    return sorted([fn for fn in paths if is_image_file(fn)])
+
+
+class ImageFolder:
+    """An image folder dataset intended for self-supervised learning."""
+
+    def __init__(self, path, transform=None, loader=default_loader):
+        self.samples = get_image_paths(path)
+        self.loader = loader
+        self.transform = transform
+
+    def __getitem__(self, idx: int):
+        assert 0 <= idx < len(self)
+        img = self.loader(self.samples[idx])
+        img = ToTensor()(img)
+        if self.transform:
+            return self.transform(img), 0
+        return img, 0
+
+    def __len__(self):
+        return len(self.samples)
+
+
+class CocoImageIDWrapper(CocoDetection):
+    def __init__(
+        self, root, annFile, transform=None, mask_transform=None, 
+        random_nb_object=True, max_nb_masks=4, multi_w=False
+    ) -> None:
+        """
+        Args:
+            root (str): Root directory where images are saved.
+            annFile (str): Path to json annotation file.
+            transform (callable, optional): A function/transform that takes in an PIL image and returns a transformed version.
+            mask_transform (callable, optional): The same as transform but for the mask.
+            random_nb_object (bool, optional): If True, randomly sample the number of objects in the image. Defaults to True.
+            max_nb_masks (int, optional): Maximum number of masks to return. Defaults to 4.
+            multi_w (bool, optional): If True, return multiple masks as a single tensor. Defaults to False.
+        """
+        with suppress_output():
+            super().__init__(root, annFile, transform=transform, target_transform=mask_transform)
+        self.random_nb_object = random_nb_object
+        self.max_nb_masks = max_nb_masks
+        self.multi_w = multi_w
+
+    def __getitem__(self, index: int) -> tuple[torch.Tensor, torch.Tensor]:
+        if not isinstance(index, int):
+            raise ValueError(
+                f"Index must be of type integer, got {type(index)} instead.")
+
+        id = self.ids[index]
+        img = self._load_image(id)
+        mask = self._load_mask(id)
+        if mask is None:
+            return None  # Skip this image if no valid mask is available
+
+        # convert PIL to tensor
+        img = ToTensor()(img)
+
+        if self.transforms is not None:
+            img, mask = self.transforms(img, mask)
+
+        return img, mask
+
+    def _load_mask(self, id):
+        anns = self.coco.loadAnns(self.coco.getAnnIds(id))
+        if not anns:
+            return None  # Return None if there are no annotations
+
+        img_info = self.coco.loadImgs(id)[0]
+        original_height = img_info['height']
+        original_width = img_info['width']
+
+        # Initialize a list to hold all masks
+        masks = []
+        if self.random_nb_object and np.random.rand() < 0.5:
+            random.shuffle(anns)
+            anns = anns[:np.random.randint(1, len(anns)+1)]
+        if not (self.multi_w):
+            mask = np.zeros((original_height, original_width),
+                            dtype=np.float32)
+            # one mask for all objects
+            for ann in anns:
+                rle = self.coco.annToRLE(ann)
+                m = maskUtils.decode(rle)
+                mask = np.maximum(mask, m)
+            mask = torch.tensor(mask, dtype=torch.float32)
+            return mask[None, ...]  # Add channel dimension
+        else:
+            anns = anns[:self.max_nb_masks]
+            for ann in anns:
+                rle = self.coco.annToRLE(ann)
+                m = maskUtils.decode(rle)
+                masks.append(m)
+            # Stack all masks along a new dimension to create a multi-channel mask tensor
+            if masks:
+                masks = np.stack(masks, axis=0)
+                masks = torch.tensor(masks, dtype=torch.bool)
+                # Check if the number of masks is less than max_nb_masks
+                if masks.shape[0] < self.max_nb_masks:
+                    # Calculate the number of additional zero masks needed
+                    additional_masks_count = self.max_nb_masks - masks.shape[0]
+                    # Create additional zero masks
+                    additional_masks = torch.zeros(
+                        (additional_masks_count, original_height, original_width), dtype=torch.bool)
+                    # Concatenate the original masks with the additional zero masks
+                    masks = torch.cat([masks, additional_masks], dim=0)
+            else:
+                # Return a tensor of shape (max_nb_masks, height, width) filled with zeros if there are no masks
+                masks = torch.zeros(
+                    (self.max_nb_masks, original_height, original_width), dtype=torch.bool)
+            return masks
 
 
 class VideoDataset(Dataset):
@@ -41,27 +151,28 @@ class VideoDataset(Dataset):
     def __init__(
         self,
         # List of folder paths containing .mp4 video files
-        folder_paths: List[str],
-        datasets_weights: Optional[List[float]] = None,
+        folder_paths: list[str],
+        datasets_weights: list[float] = None,
         frames_per_clip: int = 16,  # Number of frames in each video clip
         frame_step: int = 4,  # Step size between frames within a clip
         num_clips: int = 1,  # Number of clips to sample from each video
         # Optional transformation function to be applied to each clip
-        transform: Optional[Callable] = None,
-        mask_transform: Optional[Callable] = None,
+        transform: callable = None,
+        mask_transform: callable = None,
         # Optional transformation function applied on the video before clipping
-        shared_transform: Optional[Callable] = None,
+        shared_transform: callable = None,
         # If True, sample clips randomly inside the video
         random_clip_sampling: bool = True,
         allow_clip_overlap: bool = False,  # If True, allow clips to overlap
         # If True, exclude videos that are shorter than the required clip length
         filter_short_videos: bool = False,
         # Maximum allowed video file size in bytes
-        filter_long_videos: Union[int, float] = int(10**9),
+        filter_long_videos: int | float = int(10**9),
         # Optional, specific duration in seconds for each clip
-        duration: Optional[float] = None,
-        output_resolution: tuple = (256, 256),  # Desired output resolution
+        duration: float = None,
+        output_resolution: tuple | int = (256, 256),  # Desired output resolution
         num_workers: int = 1,  # numbers of cpu to run the preprocessing of each batch
+        subsample_frames: bool = True # if set to false return full video
     ):
         self.folder_paths = folder_paths
         self.datasets_weights = datasets_weights
@@ -78,6 +189,7 @@ class VideoDataset(Dataset):
         self.duration = duration
         self.output_resolution = output_resolution
         self.num_workers = num_workers
+        self.subsample_frames = subsample_frames
 
         if VideoReader is None:
             raise ImportError(
@@ -91,7 +203,7 @@ class VideoDataset(Dataset):
             video_files = glob.glob(os.path.join(folder_path, '*.mp4'))
             logger.info("Found %d videos in %s", len(video_files), folder_path)
 
-            for video_file in tqdm(video_files,
+            for video_file in tqdm.tqdm(video_files,
                                    desc=f"Processing videos in {folder_path}"):
                 self.videofiles.append(video_file)
 
@@ -112,6 +224,24 @@ class VideoDataset(Dataset):
         self.video_buffer = LRUDict(maxsize=150)
 
     def __getitem__(self, index):
+        if self.subsample_frames:
+            return self.get_clip(index)
+        else:
+            return self.get_vid(index)
+    
+    def get_vid(self, index):
+        video_file = self.videofiles[index]
+        video, mask = self.load_full_video_decord(
+            video_file, 
+            num_workers=self.num_workers
+        )
+        if self.transform is not None:
+            video = torch.stack([self.transform(frame) for frame in video])
+        if self.mask_transform is not None:
+            mask = torch.stack([self.mask_transform(one_mask) for one_mask in mask])
+        return video, mask
+
+    def get_clip(self, index):
         videofile_index = index // self.num_clips
         clip_index = index % self.num_clips
 
@@ -174,6 +304,37 @@ class VideoDataset(Dataset):
 
         return clip, mask, clip_frame_indices
 
+    @staticmethod
+    def load_full_video_decord(fname, num_workers=8):
+        """
+        Load full video content using Decord.
+        Args:
+            fname (str): The path to the video file.
+            num_workers (int): The number of worker threads to use for video loading. Defaults to 8.
+        Returns:
+            tuple: A tuple containing the loaded video frames as a PyTorch tensor (Frames, H, W , C) and a mask tensor.
+        Raises:
+            warnings.warn: If the video file is not found or is too short.
+        """
+        if not os.path.exists(fname):
+            warnings.warn(f'video path not found {fname=}')
+            return [], None
+        _fsize = os.path.getsize(fname)
+        if _fsize < 1 * 1024:  # avoid hanging issue
+            warnings.warn(f'video too short {fname=}')
+            return [], None
+        try:
+            vr = VideoReader(
+                fname, num_threads=num_workers, ctx=cpu(0))
+        except Exception:
+            return [], None
+        vid_np = vr.get_batch(range(len(vr))).asnumpy()
+        vid_np = vid_np.transpose(0, 3, 1, 2) / 255.0  # normalize to 0 - 1
+        vid_pt = torch.from_numpy(vid_np).float()
+        mask = torch.ones_like(vid_pt[:, 0:1, ...])
+        return vid_pt, mask
+
+
     def loadvideo_decord(self, sample):
         """ Load video content using Decord """
 
@@ -191,8 +352,20 @@ class VideoDataset(Dataset):
             return [], None
 
         try:
-            vr = VideoReader(
-                fname, num_threads=self.num_workers, ctx=cpu(0), width=self.output_resolution[1], height=self.output_resolution[0])
+            vr = VideoReader(fname, num_threads=self.num_workers, ctx=cpu(0))
+            ori_height, ori_width = vr[0].shape[:2]
+            if isinstance(self.output_resolution, int):
+                if self.output_resolution == -1:  # keep original resolution
+                    height = -1
+                    width = -1
+                else:  # keep aspect ratio
+                    scale = self.output_resolution / min(ori_height, ori_width)
+                    height = int(ori_height * scale)
+                    width = int(ori_width * scale)
+            else:
+                width = self.output_resolution[1]
+                height = self.output_resolution[0]
+            vr = VideoReader(fname, width=width, height=height, num_threads=self.num_workers, ctx=cpu(0))
         except Exception:
             return [], None
 
@@ -276,14 +449,19 @@ class VideoDataset(Dataset):
         return len(self.videofiles) * self.num_clips
 
 
+
+
+
 if __name__ == "__main__":
     import time
 
     # Specify the path to the folder containing the MP4 files
     video_folder_path = "./assets/videos"
 
-    train_transform, train_mask_transform, val_transform, val_mask_transform = get_resize_transform(
-        img_size=256)
+    from .transforms import get_resize_transform
+
+    train_transform, train_mask_transform = get_resize_transform(img_size=256)
+    val_transform, val_mask_transform = get_resize_transform(img_size=256)
 
    # Create an instance of the VideoDataset
     dataset = VideoDataset(

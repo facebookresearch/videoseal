@@ -27,11 +27,7 @@ Args inventory:
 import argparse
 import datetime
 import json
-import math
 import os
-import random
-import sys
-import threading
 import time
 from typing import List
 
@@ -60,8 +56,7 @@ from videoseal.data.loader import (get_dataloader_segmentation,
                                    get_video_dataloader)
 from videoseal.data.transforms import (get_resize_transform, get_transforms,
                                        get_transforms_segmentation)
-from videoseal.evals.metrics import (accuracy, bit_accuracy,
-                                     bit_accuracy_inference, iou, psnr, ssim)
+from videoseal.evals.metrics import accuracy, bit_accuracy, iou, psnr, ssim
 from videoseal.losses.detperceptual import LPIPSWithDiscriminator
 from videoseal.models import VideoWam, Wam, build_embedder, build_extractor
 from videoseal.modules.jnd import JND
@@ -367,8 +362,7 @@ def main(params):
                                                   num_workers=params.workers,
                                                   transform=train_transform,
                                                   mask_transform=train_mask_transform,
-                                                  output_resolution=(
-                                                      params.img_size, params.img_size),
+                                                  output_resolution=params.img_size,
                                                   frames_per_clip=params.frames_per_clip,
                                                   frame_step=params.frame_step,
                                                   # TODO: Find a smart way to shuffle while making cache efficient
@@ -380,8 +374,7 @@ def main(params):
                                                 num_workers=params.workers,
                                                 transform=val_transform,
                                                 mask_transform=val_mask_transform,
-                                                output_resolution=(
-                                                    params.img_size_val, params.img_size_val),
+                                                output_resolution=params.img_size_val,
                                                 frames_per_clip=params.frames_per_clip,
                                                 # TODO: Find a smart way to shuffle while making cache efficient
                                                 shuffle=False,

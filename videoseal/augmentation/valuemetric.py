@@ -93,7 +93,7 @@ class Brightness(nn.Module):
         return torch.rand(1).item() * (self.max_factor - self.min_factor) + self.min_factor
 
     def forward(self, image, mask, factor=None):
-        factor = factor or self.get_random_factor()
+        factor = self.get_random_factor() if factor is None else factor
         image = F.adjust_brightness(image, factor)
         return image, mask
 
@@ -110,7 +110,7 @@ class Contrast(nn.Module):
         return torch.rand(1).item() * (self.max_factor - self.min_factor) + self.min_factor
 
     def forward(self, image, mask, factor=None):
-        factor = factor or self.get_random_factor()
+        factor = self.get_random_factor() if factor is None else factor
         image = F.adjust_contrast(image, factor)
         return image, mask
 
@@ -127,7 +127,7 @@ class Saturation(nn.Module):
         return torch.rand(1).item() * (self.max_factor - self.min_factor) + self.min_factor
 
     def forward(self, image, mask, factor=None):
-        factor = factor or self.get_random_factor()
+        factor = self.get_random_factor() if factor is None else factor
         image = F.adjust_saturation(image, factor)
         return image, mask
 
@@ -144,7 +144,7 @@ class Hue(nn.Module):
         return torch.rand(1).item() * (self.max_factor - self.min_factor) + self.min_factor
 
     def forward(self, image, mask, factor=None):
-        factor = factor or self.get_random_factor()
+        factor = self.get_random_factor() if factor is None else factor
         image = F.adjust_hue(image, factor)
         return image, mask
 
