@@ -106,6 +106,8 @@ def get_parser():
        help="Path to the embedder config file")
     aa("--augmentation_config", type=str, default="configs/all_augs.yaml",
        help="Path to the augmentation config file")
+    aa("--num_augs", type=int, default=1,
+         help="Number of augmentations to apply")
     aa("--extractor_config", type=str, default="configs/extractor.yaml",
        help="Path to the extractor config file")
     aa("--attenuation_config", type=str, default="configs/attenuation.yaml",
@@ -142,8 +144,10 @@ def get_parser():
        help="Optimizer (default: AdamW,lr=1e-4)")
     aa("--optimizer_d", type=str, default=None,
        help="Discriminator optimizer. If None uses the same params (default: None)")
-    aa("--scheduler", type=str, default="None", help="Scheduler (default: None)")
-    aa('--epochs', default=100, type=int, help='Number of total epochs to run')
+    aa("--scheduler", type=str, default="None", 
+       help="Scheduler (default: None)")
+    aa('--epochs', default=100, type=int, 
+       help='Number of total epochs to run')
     aa('--iter_per_epoch', default=10000, type=int,
        help='Number of iterations per epoch, made for very large datasets')
     aa('--iter_per_valid', default=None, type=int,
@@ -254,8 +258,9 @@ def main(params):
 
     # build the augmenter
     augmenter_cfg = omegaconf.OmegaConf.load(params.augmentation_config)
+    augmenter_cfg.num_augs = params.num_augs
     augmenter = Augmenter(
-        **augmenter_cfg
+        **augmenter_cfg,
     )
     print(f'augmenter: {augmenter}')
 
@@ -659,6 +664,8 @@ def train_one_epoch(
                     params.output_dir, f'{epoch:03}_{it:03}_{epoch_modality}_train_1_wm.png')
                 diff_path = os.path.join(
                     params.output_dir, f'{epoch:03}_{it:03}_{epoch_modality}_train_2_diff.png')
+                aug_path = os.path.join(
+                    params.output_dir, f'{epoch:03}_{it:03}_{epoch_modality}_train_3_aug_{outputs["selected_aug"]}.png')
                 if udist.is_main_process():
                     save_image(imgs, ori_path, nrow=8)
                     tensorboard.add_images("TRAIN/IMAGES/orig", imgs, epoch)
@@ -669,6 +676,8 @@ def train_one_epoch(
                         imgs, outputs["imgs_w"]), diff_path, nrow=8)
                     tensorboard.add_images("TRAIN/IMAGES/diff", create_diff_img(
                         imgs, outputs["imgs_w"]), epoch)
+                    save_image(outputs["imgs_aug"], aug_path, nrow=8)
+                    tensorboard.add_images("TRAIN/IMAGES/aug", outputs["imgs_aug"], epoch)
 
         # end accumulate gradients batches
         # add optimizer step
