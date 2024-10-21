@@ -40,6 +40,9 @@ class JPEG(nn.Module):
         else:
             image = self.jpeg_single(image, quality)
         return image, mask
+    
+    def __repr__(self):
+        return f"JPEG"
 
 
 class GaussianBlur(nn.Module):
@@ -58,6 +61,9 @@ class GaussianBlur(nn.Module):
         kernel_size = kernel_size or self.get_random_kernel_size()
         image = F.gaussian_blur(image, kernel_size)
         return image, mask
+
+    def __repr__(self):
+        return f"GaussianBlur"
 
 
 class MedianFilter(nn.Module):
@@ -80,6 +86,9 @@ class MedianFilter(nn.Module):
         else:
             image = median_filter(image, kernel_size)
         return image, mask
+    
+    def __repr__(self):
+        return f"MedianFilter"
 
 
 class Brightness(nn.Module):
@@ -98,6 +107,9 @@ class Brightness(nn.Module):
         image = F.adjust_brightness(image, factor)
         return image, mask
 
+    def __repr__(self):
+        return f"Brightness"
+
 
 class Contrast(nn.Module):
     def __init__(self, min_factor=None, max_factor=None):
@@ -115,6 +127,8 @@ class Contrast(nn.Module):
         image = F.adjust_contrast(image, factor)
         return image, mask
 
+    def __repr__(self):
+        return f"Contrast"
 
 class Saturation(nn.Module):
     def __init__(self, min_factor=None, max_factor=None):
@@ -132,6 +146,8 @@ class Saturation(nn.Module):
         image = F.adjust_saturation(image, factor)
         return image, mask
 
+    def __repr__(self):
+        return f"Saturation"
 
 class Hue(nn.Module):
     def __init__(self, min_factor=None, max_factor=None):
@@ -148,6 +164,9 @@ class Hue(nn.Module):
         factor = self.get_random_factor() if factor is None else factor
         image = F.adjust_hue(image, factor)
         return image, mask
+
+    def __repr__(self):
+        return f"Hue"
 
 
 if __name__ == "__main__":

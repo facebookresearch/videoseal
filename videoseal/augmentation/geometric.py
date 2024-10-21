@@ -15,6 +15,9 @@ class Identity(nn.Module):
 
     def forward(self, image, mask, *args, **kwargs):
         return image, mask
+    
+    def __repr__(self):
+        return f"Identity"
 
 
 class Rotate(nn.Module):
@@ -33,6 +36,9 @@ class Rotate(nn.Module):
         image = F.rotate(image, angle)
         mask = F.rotate(mask, angle)
         return image, mask
+    
+    def __repr__(self):
+        return f"Rotate"
 
 
 class Resize(nn.Module):
@@ -62,6 +68,9 @@ class Resize(nn.Module):
         image = F.resize(image, output_size, antialias=True)
         mask = F.resize(mask, output_size, antialias=True)
         return image, mask
+    
+    def __repr__(self):
+        return f"Resize"
 
 
 class Crop(nn.Module):
@@ -92,6 +101,9 @@ class Crop(nn.Module):
         image = F.crop(image, i, j, h, w)
         mask = F.crop(mask, i, j, h, w)
         return image, mask
+
+    def __repr__(self):
+        return f"Crop"
 
 
 class Perspective(nn.Module):
@@ -149,6 +161,9 @@ class Perspective(nn.Module):
         endpoints = [topleft, topright, botright, botleft]
         return startpoints, endpoints
 
+    def __repr__(self):
+        return f"Perspective"
+
 
 class HorizontalFlip(nn.Module):
     def __init__(self):
@@ -158,6 +173,9 @@ class HorizontalFlip(nn.Module):
         image = F.hflip(image)
         mask = F.hflip(mask)
         return image, mask
+
+    def __repr__(self):
+        return f"HorizontalFlip"
 
 
 if __name__ == "__main__":

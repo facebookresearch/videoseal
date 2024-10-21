@@ -228,14 +228,12 @@ def evaluate(
         imgs_masked = imgs_w * masks + imgs * (1 - masks)
 
         # extraction for different augmentations
-        for transform, strengths in validation_augs:
-            # Create an instance of the transformation
-            transform_instance = transform()
+        for validation_aug, strengths in validation_augs:
 
             for strength in strengths:
-                imgs_aug, masks_aug = transform_instance(
+                imgs_aug, masks_aug = validation_aug(
                     imgs_masked, masks, strength)
-                selected_aug = str(transform.__name__).lower()
+                selected_aug = str(validation_aug)
                 selected_aug += f"_{strength}"
 
                 # extract watermark

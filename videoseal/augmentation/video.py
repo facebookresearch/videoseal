@@ -148,6 +148,8 @@ class H264(VideoCompression):
         output, mask = super().forward(frames, mask, crf)
         return output, mask
 
+    def __repr__(self) -> str:
+        return f"H264"
 
 class H264rgb(VideoCompression):
     def __init__(self, crf_min=None, crf_max=None, fps=24):
@@ -165,6 +167,9 @@ class H264rgb(VideoCompression):
         crf = crf or self.get_random_crf()
         output, mask = super().forward(frames, mask, crf)
         return output, mask
+
+    def __repr__(self) -> str:
+        return f"H264rgb"
 
 
 class H265(VideoCompression):
@@ -184,6 +189,9 @@ class H265(VideoCompression):
         output, mask = super().forward(frames, mask, crf)
         return output, mask
 
+    def __repr__(self) -> str:
+        return f"H265"
+
 
 class VP9(VideoCompression):
     def __init__(self, fps=24):
@@ -194,7 +202,10 @@ class VP9(VideoCompression):
     def forward(self, frames, mask=None) -> torch.Tensor:
         output, mask = super().forward(frames, mask)
         return output, mask
-    
+
+    def __repr__(self) -> str:
+        return f"VP9"
+
 
 class AV1(VideoCompression):
     def __init__(self, crf_min=None, crf_max=None, fps=24):
@@ -212,6 +223,9 @@ class AV1(VideoCompression):
         crf = crf or self.get_random_crf()
         output, mask = super().forward(frames, mask, crf)
         return output, mask
+    
+    def __repr__(self) -> str:
+        return f"AV1"
 
 
 def compress_decompress(frames, codec='libx264', crf=28, fps=24) -> torch.Tensor:
