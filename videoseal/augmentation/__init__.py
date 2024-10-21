@@ -3,6 +3,35 @@ from .geometric import Crop, HorizontalFlip, Identity, Perspective, Resize, Rota
 from .valuemetric import JPEG, Brightness, Contrast, GaussianBlur, Hue, MedianFilter, Saturation
 from .video import H264, H264rgb, H265
 
+
+def get_validation_augs_subset(
+    is_video: bool = False
+) -> list:
+    """
+    Get the validation augmentations.
+    """
+    if is_video:
+        # less augs for videos because more expensive
+        augs = [
+            (Identity(),          [0]),  # No parameters needed for identity
+            (HorizontalFlip(),    [0]),  # No parameters needed for flip
+            (Crop(),              [0.71]),  # size ratio
+            (Brightness(),        [0.5]),
+            (H264(),              [40]),
+            (Sequential(H264(), Crop(), Brightness()), [(40, 0.71, 0.5)]),
+        ]
+    else:
+        augs = [
+            (Identity(),          [0]),  # No parameters needed for identity
+            (HorizontalFlip(),    [0]),  # No parameters needed for flip
+            (Crop(),              [0.71]),  # size ratio
+            (Brightness(),        [0.5]),
+            (JPEG(),              [60]),
+            (Sequential(JPEG(), Crop(), Brightness()), [(60, 0.71, 0.5)]),
+        ]
+    return augs
+
+
 def get_validation_augs(
     is_video: bool = False
 ) -> list:
@@ -28,7 +57,9 @@ def get_validation_augs(
             (H264(),              [30, 40, 50, 60]),
             (H264rgb(),           [30, 40, 50, 60]),
             (H265(),              [30, 40, 50]),  # crf > 50 is not valid
-            (Sequential(H264(), Brightness(), Crop()), [(40, 1.5, 0.71), (50, 1.5, 0.71)]),
+            (Sequential(H264(), Crop(), Brightness()), [(30, 0.71, 0.5)]),
+            (Sequential(H264(), Crop(), Brightness()), [(40, 0.71, 0.5)]),
+            (Sequential(H264(), Crop(), Brightness()), [(50, 0.71, 0.5)]),
         ]
     else:
         augs = [
@@ -44,6 +75,8 @@ def get_validation_augs(
             (JPEG(),              [40, 50, 60, 70, 80, 90]),
             (GaussianBlur(),      [3, 5, 9, 13, 17]),
             (MedianFilter(),      [3, 5, 9, 13, 17]),
-            (Sequential(JPEG(), Crop(), Brightness()), [(60, 0.71, 1.5)]),
+            (Sequential(JPEG(), Crop(), Brightness()), [(40, 0.71, 0.5)]),
+            (Sequential(JPEG(), Crop(), Brightness()), [(60, 0.71, 0.5)]),
+            (Sequential(JPEG(), Crop(), Brightness()), [(80, 0.71, 0.5)]),
         ]
     return augs

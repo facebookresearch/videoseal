@@ -45,6 +45,7 @@ import videoseal.utils as utils
 import videoseal.utils.dist as udist
 import videoseal.utils.logger as ulogger
 import videoseal.utils.optim as uoptim
+from videoseal.augmentation import get_validation_augs_subset, get_validation_augs
 from videoseal.augmentation.augmenter import Augmenter
 from videoseal.augmentation.geometric import (Crop, HorizontalFlip, Identity,
                                               Perspective, Resize, Rotate)
@@ -420,28 +421,6 @@ def main(params):
     else:
         wam_ddp = wam
 
-    # setup for validation
-    validation_augs = [
-        (Identity,          [0]),  # No parameters needed for identity
-        (HorizontalFlip,    [0]),  # No parameters needed for flip
-        (Rotate,            [10, 30, 45, 90]),  # (min_angle, max_angle)
-        (Resize,            [0.5, 0.75]),  # size ratio
-        (Crop,              [0.5, 0.75]),  # size ratio
-        (Perspective,       [0.2, 0.5, 0.8]),  # distortion_scale
-        (Brightness,        [0.5, 1.5]),
-        (Contrast,          [0.5, 1.5]),
-        (Saturation,        [0.5, 1.5]),
-        (Hue,               [-0.5, -0.25, 0.25, 0.5]),
-        (JPEG,              [40, 60, 80]),
-        (GaussianBlur,      [3, 5, 9, 17]),
-        (MedianFilter,      [3, 5, 9, 17]),
-    ]  # augs evaluated every full_eval_freq
-    validation_augs_subset = [
-        (Identity,          [0]),  # No parameters needed for identity
-        (Brightness,        [0.5]),
-        (Crop,              [0.75]),  # size ratio
-        (JPEG,              [60]),
-    ]  # augs evaluated every eval_freq
     dummy_img = torch.ones(3, params.img_size_val, params.img_size_val)
     validation_masks = augmenter.mask_embedder.sample_representative_masks(
         dummy_img)  # n 1 h w, full of ones or random masks depending on config
@@ -453,13 +432,9 @@ def main(params):
         val_loaders = ((Modalities.IMAGE, image_val_loader),
                        (Modalities.VIDEO, video_val_loader))
 
-        augs = validation_augs.copy()
-
         for val_loader, modality in val_loaders:
             if val_loader is not None:
-
-                if modality == Modalities.VIDEO:
-                    augs.append((H264, [32, 40, 46]))
+                augs = get_validation_augs(modality == Modalities.VIDEO)
 
                 print(f"running eval on {modality} dataset.")
                 val_stats = eval_one_epoch(wam, val_loader, modality, image_detection_loss,
@@ -514,14 +489,10 @@ def main(params):
                            (Modalities.VIDEO, video_val_loader))
             for epoch_modality, epoch_val_loader in val_loaders:
                 if epoch_val_loader is not None:
-                    if epoch % params.full_eval_freq == 0 and epoch > 0:
-                        augs = validation_augs.copy()
-                        if epoch_modality == Modalities.VIDEO:
-                            augs.append((H264, [32, 40, 46]))
+                    if (epoch % params.full_eval_freq == 0 and epoch > 0) or (epoch == params.epochs-1):
+                        augs = get_validation_augs(epoch_modality == Modalities.VIDEO)
                     else: 
-                        augs = validation_augs_subset.copy()
-                        if epoch_modality == Modalities.VIDEO:
-                            augs.append((H264, [32]))
+                        augs = get_validation_augs_subset(epoch_modality == Modalities.VIDEO)
                     val_stats = eval_one_epoch(wam, epoch_val_loader, epoch_modality, image_detection_loss,
                                                epoch, augs, validation_masks, params, tensorboard=tensorboard)
                     log_stats = {
@@ -801,9 +772,7 @@ def eval_one_epoch(
                         imgs_w.shape[0], 1, 1, 1)  # b 1 h w
                 imgs_masked = imgs_w * masks + imgs * (1 - masks)
 
-                for transform, strengths in validation_augs:
-                    # Create an instance of the transformation
-                    transform_instance = transform()
+                for transform_instance, strengths in validation_augs:
 
                     for strength in strengths:
                         do_resize = False  # hardcode for now, might need to change
@@ -820,7 +789,7 @@ def eval_one_epoch(
                                                                     mode='bilinear', align_corners=False, antialias=True)
                                 masks_aug = nn.functional.interpolate(masks_aug, size=(h, w),
                                                                     mode='bilinear', align_corners=False, antialias=True)
-                        selected_aug = str(transform.__name__).lower()
+                        selected_aug = str(transform_instance).lower()
                         selected_aug += f"_{strength}"
 
                         # extract watermark
