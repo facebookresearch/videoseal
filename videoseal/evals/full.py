@@ -8,6 +8,7 @@ python -m videoseal.evals.full \
     
     /private/home/hadyelsahar/work/code/videoseal/2024_logs/1013-hybrid-large-sweep-allaugs/_lambda_d=0.5_lambda_i=0.5_optimizer=AdamW,lr=5e-5_prop_img_vid=0.9_videowam_step_size=4_video_start=500_embedder_model=vae_small_bw/checkpoint.pth
     /private/home/hadyelsahar/work/code/videoseal/2024_logs/1013-hybrid-large-sweep-allaugs/_lambda_d=0.5_lambda_i=0.5_optimizer=AdamW,lr=5e-5_prop_img_vid=0.9_videowam_step_size=4_video_start=500_embedder_model=unet_small2/checkpoint.pth
+    /private/home/hadyelsahar/work/code/videoseal/2024_logs/1016-hybrid-vs-ours/_lambda_d=0.5_lambda_i=0.5_optimizer=AdamW,lr=1e-4_videowam_step_size=4_video_start=500_embedder_model=unet_small2/checkpoint.pth
 """
 
 
@@ -205,7 +206,7 @@ def evaluate(
 
         # save images and videos
         if it < save_first:
-            base_name = os.path.join(output_dir, f'val')
+            base_name = os.path.join(output_dir, f'{it:03}_val')
             ori_path = base_name + '_0_ori.png'
             wm_path = base_name + '_1_wm.png'
             diff_path = base_name + '_2_diff.png'
