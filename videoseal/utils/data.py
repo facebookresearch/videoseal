@@ -46,8 +46,7 @@ class LRUDict(OrderedDict):
 
 def parse_dataset_params(params):
     """
-    Parses the dataset parameters and loads the dataset configuration if needed.
-
+    Parses the dataset parameters. Populates image_dataset_config, video_dataset_config and modality fields.
     Logic:
     1. If a dataset name is provided (--image_dataset or --video_dataset), load the corresponding configuration from configs/datasets/<dataset_name>.yaml.
     2. If neither dataset name is provided, raise an error.

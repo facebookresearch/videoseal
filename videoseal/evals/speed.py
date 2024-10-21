@@ -3,7 +3,6 @@ from root directory:
     python videoseal/evals/speed.py --device cuda
 """
 
-
 import argparse
 import os
 import time
@@ -12,7 +11,12 @@ import omegaconf
 import pandas as pd
 import torch
 import torch.nn.functional as F
+from calflops import calculate_flops
+from torch.utils.data import DataLoader
+from torchvision.datasets import FakeData
+from torchvision.transforms import ToTensor
 
+import videoseal.utils as utils
 from videoseal.models import (Embedder, Extractor, build_embedder,
                               build_extractor)
 
@@ -21,8 +25,8 @@ from videoseal.models import (Embedder, Extractor, build_embedder,
 
 def sync(device):
     """ wait for the GPU to finish processing, before measuring time """
-    # if device.startswith('cuda'):
-    #     torch.cuda.synchronize()
+    if device.startswith('cuda'):
+        torch.cuda.synchronize()
     return
 
 
@@ -38,9 +42,34 @@ def estimate_floating_point_ops(model):
     return num_floating_point_ops
 
 
+def get_flops(model, img_size, device):
+    if isinstance(model, Embedder):
+        msgs = model.get_random_msg(bsz=1)
+        msgs = msgs.to(device)
+        img_size = (1, 3, img_size, img_size)
+        return calculate_flops(
+            model,
+            args=[torch.randn(img_size), msgs],
+            output_as_string=False,
+            output_precision=4,
+            print_results=False
+        )
+    elif isinstance(model, Extractor):
+        img_size = (1, 3, img_size, img_size)
+        return calculate_flops(
+            model,
+            args=[torch.randn(img_size)],
+            output_as_string=False,
+            output_precision=4,
+            print_results=False
+        )
+
+
+@torch.no_grad()
 def benchmark_model(model, img_size, data_loader, device):
     model.to(device)
     model.eval()
+
     times = []
     times_interp = []
     times_norm = []
@@ -106,13 +135,11 @@ def benchmark_model(model, img_size, data_loader, device):
         }
         results.update(curr_result)
     results.update({'nsamples': len(tt)})
+
     return results
 
 
 def get_data_loader(batch_size, img_size, num_workers, nsamples):
-    from torch.utils.data import DataLoader
-    from torchvision.datasets import FakeData
-    from torchvision.transforms import ToTensor
 
     transform = ToTensor()
     total_size = nsamples * batch_size
@@ -144,30 +171,60 @@ def main(args):
     results = []
 
     for embedder_name in args.embedder_models.split(','):
+        if 'yuv' in embedder_name:
+            continue  # skip yuv models for now as they require different input
+        result = {'model': embedder_name}
+        # build
         embedder_args = embedder_cfg[embedder_name]
         embedder = build_embedder(embedder_name, embedder_args, args.nbits)
         embedder = embedder.to(device)
-        embedder_stats = benchmark_model(
-            embedder, args.img_size_work, data_loader, device)
-        results.append({
-            'model': embedder_name,
-            'params': sum(p.numel() for p in embedder.parameters() if p.requires_grad) / 1e6,
-            **embedder_stats,
-        })
+        # flops
+        if args.do_flops:
+            flops, macs, params = get_flops(
+                embedder, args.img_size_work, device)
+            result.update({
+                'gflops': flops / 1e9,
+                'gmacs': macs / 1e9,
+                'params(m)': params / 1e6
+            })
+        # benchmark
+        if args.do_speed:
+            embedder_stats = benchmark_model(
+                embedder, args.img_size_work, data_loader, device)
+            result.update({
+                # 'model': embedder_name,
+                # 'params': sum(p.numel() for p in embedder.parameters() if p.requires_grad) / 1e6,
+                **embedder_stats,
+            })
+        results.append(result)
         print(results[-1])
 
     for extractor_name in args.extractor_models.split(','):
+        result = {'model': extractor_name}
+        # build
         extractor_args = extractor_cfg[extractor_name]
         extractor = build_extractor(
             extractor_name, extractor_args, args.img_size_work, args.nbits)
         extractor = extractor.to(device)
-        extractor_stats = benchmark_model(
-            extractor, args.img_size_work, data_loader, device)
-        results.append({
-            'model': extractor_name,
-            'params': sum(p.numel() for p in extractor.parameters() if p.requires_grad) / 1e6,
-            **extractor_stats
-        })
+        # flops
+        if args.do_flops:
+            flops, macs, params = get_flops(
+                extractor, args.img_size_work, device)
+            result.update({
+                'gflops': flops / 1e9,
+                'gmacs': macs / 1e9,
+                'params(m)': params / 1e6
+            })
+        # benchmark
+        if args.do_speed:
+            extractor_stats = benchmark_model(
+                extractor, args.img_size_work, data_loader, device)
+            result.update({
+                # 'model': extractor_name,
+                # 'params': sum(p.numel() for p in extractor.parameters() if p.requires_grad) / 1e6,
+                **extractor_stats,
+            })
+        results.append(result)
         print(results[-1])
 
     # Save results to CSV
@@ -194,5 +251,10 @@ if __name__ == '__main__':
     parser.add_argument('--extractor_models', type=str, default=None)
     parser.add_argument('--nbits', type=int, default=32)
     parser.add_argument('--output_dir', type=str, default='output')
+    parser.add_argument('--do_flops', type=utils.bool_inst, default=True,
+                        help='Calculate FLOPS for each model')
+    parser.add_argument('--do_speed', type=utils.bool_inst, default=False,
+                        help='Run speed benchmark for each model')
+
     args = parser.parse_args()
     main(args)
