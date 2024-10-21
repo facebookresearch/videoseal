@@ -75,7 +75,7 @@
     },
     "meta": {
         "group": "",
-        "name": "1013-hybrid-large-sweep-allaugs",
+        "name": "1013-hybrid-large-sweep-allaugs-largembit",
         "dest-arg": "yes",
         "dest-name": "output_dir"
     }
