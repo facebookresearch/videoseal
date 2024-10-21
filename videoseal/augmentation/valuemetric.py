@@ -33,6 +33,7 @@ class JPEG(nn.Module):
 
     def forward(self, image: torch.tensor, mask, quality=None):
         quality = quality or self.get_random_quality()
+        image = torch.clamp(image, 0, 1)
         if len(image.shape) == 4:  # b c h w
             for ii in range(image.shape[0]):
                 image[ii] = self.jpeg_single(image[ii], quality)

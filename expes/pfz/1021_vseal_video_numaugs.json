@@ -2,7 +2,7 @@
     "cmd": "/private/home/pfz/miniconda3/envs/img/bin/python train.py",
     "git": "git@github.com:fairinternal/videoseal.git",
     "preload": "MKL_THREADING_LAYER=GNU",
-    "commit": "eval-script",
+    "commit": "sequential-aug",
     "precmd": [],
     "params": {
         "image_dataset":        "coco-stuff-blurred",
@@ -43,7 +43,7 @@
         "gres": "gpu:8",
         "nodes": "1",
         "tasks-per-node": "8",
-        "partition": "devlab",
+        "partition": "learnfair",
         "cpus-per-task": "10",
         "time": 4320,
         "mem-per-cpu": "10G"
