@@ -58,8 +58,20 @@ class Augmenter(nn.Module):
         masks: dict,
         augs: dict,
         augs_params: dict,
+        num_augs: int = 1,
         **kwargs: dict
     ) -> None:
+        """
+        Args:
+            masks: (dict) The parameters for the mask embedder. \
+                E.g. {'kind': None}
+            augs: (dict) The augmentations to apply. \
+                E.g. {'identity': 4, 'resize': 1, 'crop': 1}
+            augs_params: (dict) The parameters for each augmentation. \
+                E.g. {'resize': {'min_size': 0.7, 'max_size': 1.5}, 'crop': {'min_size': 0.7, 'max_size': 1.0}}
+            num_augs: (int) The number of augmentations to apply.
+            **kwargs: (dict) Additional arguments.
+        """
         super(Augmenter, self).__init__()
 
         # create mask embedder
@@ -72,6 +84,7 @@ class Augmenter(nn.Module):
             augs=augs,
             augs_params=augs_params
         )
+        self.num_augs = num_augs
 
     def parse_augmentations(
         self,
@@ -123,7 +136,7 @@ class Augmenter(nn.Module):
                     h, w), mode='bilinear', align_corners=False, antialias=True)
                 mask = nn.functional.interpolate(mask, size=(
                     h, w), mode='bilinear', align_corners=False, antialias=True)
-        return image, mask, str(selected_aug)
+        return image, mask, selected_aug.__class__.__name__
 
     def forward(
         self,
@@ -148,15 +161,22 @@ class Augmenter(nn.Module):
             # watermark masking
             imgs_aug = imgs_w * mask_targets + imgs * (1 - mask_targets)
             # image augmentations
-            imgs_aug, mask_targets, selected_aug = self.augment(
-                imgs_aug, mask_targets, is_video)
+            selected_augs = []
+            for _ in range(self.num_augs):
+                imgs_aug, mask_targets, selected_aug_ = self.augment(
+                    imgs_aug, mask_targets, is_video)
+                selected_augs.append(selected_aug_)
+            selected_aug = "+".join(selected_augs)
             return imgs_aug, mask_targets, selected_aug
         else:
             # no mask
             mask_targets = torch.ones_like(imgs_w)[:, 0:1, :, :]
-            imgs_aug, mask_targets, selected_aug = self.augment(
-                imgs_w, mask_targets, is_video)
-            # imgs_aug = imgs_w
+            # image augmentations
+            selected_augs = []
+            for _ in range(self.num_augs):
+                imgs_aug, mask_targets, selected_aug_ = self.augment(
+                    imgs_aug, mask_targets, is_video)
+                selected_augs.append(selected_aug_)
             return imgs_aug, mask_targets, selected_aug
 
     def __repr__(self) -> str:
