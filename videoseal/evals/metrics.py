@@ -338,7 +338,11 @@ def bit_accuracy_mv(
 #             return vmaf_score, aux
 #     return vmaf_score
 
-def tensor_to_video(tensor, filename, fps, codec=None, crf=12):
+def tensor_to_video(
+        tensor, filename, fps, 
+        codec=None, crf=23,
+        ffmpeg_bin: str = '/private/home/pfz/09-videoseal/vmaf-dev/ffmpeg-git-20240629-amd64-static/ffmpeg',
+    ):
     """ Saves a video tensor into a video file."""
     T, C, H, W = tensor.shape
     assert C == 3, "Video must have 3 channels (RGB)."
@@ -350,22 +354,22 @@ def tensor_to_video(tensor, filename, fps, codec=None, crf=12):
             video_data.tofile(temp_file.name)
             temp_filename = temp_file.name
         command = [
-            'ffmpeg', '-y', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-s', f'{W}x{H}',
+            f'{ffmpeg_bin}', '-y', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-s', f'{W}x{H}',
             '-r', f'{fps}', '-i', temp_filename, filename
         ]
     elif codec == 'libx264':
-        with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as temp_file:
+        with tempfile.NamedTemporaryFile(suffix='.raw', delete=False) as temp_file:
             video_data.tofile(temp_file.name)
             temp_filename = temp_file.name
         command = [
-            'ffmpeg', '-y', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-s', f'{W}x{H}',
+            f'{ffmpeg_bin}', '-y', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-s', f'{W}x{H}',
             '-r', f'{fps}', '-i', temp_filename,
-            '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', str(crf), 
+            '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', f'{crf}',
             filename
         ]
     else:
         raise ValueError(f"Unsupported codec: {codec}")
-    subprocess.run(command, check=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
+    subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     os.remove(temp_filename)
 
 def vmaf_on_file(
@@ -498,16 +502,16 @@ if __name__ == '__main__':
     # # # Test the vmaf function
     vid_o = 'assets/videos/sav_013754.mp4'
     vid_w = 'assets/videos/sav_013754.mp4'
-    print("> test vmaf")
-    try:
-        result = vmaf_on_file(vid_o, vid_w)
-        if result is not None:
-            print("OK!", result)
-        else:
-            raise Exception("VMAF score not found in the output.")
-    except Exception as e:
-        print(f"!!! An error occurred: {str(e)}")
-        print(f"Try checking that ffmpeg is installed and that vmaf is available.")
+    # print("> test vmaf")
+    # try:
+    #     result = vmaf_on_file(vid_o, vid_w)
+    #     if result is not None:
+    #         print("OK!", result)
+    #     else:
+    #         raise Exception("VMAF score not found in the output.")
+    # except Exception as e:
+    #     print(f"!!! An error occurred: {str(e)}")
+    #     print(f"Try checking that ffmpeg is installed and that vmaf is available.")
 
     # Test the vmaf function on tensors
     print("> test vmaf on tensor")
@@ -515,7 +519,7 @@ if __name__ == '__main__':
     vid_o = load_video(vid_o)
     vid_w = load_video(vid_w)
     try:
-        result = vmaf_on_tensor(vid_o, vid_w, return_aux=True)
+        result = vmaf_on_tensor(vid_o, vid_w, return_aux=True, codec='libx264')
         if result is not None:
             print("OK!", result)
         else:
