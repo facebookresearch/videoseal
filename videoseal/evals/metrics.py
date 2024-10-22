@@ -338,7 +338,7 @@ def bit_accuracy_mv(
 #             return vmaf_score, aux
 #     return vmaf_score
 
-def tensor_to_video(tensor, filename, fps, codec=None, crf=28):
+def tensor_to_video(tensor, filename, fps, codec=None, crf=12):
     """ Saves a video tensor into a video file."""
     T, C, H, W = tensor.shape
     assert C == 3, "Video must have 3 channels (RGB)."

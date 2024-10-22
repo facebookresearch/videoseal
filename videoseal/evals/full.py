@@ -195,7 +195,7 @@ def evaluate_quality(
         metrics['ssim'] = ssim(imgs_w, imgs).mean().item()
         if is_video:
             timer.start()
-            metrics['vmaf'] = vmaf_on_tensor(imgs_w, imgs)
+            metrics['vmaf'] = vmaf_on_tensor(imgs_w, imgs, codec='libx264')
             metrics['vmaf_time'] = timer.end()
 
         # bdrate
