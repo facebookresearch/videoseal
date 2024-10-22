@@ -3,12 +3,12 @@ To run
     python -m videoseal.evals.metrics
 """
 
-import io
+import os
 import math
 import subprocess
 import tempfile
-import av
 import re
+import scipy
 import numpy as np
 
 import torch
@@ -217,6 +217,157 @@ def bit_accuracy_mv(
     bit_acc = torch.mean(correct, dim=-1)  # b
     return bit_acc
 
+# TODO: remove the following functions when the new implementation is tested
+# def vmaf_on_file(
+#     vid_o: str,
+#     vid_w: str,
+#     ffmpeg_bin: str = '/private/home/pfz/09-videoseal/vmaf-dev/ffmpeg-git-20240629-amd64-static/ffmpeg',
+# ) -> float:
+#     """
+#     Runs `ffmpeg -i vid_o.mp4 -i vid_w.mp4 -filter_complex libvmaf` and returns the score.
+#     """
+#     # Execute the command and capture the output to get the VMAF score
+#     command = [
+#             ffmpeg_bin,
+#             '-i', vid_o,
+#             '-i', vid_w,
+#             '-filter_complex', 'libvmaf',
+#             '-f', 'null', '-'
+#         ]
+#     result = subprocess.run(command, text=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
+#     vmaf_score = None
+#     for line in result.stderr.split('\n'):
+#         if "VMAF score:" in line:
+#             # numerical part of the VMAF score with regex
+#             match = re.search(r"VMAF score: ([0-9.]+)", line)
+#             if match:
+#                 vmaf_score = float(match.group(1))
+#                 break
+#     return vmaf_score
+
+# def vmaf_on_tensor(
+#     vid_o: torch.Tensor,
+#     vid_w: torch.Tensor,
+#     codec='libx264', crf=23, fps=24, 
+#     ffmpeg_bin: str = '/private/home/pfz/09-videoseal/vmaf-dev/ffmpeg-git-20240629-amd64-static/ffmpeg',
+#     return_aux: bool = False
+# ) -> float:
+#     """
+#     Computes the VMAF score between two videos represented as tensors, 
+#     and encoded using the specified codec.
+
+#     Args:
+#         vid_o (torch.Tensor): Original video tensor with shape TxCxHxW with normalized values (≈ [0,1])
+#         vid_w (torch.Tensor): Watermarked video tensor with shape TxCxHxW with normalized values (≈ [0,1])
+#         codec (str): Codec to use for encoding the video
+#         crf (int): Constant Rate Factor for the codec
+#         fps (int): Frames per second of the video
+#     """
+#     vid_o = vid_o.clamp(0, 1).permute(0, 2, 3, 1)  # t c h w -> t w h c
+#     vid_o = (vid_o * 255).to(torch.uint8).numpy()
+#     # Create an in-memory bytes buffer
+#     buffer = io.BytesIO()
+#     # Create a PyAV container for output in memory
+#     container = av.open(buffer, mode='w', format='mp4')
+#     # Add a video stream to the container
+#     stream = container.add_stream(codec, rate=fps)
+#     stream.width = vid_o.shape[2]
+#     stream.height = vid_o.shape[1]
+#     stream.pix_fmt = 'yuv420p' if codec != 'libx264rgb' else 'rgb24'
+#     stream.options = {'crf': str(crf)}
+#     # Write frames to the stream
+#     for frame_arr in vid_o:
+#         frame = av.VideoFrame.from_ndarray(frame_arr, format='rgb24')
+#         for packet in stream.encode(frame):
+#             container.mux(packet)
+#     # Finalize the file
+#     for packet in stream.encode():
+#         container.mux(packet)
+#     container.close()
+    
+#     vid_w = vid_w.clamp(0, 1).permute(0, 2, 3, 1)  # t c h w -> t w h c
+#     vid_w = (vid_w * 255).to(torch.uint8).numpy()
+#     # Create an in-memory bytes buffer
+#     buffer1 = io.BytesIO()
+#     # Create a PyAV container for output in memory
+#     container1 = av.open(buffer1, mode='w', format='mp4')
+#     # Add a video stream to the container
+#     stream = container1.add_stream(codec, rate=fps)
+#     stream.width = vid_w.shape[2]
+#     stream.height = vid_w.shape[1]
+#     stream.pix_fmt = 'yuv420p' if codec != 'libx264rgb' else 'rgb24'
+#     stream.options = {'crf': str(crf)}
+#     # Write frames to the stream
+#     for frame_arr in vid_w:
+#         frame = av.VideoFrame.from_ndarray(frame_arr, format='rgb24')
+#         for packet in stream.encode(frame):
+#             container1.mux(packet)
+#     # Finalize the file
+#     for packet in stream.encode():
+#         container1.mux(packet)
+#     container1.close()
+
+#     # Seek back to the beginning of the buffers
+#     buffer.seek(0)
+#     buffer1.seek(0)
+#     # Save the buffers to temporary files
+#     with tempfile.NamedTemporaryFile(suffix='.mp4') as tmp_file_o, \
+#          tempfile.NamedTemporaryFile(suffix='.mp4') as tmp_file_w:
+#         tmp_file_o.write(buffer.read())
+#         tmp_file_w.write(buffer1.read())
+#         tmp_file_o.flush()
+#         tmp_file_w.flush()
+#         # Compute VMAF score using the temporary files
+#         vmaf_score = vmaf_on_file(tmp_file_o.name, tmp_file_w.name, ffmpeg_bin)
+#         if return_aux:
+#             MB = 1024 * 1024
+#             filesize_o = tmp_file_o.tell() / MB
+#             duration_o = len(vid_o) / fps
+#             bps_o = filesize_o / duration_o
+#             filesize_w = tmp_file_w.tell() / MB
+#             duration_w = len(vid_w) / fps
+#             bps_w = filesize_w / duration_w
+#             aux = {
+#                 'filesize_o': filesize_o,
+#                 'filesize_w': filesize_w,
+#                 'duration_o': duration_o,
+#                 'duration_w': duration_w,
+#                 'bps_o': bps_o,
+#                 'bps_w': bps_w
+#             }
+#             return vmaf_score, aux
+#     return vmaf_score
+
+def tensor_to_video(tensor, filename, fps, codec=None, crf=28):
+    """ Saves a video tensor into a video file."""
+    T, C, H, W = tensor.shape
+    assert C == 3, "Video must have 3 channels (RGB)."
+    video_data = (tensor * 255).to(torch.uint8).numpy()
+    
+    # write video using ffmpeg
+    if codec is None:
+        with tempfile.NamedTemporaryFile(suffix='.raw', delete=False) as temp_file:
+            video_data.tofile(temp_file.name)
+            temp_filename = temp_file.name
+        command = [
+            'ffmpeg', '-y', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-s', f'{W}x{H}',
+            '-r', f'{fps}', '-i', temp_filename, filename
+        ]
+    elif codec == 'libx264':
+        with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as temp_file:
+            video_data.tofile(temp_file.name)
+            temp_filename = temp_file.name
+        command = [
+            'ffmpeg', '-y', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-s', f'{W}x{H}',
+            '-r', f'{fps}', '-i', temp_filename,
+            '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', str(crf), 
+            filename
+        ]
+    else:
+        raise ValueError(f"Unsupported codec: {codec}")
+    subprocess.run(command, check=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
+    os.remove(temp_filename)
+
 def vmaf_on_file(
     vid_o: str,
     vid_w: str,
@@ -244,100 +395,77 @@ def vmaf_on_file(
                 break
     return vmaf_score
 
-def vmaf_on_tensor(
-    vid_o: torch.Tensor,
-    vid_w: torch.Tensor,
-    codec='libx264', crf=23, fps=24, 
-    ffmpeg_bin: str = '/private/home/pfz/09-videoseal/vmaf-dev/ffmpeg-git-20240629-amd64-static/ffmpeg',
-    return_aux: bool = False
-) -> float:
-    """
-    Computes the VMAF score between two videos represented as tensors, 
-    and encoded using the specified codec.
+def vmaf_on_tensor(tensor1, tensor2, fps=24, codec=None, return_aux=False):
+    """Compute VMAF between original and compressed video tensors."""
+    with tempfile.NamedTemporaryFile(suffix='.mp4') as file1, \
+         tempfile.NamedTemporaryFile(suffix='.mp4') as file2:
+        
+        # save tensors to video files
+        tensor_to_video(tensor1, file1.name, fps=fps, codec=codec)
+        tensor_to_video(tensor2, file2.name, fps=fps, codec=codec)
+        
+        # compute VMAF
+        vmaf_score = vmaf_on_file(file1.name, file2.name)
 
-    Args:
-        vid_o (torch.Tensor): Original video tensor with shape TxCxHxW with normalized values (≈ [0,1])
-        vid_w (torch.Tensor): Watermarked video tensor with shape TxCxHxW with normalized values (≈ [0,1])
-        codec (str): Codec to use for encoding the video
-        crf (int): Constant Rate Factor for the codec
-        fps (int): Frames per second of the video
-    """
-    vid_o = vid_o.clamp(0, 1).permute(0, 2, 3, 1)  # t c h w -> t w h c
-    vid_o = (vid_o * 255).to(torch.uint8).numpy()
-    # Create an in-memory bytes buffer
-    buffer = io.BytesIO()
-    # Create a PyAV container for output in memory
-    container = av.open(buffer, mode='w', format='mp4')
-    # Add a video stream to the container
-    stream = container.add_stream(codec, rate=fps)
-    stream.width = vid_o.shape[2]
-    stream.height = vid_o.shape[1]
-    stream.pix_fmt = 'yuv420p' if codec != 'libx264rgb' else 'rgb24'
-    stream.options = {'crf': str(crf)}
-    # Write frames to the stream
-    for frame_arr in vid_o:
-        frame = av.VideoFrame.from_ndarray(frame_arr, format='rgb24')
-        for packet in stream.encode(frame):
-            container.mux(packet)
-    # Finalize the file
-    for packet in stream.encode():
-        container.mux(packet)
-    container.close()
-    
-    vid_w = vid_w.clamp(0, 1).permute(0, 2, 3, 1)  # t c h w -> t w h c
-    vid_w = (vid_w * 255).to(torch.uint8).numpy()
-    # Create an in-memory bytes buffer
-    buffer1 = io.BytesIO()
-    # Create a PyAV container for output in memory
-    container1 = av.open(buffer1, mode='w', format='mp4')
-    # Add a video stream to the container
-    stream = container1.add_stream(codec, rate=fps)
-    stream.width = vid_w.shape[2]
-    stream.height = vid_w.shape[1]
-    stream.pix_fmt = 'yuv420p' if codec != 'libx264rgb' else 'rgb24'
-    stream.options = {'crf': str(crf)}
-    # Write frames to the stream
-    for frame_arr in vid_w:
-        frame = av.VideoFrame.from_ndarray(frame_arr, format='rgb24')
-        for packet in stream.encode(frame):
-            container1.mux(packet)
-    # Finalize the file
-    for packet in stream.encode():
-        container1.mux(packet)
-    container1.close()
+        # aux info
+        MB = 1024 * 1024
+        filesize1 = os.path.getsize(file1.name) / MB
+        filesize2 = os.path.getsize(file2.name) / MB
+        duration1 = len(tensor1) / fps
+        duration2 = len(tensor2) / fps
+        bps1 = filesize1 / duration1
+        bps2 = filesize2 / duration2
+        aux = {
+            'filesize1': filesize1,
+            'filesize2': filesize2,
+            'duration1': duration1,
+            'duration2': duration2,
+            'bps1': bps1,
+            'bps2': bps2
+        }
 
-    # Seek back to the beginning of the buffers
-    buffer.seek(0)
-    buffer1.seek(0)
-    # Save the buffers to temporary files
-    with tempfile.NamedTemporaryFile(suffix='.mp4') as tmp_file_o, \
-         tempfile.NamedTemporaryFile(suffix='.mp4') as tmp_file_w:
-        tmp_file_o.write(buffer.read())
-        tmp_file_w.write(buffer1.read())
-        tmp_file_o.flush()
-        tmp_file_w.flush()
-        # Compute VMAF score using the temporary files
-        vmaf_score = vmaf_on_file(tmp_file_o.name, tmp_file_w.name, ffmpeg_bin)
+        # return
         if return_aux:
-            MB = 1024 * 1024
-            filesize_o = tmp_file_o.tell() / MB
-            duration_o = len(vid_o) / fps
-            bps_o = filesize_o / duration_o
-            filesize_w = tmp_file_w.tell() / MB
-            duration_w = len(vid_w) / fps
-            bps_w = filesize_w / duration_w
-            aux = {
-                'filesize_o': filesize_o,
-                'filesize_w': filesize_w,
-                'duration_o': duration_o,
-                'duration_w': duration_w,
-                'bps_o': bps_o,
-                'bps_w': bps_w
-            }
             return vmaf_score, aux
-    return vmaf_score
+        return vmaf_score
 
-    
+def bd_rate(R1, PSNR1, R2, PSNR2, piecewise=0):
+    """
+    Almost copy paste from https://github.com/Anserw/Bjontegaard_metric/blob/master/bjontegaard_metric.py
+    """
+    lR1 = np.log(R1)
+    lR2 = np.log(R2)
+
+    # rate method
+    p1 = np.polyfit(PSNR1, lR1, 3)
+    p2 = np.polyfit(PSNR2, lR2, 3)
+
+    # integration interval
+    min_int = max(min(PSNR1), min(PSNR2))
+    max_int = min(max(PSNR1), max(PSNR2))
+
+    # find integral
+    if piecewise == 0:
+        p_int1 = np.polyint(p1)
+        p_int2 = np.polyint(p2)
+
+        int1 = np.polyval(p_int1, max_int) - np.polyval(p_int1, min_int)
+        int2 = np.polyval(p_int2, max_int) - np.polyval(p_int2, min_int)
+    else:
+        lin = np.linspace(min_int, max_int, num=100, retstep=True)
+        interval = lin[1]
+        samples = lin[0]
+        v1 = scipy.interpolate.pchip_interpolate(np.sort(PSNR1), lR1[np.argsort(PSNR1)], samples)
+        v2 = scipy.interpolate.pchip_interpolate(np.sort(PSNR2), lR2[np.argsort(PSNR2)], samples)
+        # Calculate the integral using the trapezoid method on the samples.
+        int1 = np.trapezoid(v1, dx=interval)
+        int2 = np.trapezoid(v2, dx=interval)
+
+    # find avg diff
+    avg_exp_diff = (int2-int1)/(max_int-min_int)
+    avg_diff = (np.exp(avg_exp_diff)-1)*100
+    return avg_diff
+
 
 if __name__ == '__main__':
     # Test the PSNR function
@@ -386,8 +514,6 @@ if __name__ == '__main__':
     from videoseal.data.loader import load_video
     vid_o = load_video(vid_o)
     vid_w = load_video(vid_w)
-    vid_o = vid_o / 255
-    vid_w = vid_w / 255
     try:
         result = vmaf_on_tensor(vid_o, vid_w, return_aux=True)
         if result is not None:

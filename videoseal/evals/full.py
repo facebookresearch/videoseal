@@ -1,9 +1,9 @@
 """
 python -m videoseal.evals.full \
     --checkpoint /private/home/hadyelsahar/work/code/videoseal/2024_logs/1013-hybrid-large-sweep-allaugs/_lambda_d=0.5_lambda_i=0.5_optimizer=AdamW,lr=5e-5_prop_img_vid=0.9_videowam_step_size=4_video_start=500_embedder_model=unet_small2/checkpoint.pth \
+    --dataset sa-v --is_video true --num_samples 1 \
     --dataset coco --is_video false \
 
-    --dataset sa-v --is_video true \
 
     
     /private/home/hadyelsahar/work/code/videoseal/2024_logs/1013-hybrid-large-sweep-allaugs/_lambda_d=0.5_lambda_i=0.5_optimizer=AdamW,lr=5e-5_prop_img_vid=0.9_videowam_step_size=4_video_start=500_embedder_model=vae_small_bw/checkpoint.pth
@@ -29,7 +29,9 @@ from ..data.datasets import ImageFolder, VideoDataset, CocoImageIDWrapper
 from ..models import VideoWam, build_embedder, build_extractor
 from ..augmentation import get_validation_augs
 from ..augmentation.augmenter import get_dummy_augmenter
-from ..evals.metrics import psnr, ssim
+from ..augmentation.video import H264
+from ..augmentation.valuemetric import JPEG
+from ..evals.metrics import psnr, ssim, bd_rate
 from ..utils import Timer
 from ..utils.data import parse_dataset_params, Modalities
 from ..utils.image import create_diff_img
@@ -138,12 +140,108 @@ def setup_dataset(args):
 
 
 @torch.no_grad()
-def evaluate(
+def evaluate_quality(
     wam: VideoWam,
     dataset: Dataset, 
     is_video: bool,
     output_dir: str,
     save_first: int = -1,
+    num_frames: int = 24*3
+):
+    """
+    Gives quality evaluation metrics for a model on a given dataset.
+    Args:
+        wam (VideoWam): The model to evaluate
+        dataset (Dataset): The dataset to evaluate on
+        is_video (bool): Whether the data is video
+        output_dir (str): Directory to save the output images
+        num_frames (int): Number of frames to evaluate for video quality and extraction (default: 24*3 i.e. 3seconds)
+        decoding (bool): Whether to evaluate decoding metrics (default: True)
+        detection (bool): Whether to evaluate detection metrics (default: False)
+    """
+    all_metrics = []
+    timer = Timer()
+
+    for it, batch_items in enumerate(tqdm.tqdm(dataset)):
+        # initialize metrics
+        metrics = {}
+
+        # some data loaders return batch_data, masks, frames_positions as well
+        imgs, masks = batch_items[0], batch_items[1]
+        if not is_video:
+            imgs = imgs.unsqueeze(0)  # c h w -> 1 c h w
+            masks = masks.unsqueeze(0) if isinstance(masks, torch.Tensor) else masks
+        metrics['iteration'] = it
+        metrics['t'] = imgs.shape[-4]
+        metrics['h'] = imgs.shape[-2]
+        metrics['w'] = imgs.shape[-1]
+
+        # forward embedder, at any resolution
+        # does cpu -> gpu -> cpu when gpu is available
+        timer.start()
+        outputs = wam.embed(imgs, is_video=is_video)
+        metrics['embed_time'] = timer.end()
+        msgs = outputs["msgs"]  # b k
+        imgs_w = outputs["imgs_w"]  # b c h w
+
+        # cut frames
+        imgs = imgs[:num_frames]  # f c h w
+        msgs = msgs[:num_frames]  # f k
+        imgs_w = imgs_w[:num_frames]  # f c h w
+        masks = masks[:num_frames]  # f 1 h w
+
+        # compute qualitative metrics
+        metrics['psnr'] = psnr(imgs_w, imgs).mean().item()
+        metrics['ssim'] = ssim(imgs_w, imgs).mean().item()
+        if is_video:
+            timer.start()
+            metrics['vmaf'] = vmaf_on_tensor(imgs_w, imgs)
+            metrics['vmaf_time'] = timer.end()
+
+        # bdrate
+        if is_video:
+            h264 = H264()
+            r1, vmaf1, r2, vmaf2 = [], [], [], []
+            for crf in [28, 34, 40, 46]:
+                imgs_h264, _ = h264(imgs, crf=crf)
+                imgs_w_h264, _ = h264(imgs_w, crf=crf)
+                vmaf_score, aux = vmaf_on_tensor(imgs, imgs_h264, return_aux=True)
+                r1.append(aux['bps2'])
+                vmaf1.append(vmaf_score)
+                vmaf_score, aux = vmaf_on_tensor(imgs_w, imgs_w_h264, return_aux=True)
+                r2.append(aux['bps2'])
+                vmaf2.append(vmaf_score)
+            metrics['bd_rate'] = bd_rate(r1, vmaf1, r2, vmaf2) 
+
+        # save images and videos
+        if it < save_first:
+            base_name = os.path.join(output_dir, f'{it:03}_val')
+            ori_path = base_name + '_0_ori.png'
+            wm_path = base_name + '_1_wm.png'
+            diff_path = base_name + '_2_diff.png'
+            save_image(imgs[:8], ori_path, nrow=8)
+            save_image(imgs_w[:8], wm_path, nrow=8)
+            save_image(create_diff_img(imgs[:8], imgs_w[:8]), diff_path, nrow=8)
+            if is_video:
+                fps = 24 // 1
+                ori_path = ori_path.replace(".png", ".mp4")
+                wm_path = wm_path.replace(".png", ".mp4")
+                diff_path = diff_path.replace(".png", ".mp4")
+                timer.start()
+                save_vid(imgs, ori_path, fps)
+                save_vid(imgs_w, wm_path, fps)
+                save_vid(imgs - imgs_w, diff_path, fps)
+                metrics['save_vid_time'] = timer.end()
+        all_metrics.append(metrics)
+
+    return all_metrics
+
+
+@torch.no_grad()
+def evaluate(
+    wam: VideoWam,
+    dataset: Dataset, 
+    is_video: bool,
     num_frames: int = 24*3,
     decoding: bool = True,
     detection: bool = False,
@@ -203,26 +301,6 @@ def evaluate(
             metrics['vmaf'] = vmaf_on_tensor(
                 imgs_w[:num_frames], imgs[:num_frames])
             metrics['vmaf_time'] = timer.end()
-
-        # save images and videos
-        if it < save_first:
-            base_name = os.path.join(output_dir, f'{it:03}_val')
-            ori_path = base_name + '_0_ori.png'
-            wm_path = base_name + '_1_wm.png'
-            diff_path = base_name + '_2_diff.png'
-            save_image(imgs[:8], ori_path, nrow=8)
-            save_image(imgs_w[:8], wm_path, nrow=8)
-            save_image(create_diff_img(imgs[:8], imgs_w[:8]), diff_path, nrow=8)
-            if is_video:
-                fps = 24 // 1
-                ori_path = ori_path.replace(".png", ".mp4")
-                wm_path = wm_path.replace(".png", ".mp4")
-                diff_path = diff_path.replace(".png", ".mp4")
-                timer.start()
-                save_vid(imgs, ori_path, fps)
-                save_vid(imgs_w, wm_path, fps)
-                save_vid(imgs - imgs_w, diff_path, fps)
-                metrics['save_vid_time'] = timer.end()
 
         # masks, for now, are all ones
         masks = torch.ones_like(imgs[:, :1])  # b 1 h w
@@ -321,15 +399,23 @@ def main():
     dataset = setup_dataset(args)
     dataset = Subset(dataset, range(args.num_samples))
 
-    # Evaluate the model
+    # evaluate the model, quality and extraction metrics
     os.makedirs(args.output_dir, exist_ok=True)
-    metrics = evaluate(
+    metrics_quality = evaluate_quality(
         wam = model, 
         dataset = dataset, 
-        is_video = args.is_video, 
+        is_video = args.is_video,
         output_dir = args.output_dir,
         save_first = args.save_first,
+        num_frames = args.num_frames
     )
+    metrics_robustness = evaluate(
+        wam = model, 
+        dataset = dataset, 
+        is_video = args.is_video,
+        num_frames = args.num_frames
+    )
+    metrics = [{**q, **r} for q, r in zip(metrics_quality, metrics_robustness)]
 
     # Save the metrics as csv
     metrics_path = os.path.join(args.output_dir, "metrics.csv")
@@ -342,6 +428,7 @@ def main():
     # Print mean
     pd.set_option('display.max_rows', None)
     print(pd.DataFrame(metrics).mean())
+
 
 if __name__ == '__main__':
     main()
