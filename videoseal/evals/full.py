@@ -1,8 +1,8 @@
 """
 python -m videoseal.evals.full \
-    --checkpoint /private/home/hadyelsahar/work/code/videoseal/2024_logs/1013-hybrid-large-sweep-allaugs/_lambda_d=0.5_lambda_i=0.5_optimizer=AdamW,lr=5e-5_prop_img_vid=0.9_videowam_step_size=4_video_start=500_embedder_model=unet_small2/checkpoint.pth \
-    --dataset sa-v --is_video true --num_samples 1 \
+    --checkpoint /private/home/hadyelsahar/work/code/videoseal/2024_logs/1013-hybrid-large-sweep-allaugs/_lambda_d=0.5_lambda_i=0.5_optimizer=AdamW,lr=5e-5_prop_img_vid=0.9_videowam_step_size=4_video_start=500_embedder_model=vae_small_bw/checkpoint.pth \
     --dataset coco --is_video false \
+    --dataset sa-v --is_video true --num_samples 1 \
 
 
     
@@ -218,10 +218,10 @@ def evaluate(
                 vmaf_score, aux = vmaf_on_tensor(imgs_w, return_aux=True, crf=crf)
                 r2.append(aux['bps2'])
                 vmaf2.append(vmaf_score)
-            metrics['r1'] = np.array(r1)
-            metrics['vmaf1'] = np.array(vmaf1)
-            metrics['r2'] = np.array(r2)
-            metrics['vmaf2'] = np.array(vmaf2)
+            metrics['r1'] = r1
+            metrics['vmaf1'] = vmaf1
+            metrics['r2'] = r2
+            metrics['vmaf2'] = vmaf2
             metrics['bd_rate'] = bd_rate(r1, vmaf1, r2, vmaf2) 
 
         # save images and videos

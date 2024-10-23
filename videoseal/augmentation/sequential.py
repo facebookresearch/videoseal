@@ -23,4 +23,4 @@ class Sequential(nn.Module):
         return image, mask
 
     def __repr__(self):
-        return f"{self.__class__.__name__}({self.transforms})".replace(", ", "_")
+        return f"{self.transforms}".replace(", ", "_")
