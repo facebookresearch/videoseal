@@ -370,6 +370,8 @@ def main():
 
     # Print mean
     pd.set_option('display.max_rows', None)
+    to_remove = ['r1', 'r2', 'vmaf1', 'vmaf2']
+    metrics = [{k: v for k, v in metric.items() if k not in to_remove} for metric in metrics]
     print(pd.DataFrame(metrics).mean())
 
 
