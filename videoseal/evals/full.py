@@ -16,6 +16,7 @@ import json
 import omegaconf
 import argparse
 import os
+import numpy as np
 import pandas as pd
 
 import torch
@@ -217,10 +218,10 @@ def evaluate(
                 vmaf_score, aux = vmaf_on_tensor(imgs_w, return_aux=True, crf=crf)
                 r2.append(aux['bps2'])
                 vmaf2.append(vmaf_score)
-            metrics['r1'] = r1
-            metrics['vmaf1'] = vmaf1
-            metrics['r2'] = r2
-            metrics['vmaf2'] = vmaf2
+            metrics['r1'] = np.array(r1)
+            metrics['vmaf1'] = np.array(vmaf1)
+            metrics['r2'] = np.array(r2)
+            metrics['vmaf2'] = np.array(vmaf2)
             metrics['bd_rate'] = bd_rate(r1, vmaf1, r2, vmaf2) 
 
         # save images and videos
@@ -255,8 +256,8 @@ def evaluate(
                 for strength in strengths:
                     imgs_aug, masks_aug = validation_aug(
                         imgs_masked, masks, strength)
-                    selected_aug = str(validation_aug)
-                    selected_aug += f"_{strength}"
+                    selected_aug = str(validation_aug) + f"_{strength}"
+                    selected_aug = selected_aug.replace(", ", "_")
 
                     # extract watermark
                     timer.start()
