@@ -217,127 +217,6 @@ def bit_accuracy_mv(
     bit_acc = torch.mean(correct, dim=-1)  # b
     return bit_acc
 
-# TODO: remove the following functions when the new implementation is tested
-# def vmaf_on_file(
-#     vid_o: str,
-#     vid_w: str,
-#     ffmpeg_bin: str = '/private/home/pfz/09-videoseal/vmaf-dev/ffmpeg-git-20240629-amd64-static/ffmpeg',
-# ) -> float:
-#     """
-#     Runs `ffmpeg -i vid_o.mp4 -i vid_w.mp4 -filter_complex libvmaf` and returns the score.
-#     """
-#     # Execute the command and capture the output to get the VMAF score
-#     command = [
-#             ffmpeg_bin,
-#             '-i', vid_o,
-#             '-i', vid_w,
-#             '-filter_complex', 'libvmaf',
-#             '-f', 'null', '-'
-#         ]
-#     result = subprocess.run(command, text=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
-#     vmaf_score = None
-#     for line in result.stderr.split('\n'):
-#         if "VMAF score:" in line:
-#             # numerical part of the VMAF score with regex
-#             match = re.search(r"VMAF score: ([0-9.]+)", line)
-#             if match:
-#                 vmaf_score = float(match.group(1))
-#                 break
-#     return vmaf_score
-
-# def vmaf_on_tensor(
-#     vid_o: torch.Tensor,
-#     vid_w: torch.Tensor,
-#     codec='libx264', crf=23, fps=24, 
-#     ffmpeg_bin: str = '/private/home/pfz/09-videoseal/vmaf-dev/ffmpeg-git-20240629-amd64-static/ffmpeg',
-#     return_aux: bool = False
-# ) -> float:
-#     """
-#     Computes the VMAF score between two videos represented as tensors, 
-#     and encoded using the specified codec.
-
-#     Args:
-#         vid_o (torch.Tensor): Original video tensor with shape TxCxHxW with normalized values (≈ [0,1])
-#         vid_w (torch.Tensor): Watermarked video tensor with shape TxCxHxW with normalized values (≈ [0,1])
-#         codec (str): Codec to use for encoding the video
-#         crf (int): Constant Rate Factor for the codec
-#         fps (int): Frames per second of the video
-#     """
-#     vid_o = vid_o.clamp(0, 1).permute(0, 2, 3, 1)  # t c h w -> t w h c
-#     vid_o = (vid_o * 255).to(torch.uint8).numpy()
-#     # Create an in-memory bytes buffer
-#     buffer = io.BytesIO()
-#     # Create a PyAV container for output in memory
-#     container = av.open(buffer, mode='w', format='mp4')
-#     # Add a video stream to the container
-#     stream = container.add_stream(codec, rate=fps)
-#     stream.width = vid_o.shape[2]
-#     stream.height = vid_o.shape[1]
-#     stream.pix_fmt = 'yuv420p' if codec != 'libx264rgb' else 'rgb24'
-#     stream.options = {'crf': str(crf)}
-#     # Write frames to the stream
-#     for frame_arr in vid_o:
-#         frame = av.VideoFrame.from_ndarray(frame_arr, format='rgb24')
-#         for packet in stream.encode(frame):
-#             container.mux(packet)
-#     # Finalize the file
-#     for packet in stream.encode():
-#         container.mux(packet)
-#     container.close()
-    
-#     vid_w = vid_w.clamp(0, 1).permute(0, 2, 3, 1)  # t c h w -> t w h c
-#     vid_w = (vid_w * 255).to(torch.uint8).numpy()
-#     # Create an in-memory bytes buffer
-#     buffer1 = io.BytesIO()
-#     # Create a PyAV container for output in memory
-#     container1 = av.open(buffer1, mode='w', format='mp4')
-#     # Add a video stream to the container
-#     stream = container1.add_stream(codec, rate=fps)
-#     stream.width = vid_w.shape[2]
-#     stream.height = vid_w.shape[1]
-#     stream.pix_fmt = 'yuv420p' if codec != 'libx264rgb' else 'rgb24'
-#     stream.options = {'crf': str(crf)}
-#     # Write frames to the stream
-#     for frame_arr in vid_w:
-#         frame = av.VideoFrame.from_ndarray(frame_arr, format='rgb24')
-#         for packet in stream.encode(frame):
-#             container1.mux(packet)
-#     # Finalize the file
-#     for packet in stream.encode():
-#         container1.mux(packet)
-#     container1.close()
-
-#     # Seek back to the beginning of the buffers
-#     buffer.seek(0)
-#     buffer1.seek(0)
-#     # Save the buffers to temporary files
-#     with tempfile.NamedTemporaryFile(suffix='.mp4') as tmp_file_o, \
-#          tempfile.NamedTemporaryFile(suffix='.mp4') as tmp_file_w:
-#         tmp_file_o.write(buffer.read())
-#         tmp_file_w.write(buffer1.read())
-#         tmp_file_o.flush()
-#         tmp_file_w.flush()
-#         # Compute VMAF score using the temporary files
-#         vmaf_score = vmaf_on_file(tmp_file_o.name, tmp_file_w.name, ffmpeg_bin)
-#         if return_aux:
-#             MB = 1024 * 1024
-#             filesize_o = tmp_file_o.tell() / MB
-#             duration_o = len(vid_o) / fps
-#             bps_o = filesize_o / duration_o
-#             filesize_w = tmp_file_w.tell() / MB
-#             duration_w = len(vid_w) / fps
-#             bps_w = filesize_w / duration_w
-#             aux = {
-#                 'filesize_o': filesize_o,
-#                 'filesize_w': filesize_w,
-#                 'duration_o': duration_o,
-#                 'duration_w': duration_w,
-#                 'bps_o': bps_o,
-#                 'bps_w': bps_w
-#             }
-#             return vmaf_score, aux
-#     return vmaf_score
-
 def tensor_to_video(
         tensor, filename, fps, 
         codec=None, crf=23,
@@ -399,14 +278,33 @@ def vmaf_on_file(
                 break
     return vmaf_score
 
-def vmaf_on_tensor(tensor1, tensor2, fps=24, codec=None, return_aux=False):
-    """Compute VMAF between original and compressed video tensors."""
+def vmaf_on_tensor(
+    tensor1, 
+    tensor2=None, 
+    fps=24, codec='libx264', crf=23, 
+    return_aux=False
+):
+    """
+    Compute VMAF between original and compressed/watermarked video tensors.
+    Args:
+        tensor1: Original video tensor
+        tensor2: Compressed/Watermarked video tensor. \
+            If None, the original tensor is used as the second tensor, but with the codec and crf specified.
+        fps: Frames per second
+        codec: Codec to use when saving the video to file
+        crf: Constant Rate Factor for libx264 codec
+        return_aux: Return additional information
+    """
     with tempfile.NamedTemporaryFile(suffix='.mp4') as file1, \
          tempfile.NamedTemporaryFile(suffix='.mp4') as file2:
         
         # save tensors to video files
-        tensor_to_video(tensor1, file1.name, fps=fps, codec=codec)
-        tensor_to_video(tensor2, file2.name, fps=fps, codec=codec)
+        if tensor2 is None:
+            tensor_to_video(tensor1, file1.name, fps=fps, codec=None)
+            tensor2 = tensor1
+        else:
+            tensor_to_video(tensor1, file1.name, fps=fps, codec=codec, crf=crf)
+        tensor_to_video(tensor2, file2.name, fps=fps, codec=codec, crf=crf)
         
         # compute VMAF
         vmaf_score = vmaf_on_file(file1.name, file2.name)
@@ -499,31 +397,47 @@ if __name__ == '__main__':
     except Exception as e:
         print(f"An error occurred: {str(e)}")
 
-    # # # Test the vmaf function
-    vid_o = 'assets/videos/sav_013754.mp4'
-    vid_w = 'assets/videos/sav_013754.mp4'
-    # print("> test vmaf")
-    # try:
-    #     result = vmaf_on_file(vid_o, vid_w)
-    #     if result is not None:
-    #         print("OK!", result)
-    #     else:
-    #         raise Exception("VMAF score not found in the output.")
-    # except Exception as e:
-    #     print(f"!!! An error occurred: {str(e)}")
-    #     print(f"Try checking that ffmpeg is installed and that vmaf is available.")
+    # Load
+    from videoseal.data.loader import load_video
+    filename_o = 'assets/videos/sav_013754.mp4'
+    filename_w = 'assets/videos/sav_013754.mp4'
+    vid_o = load_video(filename_o)
+    vid_w = load_video(filename_w)
+
+    # Test the vmaf function
+    print("> test vmaf")
+    try:
+        result = vmaf_on_file(filename_o, filename_w)
+        if result is not None:
+            print("OK!", result)
+        else:
+            raise Exception("VMAF score not found in the output.")
+    except Exception as e:
+        print(f"!!! An error occurred: {str(e)}")
+        print(f"Try checking that ffmpeg is installed and that vmaf is available.")
 
     # Test the vmaf function on tensors
     print("> test vmaf on tensor")
-    from videoseal.data.loader import load_video
-    vid_o = load_video(vid_o)
-    vid_w = load_video(vid_w)
     try:
         result = vmaf_on_tensor(vid_o, vid_w, return_aux=True, codec='libx264')
         if result is not None:
             print("OK!", result)
         else:
             raise Exception("VMAF score not found in the output.")
+    except Exception as e:
+        print(f"!!! An error occurred: {str(e)}")
+        print(f"Try checking that ffmpeg is installed and that vmaf is available.")
+    
+    # Test the vmaf function on single tensor
+    print("> test vmaf on tensor")
+    vid_o = vid_o[:24*2]
+    try:
+        for crf in [23, 28, 33]:
+            result = vmaf_on_tensor(vid_o, return_aux=True, codec='libx264', crf=crf)
+            if result is not None:
+                print(f"crf={crf}", result)
+            else:
+                raise Exception("VMAF score not found in the output.")
     except Exception as e:
         print(f"!!! An error occurred: {str(e)}")
         print(f"Try checking that ffmpeg is installed and that vmaf is available.")
