@@ -175,6 +175,8 @@ def main(args):
             continue  # skip yuv models for now as they require different input
         result = {'model': embedder_name}
         # build
+        if embedder_name not in embedder_cfg:
+            continue
         embedder_args = embedder_cfg[embedder_name]
         embedder = build_embedder(embedder_name, embedder_args, args.nbits)
         embedder = embedder.to(device)
@@ -202,6 +204,8 @@ def main(args):
     for extractor_name in args.extractor_models.split(','):
         result = {'model': extractor_name}
         # build
+        if extractor_name not in extractor_cfg:
+            continue
         extractor_args = extractor_cfg[extractor_name]
         extractor = build_extractor(
             extractor_name, extractor_args, args.img_size_work, args.nbits)
@@ -232,7 +236,8 @@ def main(args):
     print(df)
     if not os.path.exists(args.output_dir):
         os.makedirs(args.output_dir)
-    df.to_csv(os.path.join(args.output_dir, 'speed_results.csv'), index=False)
+    df.to_csv(os.path.join(args.output_dir, 'speed_results.csv'),
+              index=False, float_format='%.5f')
 
 
 if __name__ == '__main__':
