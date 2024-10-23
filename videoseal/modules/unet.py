@@ -92,8 +92,7 @@ class UNetMsg(nn.Module):
         upsampling_type: str = 'bilinear',
         downsampling_type: str = 'bilinear',
         last_tanh: bool = True,
-        zero_init: bool = False,
-        bw: bool = False,
+        zero_init: bool = False
     ):
         super(UNetMsg, self).__init__()
         self.msg_processor = msg_processor
@@ -103,10 +102,6 @@ class UNetMsg(nn.Module):
         self.num_blocks = num_blocks
         self.z_channels_mults = z_channels_mults
         self.last_tanh = last_tanh
-        self.bw = bw
-        if self.bw:
-            out_channels = 1
-            self.out_channels = 1
         self.connect_scale = 2 ** -0.5
 
         # Set the normalization layer
@@ -184,10 +179,6 @@ class UNetMsg(nn.Module):
         logits = self.outc(x)
         if self.last_tanh:
             logits = torch.tanh(logits)
-        if self.bw:
-            logits = logits.repeat(1, 3, 1, 1)
-            # rgbs = torch.tensor([0.299, 0.587, 0.114]).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
-            # logits = logits * rgbs.to(logits.device)
         return logits
 
     def use_checkpointing(self):

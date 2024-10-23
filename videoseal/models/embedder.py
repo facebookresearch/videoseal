@@ -86,6 +86,8 @@ class VAEEmbedder(Embedder):
         latents = self.encoder(imgs)
         latents_w = self.msg_processor(latents, msgs)
         imgs_w = self.decoder(latents_w)
+        if imgs_w.shape[-3] == 1:
+            imgs_w = imgs_w.repeat(1, 3, 1, 1)
         return imgs_w
 
 
@@ -128,6 +130,8 @@ class UnetEmbedder(Embedder):
             imgs = rgb_to_yuv(imgs)[..., :1, :, :]
         imgs = self.preprocess(imgs)  # put in [-1, 1]
         imgs_w = self.unet(imgs, msgs)
+        if imgs_w.shape[-3] == 1:
+            imgs_w = imgs_w.repeat(1, 3, 1, 1)
         return imgs_w
 
 
@@ -169,7 +173,10 @@ class HiddenEmbedder(Embedder):
         if self.yuv:  # only use the Y channel
             imgs = rgb_to_yuv(imgs)[..., :1, :, :]
         imgs = self.preprocess(imgs)
-        return self.hidden_encoder(imgs, msgs)
+        imgs_w = self.hidden_encoder(imgs, msgs)
+        if imgs_w.shape[-3] == 1:
+            imgs_w = imgs_w.repeat(1, 3, 1, 1)
+        return imgs_w
 
 
 def build_embedder(name, cfg, nbits):
