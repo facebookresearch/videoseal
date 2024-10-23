@@ -218,10 +218,10 @@ def evaluate(
                 vmaf_score, aux = vmaf_on_tensor(imgs_w, return_aux=True, crf=crf)
                 r2.append(aux['bps2'])
                 vmaf2.append(vmaf_score)
-            metrics['r1'] = '_'.join(r1)
-            metrics['vmaf1'] = '_'.join(vmaf1)
-            metrics['r2'] = '_'.join(r2)
-            metrics['vmaf2'] = '_'.join(vmaf2)
+            metrics['r1'] = '_'.join(str(x) for x in r1)
+            metrics['vmaf1'] = '_'.join(str(x) for x in vmaf1)
+            metrics['r2'] = '_'.join(str(x) for x in r2)
+            metrics['vmaf2'] = '_'.join(str(x) for x in vmaf2)
             metrics['bd_rate'] = bd_rate(r1, vmaf1, r2, vmaf2) 
 
         # save images and videos
