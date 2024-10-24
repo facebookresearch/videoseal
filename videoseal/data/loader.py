@@ -110,6 +110,7 @@ def get_video_dataloader(
     batch_size: int = 1,
     shuffle: bool = True,
     num_workers: int = 8,
+    drop_last: bool = False,
     **dataset_kwargs
 ) -> DataLoader:
     """
@@ -139,11 +140,11 @@ def get_video_dataloader(
         sampler = DistributedSampler(dataset, shuffle=shuffle)
         dataloader = DataLoader(dataset, batch_size=batch_size,
                                 sampler=sampler, num_workers=num_workers,
-                                pin_memory=True, drop_last=True)
+                                pin_memory=True, drop_last=drop_last)
     else:
         dataloader = DataLoader(dataset, batch_size=batch_size,
                                 shuffle=shuffle, num_workers=num_workers,
-                                pin_memory=True, drop_last=True)
+                                pin_memory=True, drop_last=drop_last)
     return dataloader
 
 
