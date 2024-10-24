@@ -96,7 +96,7 @@ class VideoCompression(nn.Module):
         output_frames = self._postprocess_frames(output_frames)
         output_frames = output_frames.to(frames.device)
 
-        compressed_frames = frames + (frames - output_frames).detach()
+        compressed_frames = frames + (output_frames - frames).detach()
         del frames  # Free memory
 
         return compressed_frames, mask

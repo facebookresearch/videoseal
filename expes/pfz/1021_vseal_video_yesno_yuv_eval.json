@@ -1,0 +1,37 @@
+{
+    "cmd": "/private/home/pfz/miniconda3/envs/img/bin/python -m videoseal.evals.full",
+    "git": "git@github.com:fairinternal/videoseal.git",
+    "preload": "MKL_THREADING_LAYER=GNU",
+    "commit": "eval-script",
+    "precmd": [],
+    "params": {
+        "is_video":        {
+            "false": {"dataset":    "coco"},
+            "true":  {"dataset":    "sa-v"}
+        },
+        "num_samples":      50,
+        "save_first":       10,
+        "checkpoint":    [
+            "/checkpoint/pfz/2024_logs/1021_vseal_video_yesno_yuv/_video_start=50_embedder_model=vae_small/checkpoint100.pth",
+            "/checkpoint/pfz/2024_logs/1021_vseal_video_yesno_yuv/_video_start=50_embedder_model=vae_small_bw/checkpoint100.pth",
+            "/checkpoint/pfz/2024_logs/1021_vseal_video_yesno_yuv/_video_start=1000_embedder_model=vae_small/checkpoint100.pth",
+            "/checkpoint/pfz/2024_logs/1021_vseal_video_yesno_yuv/_video_start=1000_embedder_model=vae_small_bw/checkpoint100.pth"
+        ]
+    },
+    "machine": {
+        "constraint":       "volta32gb",
+        "gres":             "gpu:1",
+        "nodes":            "1",
+        "tasks-per-node":   "1",
+        "partition":        "learnfair",
+        "cpus-per-task":    "20",
+        "time":             4320,
+        "mem-per-cpu":      "6G"
+    },
+    "meta": {
+        "group": "",
+        "name": "1021_vseal_video_yesno_yuv_eval",
+        "dest-arg": "yes",
+        "dest-name": "output_dir"
+    }
+}

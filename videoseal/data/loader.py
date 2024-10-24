@@ -12,6 +12,34 @@ from .datasets import ImageFolder, CocoImageIDWrapper, VideoDataset
 from ..utils.dist import is_dist_avail_and_initialized
 
 
+def load_video(fname, num_workers=8):
+    """
+    Load full video content using Decord.
+    Args:
+        fname (str): The path to the video file.
+        num_workers (int): The number of worker threads to use for video loading. Defaults to 8.
+    Returns:
+        tuple: A tuple containing the loaded video frames as a PyTorch tensor (Frames, H, W , C) and a mask tensor.
+    Raises:
+        warnings.warn: If the video file is not found or is too short.
+    """
+    if not os.path.exists(fname):
+        warnings.warn(f'video path not found {fname=}')
+        return [], None
+    _fsize = os.path.getsize(fname)
+    if _fsize < 1 * 1024:  # avoid hanging issue
+        warnings.warn(f'video too short {fname=}')
+        return [], None
+    try:
+        vr = VideoReader(
+            fname, num_threads=num_workers, ctx=cpu(0))
+    except Exception:
+        return [], None
+    vid_np = vr.get_batch(range(len(vr))).asnumpy()
+    vid_np = vid_np.transpose(0, 3, 1, 2) / 255.0  # normalize to 0 - 1
+    vid_pt = torch.from_numpy(vid_np).float()
+    return vid_pt
+
 def get_dataloader(
     data_dir: str,
     transform: callable = default_transform,
