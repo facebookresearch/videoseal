@@ -1,6 +1,6 @@
 """
 from root directory:
-    python videoseal/evals/speed.py --device cuda
+    python -m videoseal.evals.speed --device cuda
 """
 
 import argparse
@@ -16,11 +16,9 @@ import torch.nn.functional as F
 from torchvision.datasets import FakeData
 from torchvision.transforms import ToTensor
 
-import videoseal.utils as utils
-from videoseal.models import (Embedder, Extractor, build_embedder,
+from ..utils import Timer, bool_inst
+from ..models import (Embedder, Extractor, build_embedder,
                               build_extractor)
-
-# from videoseal.data.transforms import normalize_img, unnormalize_img
 
 def sync(device):
     """ wait for the GPU to finish processing, before measuring time """
@@ -28,22 +26,12 @@ def sync(device):
         torch.cuda.synchronize()
     return
 
-def estimate_floating_point_ops(model):
-    # This function estimates the number of floating-point operations required by the model
-    # For simplicity, let's assume that each convolutional layer requires 10^6 floating-point operations
-    num_conv_layers = len(
-        [layer for layer in model.modules() if isinstance(layer, torch.nn.Conv2d)])
-    num_linear_layers = len(
-        [layer for layer in model.modules() if isinstance(layer, torch.nn.Linear)])
-    num_floating_point_ops = (num_conv_layers * 1e6) + \
-        (num_linear_layers * 1e5)
-    return num_floating_point_ops
-
 def get_flops(model, img_size, device):
+    channels = 3
     if isinstance(model, Embedder):
         msgs = model.get_random_msg(bsz=1)
         msgs = msgs.to(device)
-        img_size = (1, 3, img_size, img_size)
+        img_size = (1, channels, img_size, img_size)
         return calculate_flops(
             model, 
             args=[torch.randn(img_size), msgs],
@@ -52,7 +40,7 @@ def get_flops(model, img_size, device):
             print_results=False
         )
     elif isinstance(model, Extractor):
-        img_size = (1, 3, img_size, img_size)
+        img_size = (1, channels, img_size, img_size)
         return calculate_flops(
             model, 
             args=[torch.randn(img_size)],
@@ -70,48 +58,46 @@ def benchmark_model(model, img_size, data_loader, device):
     times = []
     times_interp = []
     times_norm = []
+    timer = Timer()
     bsz = data_loader.batch_size
-    num_floating_point_ops = estimate_floating_point_ops(model)
     with torch.no_grad():
         for imgs, _ in data_loader:
             imgs = imgs.to(device)
             h_orig, w_orig = imgs.size(-2), imgs.size(-1)
             # interpolate
-            start_time = time.time()
+            timer.start()
             imgs = F.interpolate(imgs, size=(
                 img_size, img_size), mode='bilinear', align_corners=False)
             sync(device)
-            end_time = time.time()
-            times_interp.append(end_time - start_time)
+            times_interp.append(timer.end())
             # normalize
-            start_time = time.time()
+            timer.start()
             sync(device)
             end_time = time.time()
-            times_norm.append(end_time - start_time)
+            times_norm.append(timer.end())
             # forward pass
             if isinstance(model, Embedder):
                 msgs = model.get_random_msg(bsz=imgs.size(0))
                 msgs = msgs.to(device)
-                start_time = time.time()
+                timer.start()
                 _ = model(imgs, msgs)
             elif isinstance(model, Extractor):
-                start_time = time.time()
+                timer.start()
                 _ = model(imgs)
             sync(device)
             end_time = time.time()
-            times.append(end_time - start_time)
+            times.append(timer.end())
             # unnormalize
-            start_time = time.time()
+            timer.start()
             sync(device)
             end_time = time.time()
-            times_norm[-1] += end_time - start_time
+            times_norm[-1] += timer.end()
             # interpolate
-            start_time = time.time()
+            timer.start()
             imgs = F.interpolate(imgs, size=(h_orig, w_orig),
                                  mode='bilinear', align_corners=False)
             sync(device)
-            end_time = time.time()
-            times_interp[-1] += end_time - start_time
+            times_interp[-1] += timer.end()
 
     results = {}
     for label, tt in [('forward', times), ('interp', times_interp), ('norm', times_norm)]:
@@ -119,16 +105,10 @@ def benchmark_model(model, img_size, data_loader, device):
         time_total = sum(tt)
         time_per_batch = time_total / len(tt)
         time_per_img = time_per_batch / bsz
-        flops = num_floating_point_ops / time_per_batch
-        gflops = flops / 1e9
-        tflops = flops / 1e12
         curr_result = {
             f'{label}_time_per_img': time_per_img,
             f'{label}_time_per_batch': time_per_batch,
-            f'{label}_time_total': time_total,
-            f'{label}_flops': flops,
-            f'{label}_gflops': gflops,
-            f'{label}_tflops': tflops
+            f'{label}_time_total': time_total
         }
         results.update(curr_result)
     results.update({'nsamples': len(tt)})
@@ -168,8 +148,6 @@ def main(args):
     results = []
 
     for embedder_name in args.embedder_models.split(','):
-        if 'yuv' in embedder_name:
-            continue  # skip yuv models for now as they require different input
         result = {'model': embedder_name}
         # build
         embedder_args = embedder_cfg[embedder_name]
@@ -246,9 +224,9 @@ if __name__ == '__main__':
     parser.add_argument('--extractor_models', type=str, default=None)
     parser.add_argument('--nbits', type=int, default=32)
     parser.add_argument('--output_dir', type=str, default='output')
-    parser.add_argument('--do_flops', type=utils.bool_inst, default=True, 
+    parser.add_argument('--do_flops', type=bool_inst, default=True, 
                         help='Calculate FLOPS for each model')
-    parser.add_argument('--do_speed', type=utils.bool_inst, default=False,
+    parser.add_argument('--do_speed', type=bool_inst, default=False,
                         help='Run speed benchmark for each model')
     
     args = parser.parse_args()

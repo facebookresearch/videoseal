@@ -30,12 +30,10 @@ from ..models import VideoWam, build_embedder, build_extractor
 from ..augmentation import get_validation_augs
 from ..augmentation.augmenter import get_dummy_augmenter
 from ..evals.metrics import psnr, ssim
-from ..utils import Timer
+from ..utils import Timer, bool_inst
 from ..utils.data import parse_dataset_params, Modalities
 from ..utils.image import create_diff_img
 from ..utils.display import save_vid
-
-import videoseal.utils as utils
 
 
 def setup_model_from_checkpoint(ckpt_path):
@@ -282,7 +280,7 @@ def main():
     group = parser.add_argument_group('Dataset')
     group.add_argument("--dataset", type=str, 
                        choices=["coco", "coco-stuff-blurred", "sa-v"], help="Name of the dataset.")
-    group.add_argument('--is_video', type=utils.bool_inst, default=False, 
+    group.add_argument('--is_video', type=bool_inst, default=False, 
                        help='Whether the data is video')
     group.add_argument('--short_edge_size', type=int, default=-1, 
                        help='Resizes the short edge of the image to this size at loading time, and keep the aspect ratio. If -1, no resizing.')

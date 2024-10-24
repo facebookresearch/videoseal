@@ -81,7 +81,7 @@ class VideoWam(Wam):
         masks: torch.Tensor,
         msgs: torch.Tensor = None,
         is_video: bool = True,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    ) -> dict:
         """
         Does the full forward pass of the WAM model (used for training).
         (1) Generates watermarked images from the input images and messages.
@@ -137,7 +137,7 @@ class VideoWam(Wam):
         imgs: torch.Tensor,  # [frames, c, h, w] for a single video
         masks: torch.Tensor,
         msgs: torch.Tensor = None,  # 1 message per video
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    ) -> dict:
         """
         Generate watermarked video from the input video imgs.
         """
@@ -177,7 +177,7 @@ class VideoWam(Wam):
         imgs: torch.Tensor,
         msgs: torch.Tensor = None,
         is_video: bool = True,
-    ) -> torch.Tensor:
+    ) -> dict:
         """ 
         Generates watermarked videos from the input images and messages (used for inference).
         Videos may be arbitrarily sized.
@@ -240,7 +240,7 @@ class VideoWam(Wam):
         self,
         imgs: torch.Tensor,
         is_video: bool = True,
-    ) -> torch.Tensor:
+    ) -> dict:
         """
         Performs the forward pass of the detector only.
         Rescales the input images to 256x... pixels and then computes the mask and the message.
@@ -248,10 +248,11 @@ class VideoWam(Wam):
             imgs (torch.Tensor): Batched images with shape FxCxHxW, where F is the number of frames,
                                     C is the number of channels, H is the height, and W is the width.
         Returns:
-            torch.Tensor: Predictions for each frame with shape Fx(K+1),
-                            where K is the length of the binary message. The first column represents
-                            the probability of the detection bit, and the remaining columns represent
-                            the probabilities of each bit in the message.
+            dict: The output predictions.
+                - torch.Tensor: Predictions for each frame with shape Fx(K+1),
+                                where K is the length of the binary message. The first column represents
+                                the probability of the detection bit, and the remaining columns represent
+                                the probabilities of each bit in the message.
         """
         if not is_video:
             # fallback on parent class for batch of images

@@ -70,7 +70,7 @@ class Wam(nn.Module):
         imgs: torch.Tensor,
         masks: torch.Tensor,
         msgs: torch.Tensor = None,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    ) -> dict:
         """
         Does the full forward pass of the WAM model (used for training).
         (1) Generates watermarked images from the input images and messages.
@@ -109,7 +109,7 @@ class Wam(nn.Module):
         self,
         imgs: torch.Tensor,
         msgs: torch.Tensor = None,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    ) -> dict:
         """
         Generates watermarked images from the input images and messages (used for inference).
         Images may be arbitrarily sized.
@@ -117,7 +117,10 @@ class Wam(nn.Module):
             imgs (torch.Tensor): Batched images with shape BxCxHxW.
             msgs (torch.Tensor): Optional messages with shape BxK.
         Returns:
-            tuple[torch.Tensor, torch.Tensor]: Watermarked images and predicted watermarks.
+            dict: A dictionary with the following keys:
+                - msgs (torch.Tensor): Original messages with shape BxK.
+                - deltas_w (torch.Tensor): Predicted watermarks with shape BxCxHxW.
+                - imgs_w (torch.Tensor): Watermarked images with shape BxCxHxW.
         """
         # optionally create message
         if msgs is None:
@@ -154,14 +157,15 @@ class Wam(nn.Module):
     def detect(
         self,
         imgs: torch.Tensor,
-    ) -> torch.Tensor:
+    ) -> dict:
         """
         Performs the forward pass of the detector only (used at inference).
         Rescales the input images to 256x256 pixels and then computes the mask and the message.
         Args:
             imgs (torch.Tensor): Batched images with shape BxCxHxW.
         Returns:
-            torch.Tensor: Predicted masks and/or messages with shape Bx(1+nbits)xHxW.
+            dict: A dictionary with the following keys:
+                - preds (torch.Tensor): Predicted masks and/or messages with shape Bx(1+nbits)xHxW.
         """
 
         # interpolate
