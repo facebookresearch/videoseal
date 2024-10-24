@@ -30,6 +30,9 @@ dependencies = [
     "tqdm",
     "pytorch_msssim",
     "tensorboard",
+    "calflops",
+    "transformers",
+    "safetensors",
 ]
 
 [project.optional-dependencies]
