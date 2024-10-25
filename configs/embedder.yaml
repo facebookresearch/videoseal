@@ -203,6 +203,34 @@ vae_tiny:
     tanh_out: True
 
 
+vae_tiny_yuv:
+  yuv: True
+  msg_processor:
+    nbits: 16
+    hidden_size: 32     # nbits * 2
+    msg_processor_type: 'binary+concat'
+  encoder:
+    in_channels: 1
+    z_channels: 4
+    resolution: 256  # only used for attn_resolutions
+    out_ch: 3
+    ch: 16
+    ch_mult: [1, 2, 2, 4]
+    num_res_blocks: 2
+    attn_resolutions: []
+    dropout: 0.0
+    double_z: False
+  decoder:
+    z_channels: 36      # hidden_size + z_channels
+    resolution: 256
+    out_ch: 1
+    ch: 16
+    ch_mult: [1, 2, 2, 4]
+    num_res_blocks: 2
+    attn_resolutions: []
+    dropout: 0.0
+    tanh_out: True
+
 vae_small:
   msg_processor:
     nbits: 16
