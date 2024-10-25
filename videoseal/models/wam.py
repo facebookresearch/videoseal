@@ -7,7 +7,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from ..data.transforms import rgb_to_yuv, yuv_to_rgb
+from ..data.transforms import rgb_to_yuv, yuv_to_rgb, RGB2YUV
 from ..augmentation.augmenter import Augmenter
 from ..modules.jnd import JND
 from .embedder import Embedder
@@ -58,6 +58,7 @@ class Wam(nn.Module):
         self.clamp = clamp
         # image format
         self.img_size = img_size
+        self.rgb2yuv = RGB2YUV()
 
     def get_random_msg(self, bsz: int = 1, nb_repetitions=1) -> torch.Tensor:
         return self.embedder.get_random_msg(bsz, nb_repetitions)  # b x k
@@ -76,9 +77,12 @@ class Wam(nn.Module):
             torch.Tensor: The watermarked images, with shape BxCxHxW
         """
         if preds_w.shape[1] == 1:
-            imgs_w = rgb_to_yuv(imgs)
-            imgs_w[:, 0:1] = self.scaling_i * imgs_w[:, 0:1] + self.scaling_w * preds_w
-            imgs_w = yuv_to_rgb(imgs_w)
+            preds_w = preds_w.repeat(1, 3, 1, 1)
+            imgs_w = self.scaling_i * imgs + self.scaling_w * preds_w
+            # # or equivalently
+            # imgs_w = rgb_to_yuv(imgs)
+            # imgs_w[:, 0:1] = self.scaling_i * imgs_w[:, 0:1] + self.scaling_w * preds_w
+            # imgs_w = yuv_to_rgb(imgs_w)
         else:
             imgs_w = self.scaling_i * imgs + self.scaling_w * preds_w
         if self.attenuation is not None:
@@ -104,7 +108,10 @@ class Wam(nn.Module):
             msgs = self.get_random_msg(imgs.shape[0])  # b x k
             msgs = msgs.to(imgs.device)
         # generate watermarked images
-        preds_w = self.embedder(imgs, msgs)
+        if self.embedder.yuv:  # take y channel only
+            preds_w = self.embedder(self.rgb2yuv(imgs)[:, 0:1], msgs)
+        else:
+            preds_w = self.embedder(imgs, msgs)
         imgs_w = self.blend(imgs, preds_w)
         # augment
         imgs_aug, masks, selected_aug = self.augmenter(
@@ -151,8 +158,10 @@ class Wam(nn.Module):
                                      mode="bilinear", align_corners=False)
 
         # generate watermarked images
+        if self.embedder.yuv:  # take y channel only
+            imgs_res = self.rgb2yuv(imgs_res.to(self.device))[:, 0:1]
         preds_w = self.embedder(
-            imgs_res.to(self.device), msgs.to(self.device))
+            imgs_res, msgs.to(self.device))
 
         # interpolate back
         if imgs.shape[-2:] != (self.img_size, self.img_size):

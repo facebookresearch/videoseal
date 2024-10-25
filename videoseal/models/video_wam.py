@@ -149,7 +149,10 @@ class VideoWam(Wam):
             assert msgs.shape[0] == 1, "Message should be unique"
         msgs = msgs.to(imgs.device)
         # generate watermarked images
-        preds_w = self.video_embedder(imgs, msgs)  # frames c h w
+        if self.embedder.yuv:  # take y channel only
+            preds_w = self.video_embedder(self.rgb2yuv(imgs)[:, 0:1], msgs)
+        else:
+            preds_w = self.video_embedder(imgs, msgs)
         imgs_w = self.blend(imgs, preds_w)  # frames c h w
         # augment
         imgs_aug, masks, selected_aug = self.augmenter(

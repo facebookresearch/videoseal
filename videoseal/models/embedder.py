@@ -2,7 +2,6 @@
 import torch
 from torch import nn
 
-
 from ..modules.hidden import HiddenEncoder
 from ..modules.msg_processor import MsgProcessor
 from ..modules.unet import UNetMsg
@@ -17,7 +16,6 @@ class Embedder(nn.Module):
     def __init__(self) -> None:
         super(Embedder, self).__init__()
         self.preprocess = lambda x: x * 2 - 1
-        self.postprocess = lambda x: (x + 1) / 2
 
     def get_random_msg(self, bsz: int = 1, nb_repetitions=1) -> torch.Tensor:
         """
@@ -188,4 +186,5 @@ def build_embedder(name, cfg, nbits):
         embedder = HiddenEmbedder(hidden_encoder)
     else:
         raise NotImplementedError(f"Model {name} not implemented")
+    embedder.yuv = True if 'yuv' in name else False
     return embedder
