@@ -180,6 +180,8 @@ def get_parser():
     group = parser.add_argument_group('Loading parameters')
     aa('--batch_size', default=32, type=int, help='Batch size')
     aa('--batch_size_eval', default=32, type=int, help='Batch size for evaluation')
+    aa('--batch_size_video', default=4, type=int, help='Batch size')
+    aa('--batch_size_video_eval', default=4, type=int, help='Batch size for evaluation')
     aa('--workers', default=8, type=int, help='Number of data loading workers')
     aa('--frames_per_clip', default=32, type=int,
        help='Number of frames per clip for video datasets')
@@ -364,7 +366,7 @@ def main(params):
         # bsz_video = 1
         # print(f"video batch size: {bsz_video}")
         video_train_loader = get_video_dataloader(params.video_dataset_config.train_dir,
-                                                  batch_size=params.batch_size,
+                                                  batch_size=params.batch_size_video,
                                                   num_workers=params.workers,
                                                   transform=train_transform,
                                                   mask_transform=train_mask_transform,
@@ -376,7 +378,7 @@ def main(params):
                                                   num_clips=params.num_clips,
                                                   )
         video_val_loader = get_video_dataloader(params.video_dataset_config.val_dir,
-                                                batch_size=params.batch_size,
+                                                batch_size=params.batch_size_video_eval,
                                                 num_workers=params.workers,
                                                 transform=val_transform,
                                                 mask_transform=val_mask_transform,

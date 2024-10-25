@@ -44,8 +44,8 @@ def get_validation_augs(
             (Identity(),          [0]),  # No parameters needed for identity
             (HorizontalFlip(),    [0]),  # No parameters needed for flip
             (Rotate(),            [10, 90]),  # (min_angle, max_angle)
-            (Resize(),            [0.5, 0.75]),  # size ratio
-            (Crop(),              [0.5, 0.75]),  # size ratio
+            (Resize(),            [0.55, 0.71]),  # size ratio
+            (Crop(),              [0.55, 0.71]),  # size ratio
             (Perspective(),       [0.5]),  # distortion_scale
             (Brightness(),        [0.5, 1.5]),
             (Contrast(),          [0.5, 1.5]),
