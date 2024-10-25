@@ -3,8 +3,11 @@ model: unet
 hidden:
   num_blocks: 4
   num_bits: 16
+  in_channels: 3
+  out_channels: 3
   z_channels: 64
   normalization: 'group'
+  activation: 'gelu'
   last_tanh: True
 
 unet_small:
@@ -99,7 +102,6 @@ unet_small2:
     last_tanh: True
   
 unet_small2_yuv:
-  yuv: True
   msg_processor:
     nbits: 16
     hidden_size: 32     # nbits * 2
@@ -204,7 +206,6 @@ vae_tiny:
 
 
 vae_tiny_yuv:
-  yuv: True
   msg_processor:
     nbits: 16
     hidden_size: 32     # nbits * 2
@@ -260,7 +261,6 @@ vae_small:
 
 
 vae_small_yuv:
-  yuv: True
   msg_processor:
     nbits: 16
     hidden_size: 32     # nbits * 2

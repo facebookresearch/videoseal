@@ -127,10 +127,10 @@ class VideoWam(Wam):
         """
         # TODO: deal with the case where the embedder predicts images instead of deltas
         msg = msg.repeat(len(imgs) // self.step_size, 1)  # n k
-        deltas_w = self.embedder(imgs[::self.step_size], msg)  # n 3 h w
-        deltas_w = torch.repeat_interleave(
-            deltas_w, self.step_size, dim=0)
-        return deltas_w[:len(imgs)]  # f 3 h w
+        preds_w = self.embedder(imgs[::self.step_size], msg)  # n 3 h w
+        preds_w = torch.repeat_interleave(
+            preds_w, self.step_size, dim=0)
+        return preds_w[:len(imgs)]  # f 3 h w
 
     def video_forward(
         self,
@@ -149,12 +149,8 @@ class VideoWam(Wam):
             assert msgs.shape[0] == 1, "Message should be unique"
         msgs = msgs.to(imgs.device)
         # generate watermarked images
-        deltas_w = self.video_embedder(imgs, msgs)  # frames c h w
-        imgs_w = self.scaling_i * imgs + self.scaling_w * deltas_w
-        if self.attenuation is not None:
-            imgs_w = self.attenuation(imgs, imgs_w)
-        if self.clamp:
-            imgs_w = imgs_w.clamp(0, 1)
+        preds_w = self.video_embedder(imgs, msgs)  # frames c h w
+        imgs_w = self.blend(imgs, preds_w)  # frames c h w
         # augment
         imgs_aug, masks, selected_aug = self.augmenter(
             imgs_w, imgs, masks, is_video=True)
@@ -214,7 +210,7 @@ class VideoWam(Wam):
 
             # get deltas for the chunk, and repeat them for each frame in the chunk
             outputs = super().embed(imgs_in_ck, msgs)  # n 3 h w
-            deltas_in_ck = outputs["deltas_w"]  # n 3 h w
+            deltas_in_ck = outputs["preds_w"]  # n 3 h w
             deltas_in_ck = torch.repeat_interleave(
                 deltas_in_ck, step_size, dim=0)  # f 3 h w
             
@@ -222,12 +218,7 @@ class VideoWam(Wam):
             deltas_in_ck = deltas_in_ck[:len(all_imgs_in_ck)]
 
             # create watermarked imgs
-            all_imgs_in_ck_w = self.scaling_i * all_imgs_in_ck + self.scaling_w * deltas_in_ck
-            if self.attenuation is not None:
-                all_imgs_in_ck_w = self.attenuation(all_imgs_in_ck, all_imgs_in_ck_w)
-            if self.clamp:
-                all_imgs_in_ck_w = all_imgs_in_ck_w.clamp(0, 1)
-            
+            all_imgs_in_ck_w = self.blend(all_imgs_in_ck, deltas_in_ck)
             imgs_w[start: end, ...] = all_imgs_in_ck_w  # n 3 h w
             
         outputs = {

@@ -3,13 +3,11 @@ Test with:
     python -m videoseal.models.wam
 """
 
-import random
-
 import torch
 from torch import nn
 from torch.nn import functional as F
-from torchvision import transforms
 
+from ..data.transforms import rgb_to_yuv, yuv_to_rgb
 from ..augmentation.augmenter import Augmenter
 from ..modules.jnd import JND
 from .embedder import Embedder
@@ -17,8 +15,6 @@ from .extractor import Extractor
 
 
 class Wam(nn.Module):
-    wm_threshold: float = 0.0
-    image_format: str = "RGB"
 
     @property
     def device(self):
@@ -33,8 +29,8 @@ class Wam(nn.Module):
         attenuation: JND = None,
         scaling_w: float = 1.0,
         scaling_i: float = 1.0,
-        img_size: int = 256,
         clamp: bool = True,
+        img_size: int = 256,
     ) -> None:
         """
         WAM (watermark-anything models) model that combines an embedder, a detector, and an augmenter.
@@ -48,6 +44,7 @@ class Wam(nn.Module):
             scaling_w: The scaling factor for the watermark
             scaling_i: The scaling factor for the image
             img_size: The size at which the images are processed
+            clamp: Whether to clamp the output images to [0, 1]
         """
         super().__init__()
         # modules
@@ -56,14 +53,39 @@ class Wam(nn.Module):
         self.augmenter = augmenter
         self.attenuation = attenuation
         # scalings
-        self.clamp = clamp
         self.scaling_w = scaling_w
         self.scaling_i = scaling_i
+        self.clamp = clamp
         # image format
         self.img_size = img_size
 
     def get_random_msg(self, bsz: int = 1, nb_repetitions=1) -> torch.Tensor:
         return self.embedder.get_random_msg(bsz, nb_repetitions)  # b x k
+
+    def blend(self, imgs, preds_w) -> torch.Tensor:
+        """
+        Blends the original images with the predicted watermarks.
+        E.g.,
+            If scaling_i = 0.0 and scaling_w = 1.0, the watermarked image is predicted directly.
+            If scaling_i = 1.0 and scaling_w = 0.2, the watermark is additive.
+        Args:
+            imgs (torch.Tensor): The original images, with shape BxCxHxW
+            preds_w (torch.Tensor): The predicted watermarks, with shape BxC'xHxW, \
+                if C'=1, the watermark alters Y channel only, if C'=3, the watermark is RGB.
+        Returns:
+            torch.Tensor: The watermarked images, with shape BxCxHxW
+        """
+        if preds_w.shape[1] == 1:
+            imgs_w = rgb_to_yuv(imgs)
+            imgs_w[:, 0:1] = self.scaling_i * imgs_w[:, 0:1] + self.scaling_w * preds_w
+            imgs_w = yuv_to_rgb(imgs_w)
+        else:
+            imgs_w = self.scaling_i * imgs + self.scaling_w * preds_w
+        if self.attenuation is not None:
+            imgs_w = self.attenuation(imgs, imgs_w)
+        if self.clamp:
+            imgs_w = imgs_w.clamp(0, 1)
+        return imgs_w
 
     def forward(
         self,
@@ -82,12 +104,8 @@ class Wam(nn.Module):
             msgs = self.get_random_msg(imgs.shape[0])  # b x k
             msgs = msgs.to(imgs.device)
         # generate watermarked images
-        deltas_w = self.embedder(imgs, msgs)
-        imgs_w = self.scaling_i * imgs + self.scaling_w * deltas_w
-        if self.attenuation is not None:
-            imgs_w = self.attenuation(imgs, imgs_w)
-        if self.clamp:
-            imgs_w = imgs_w.clamp(0, 1)
+        preds_w = self.embedder(imgs, msgs)
+        imgs_w = self.blend(imgs, preds_w)
         # augment
         imgs_aug, masks, selected_aug = self.augmenter(
             imgs_w, imgs, masks, is_video=False)
@@ -97,7 +115,7 @@ class Wam(nn.Module):
         outputs = {
             "msgs": msgs,  # original messages: b k
             "masks": masks,  # augmented masks: b 1 h w
-            "deltas_w": deltas_w,  # predicted watermarks: b c h w
+            "preds_w": preds_w,  # predicted watermarks: b c h w
             "imgs_w": imgs_w,  # watermarked images: b c h w
             "imgs_aug": imgs_aug,  # augmented images: b c h w
             "preds": preds,  # predicted masks and/or messages: b (1+nbits) h w
@@ -119,7 +137,7 @@ class Wam(nn.Module):
         Returns:
             dict: A dictionary with the following keys:
                 - msgs (torch.Tensor): Original messages with shape BxK.
-                - deltas_w (torch.Tensor): Predicted watermarks with shape BxCxHxW.
+                - preds_w (torch.Tensor): Predicted watermarks with shape BxCxHxW.
                 - imgs_w (torch.Tensor): Watermarked images with shape BxCxHxW.
         """
         # optionally create message
@@ -133,23 +151,19 @@ class Wam(nn.Module):
                                      mode="bilinear", align_corners=False)
 
         # generate watermarked images
-        deltas_w = self.embedder(
+        preds_w = self.embedder(
             imgs_res.to(self.device), msgs.to(self.device))
 
         # interpolate back
         if imgs.shape[-2:] != (self.img_size, self.img_size):
-            deltas_w = F.interpolate(deltas_w, size=imgs.shape[-2:], 
+            preds_w = F.interpolate(preds_w, size=imgs.shape[-2:], 
                                     mode="bilinear", align_corners=False)
-        deltas_w = deltas_w.to(imgs.device)
-        imgs_w = self.scaling_i * imgs + self.scaling_w * deltas_w
-        if self.attenuation is not None:
-            imgs_w = self.attenuation(imgs, imgs_w)
-        if self.clamp:
-            imgs_w = imgs_w.clamp(0, 1)
+        preds_w = preds_w.to(imgs.device)
+        imgs_w = self.blend(imgs, preds_w)
         
         outputs = {
             "msgs": msgs,  # original messages: b k
-            "deltas_w": deltas_w,  # predicted watermarks: b c h w
+            "preds_w": preds_w,  # predicted watermarks: b c h w
             "imgs_w": imgs_w,  # watermarked images: b c h w
         }
         return outputs

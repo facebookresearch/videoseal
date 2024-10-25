@@ -2,11 +2,11 @@
 import torch
 from torch import nn
 
-from videoseal.data.transforms import rgb_to_yuv, yuv_to_rgb
-from videoseal.modules.hidden import HiddenEncoder
-from videoseal.modules.msg_processor import MsgProcessor
-from videoseal.modules.unet import UNetMsg
-from videoseal.modules.vae import VAEDecoder, VAEEncoder
+
+from ..modules.hidden import HiddenEncoder
+from ..modules.msg_processor import MsgProcessor
+from ..modules.unet import UNetMsg
+from ..modules.vae import VAEDecoder, VAEEncoder
 
 
 class Embedder(nn.Module):
@@ -52,14 +52,12 @@ class VAEEmbedder(Embedder):
         self,
         encoder: VAEEncoder,
         decoder: VAEDecoder,
-        msg_processor: MsgProcessor,
-        yuv: bool = False
+        msg_processor: MsgProcessor
     ) -> None:
         super(VAEEmbedder, self).__init__()
         self.encoder = encoder
         self.decoder = decoder
         self.msg_processor = msg_processor
-        self.yuv = yuv
 
     def get_random_msg(self, bsz: int = 1, nb_repetitions=1) -> torch.Tensor:
         return self.msg_processor.get_random_msg(bsz, nb_repetitions)  # b x k
@@ -80,14 +78,10 @@ class VAEEmbedder(Embedder):
         Returns:
             The watermarked images.
         """
-        if self.yuv:  # only use the Y channel
-            imgs = rgb_to_yuv(imgs)[..., :1, :, :]
         imgs = self.preprocess(imgs)  # put in [-1, 1]
         latents = self.encoder(imgs)
         latents_w = self.msg_processor(latents, msgs)
         imgs_w = self.decoder(latents_w)
-        if imgs_w.shape[-3] == 1:
-            imgs_w = imgs_w.repeat(1, 3, 1, 1)
         return imgs_w
 
 
@@ -99,13 +93,11 @@ class UnetEmbedder(Embedder):
     def __init__(
         self,
         unet: nn.Module,
-        msg_processor: MsgProcessor,
-        yuv: bool = False
+        msg_processor: MsgProcessor
     ) -> None:
         super(UnetEmbedder, self).__init__()
         self.unet = unet
         self.msg_processor = msg_processor
-        self.yuv = yuv
 
     def get_random_msg(self, bsz: int = 1, nb_repetitions=1) -> torch.Tensor:
         return self.msg_processor.get_random_msg(bsz, nb_repetitions)  # b x k
@@ -126,12 +118,8 @@ class UnetEmbedder(Embedder):
         Returns:
             The watermarked images.
         """
-        if self.yuv:  # only use the Y channel
-            imgs = rgb_to_yuv(imgs)[..., :1, :, :]
         imgs = self.preprocess(imgs)  # put in [-1, 1]
         imgs_w = self.unet(imgs, msgs)
-        if imgs_w.shape[-3] == 1:
-            imgs_w = imgs_w.repeat(1, 3, 1, 1)
         return imgs_w
 
 
@@ -142,12 +130,10 @@ class HiddenEmbedder(Embedder):
 
     def __init__(
         self,
-        hidden_encoder: HiddenEncoder,
-        yuv: bool = False
+        hidden_encoder: HiddenEncoder
     ) -> None:
         super(HiddenEmbedder, self).__init__()
         self.hidden_encoder = hidden_encoder
-        self.yuv = yuv
 
     def get_random_msg(self, bsz: int = 1, nb_repetitions=1) -> torch.Tensor:
         nbits = self.hidden_encoder.num_bits
@@ -170,12 +156,8 @@ class HiddenEmbedder(Embedder):
             The watermarked images.
         """
         msgs = 2 * msgs.float() - 1
-        if self.yuv:  # only use the Y channel
-            imgs = rgb_to_yuv(imgs)[..., :1, :, :]
         imgs = self.preprocess(imgs)
         imgs_w = self.hidden_encoder(imgs, msgs)
-        if imgs_w.shape[-3] == 1:
-            imgs_w = imgs_w.repeat(1, 3, 1, 1)
         return imgs_w
 
 
@@ -189,8 +171,7 @@ def build_embedder(name, cfg, nbits):
         encoder = VAEEncoder(**cfg.encoder)
         msg_processor = MsgProcessor(**cfg.msg_processor)
         decoder = VAEDecoder(**cfg.decoder)
-        yuv = cfg.get('yuv', False)
-        embedder = VAEEmbedder(encoder, decoder, msg_processor, yuv)
+        embedder = VAEEmbedder(encoder, decoder, msg_processor)
     elif name.startswith('unet'):
         # updates some cfg
         cfg.msg_processor.nbits = nbits
@@ -198,8 +179,7 @@ def build_embedder(name, cfg, nbits):
         # build the encoder, decoder and msg processor
         msg_processor = MsgProcessor(**cfg.msg_processor)
         unet = UNetMsg(msg_processor=msg_processor, **cfg.unet)
-        yuv = cfg.get('yuv', False)
-        embedder = UnetEmbedder(unet, msg_processor, yuv)
+        embedder = UnetEmbedder(unet, msg_processor)
     elif name.startswith('hidden'):
         # updates some cfg
         cfg.num_bits = nbits

@@ -6,11 +6,10 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
-from .common import ChanRMSNorm, Upsample, Downsample
+from .common import ChanRMSNorm, Upsample, Downsample, get_activation, get_normalization
 
 # https://github.com/lucidrains/imagen-pytorch/blob/main/imagen_pytorch/imagen_pytorch.py
 # https://github.com/milesial/Pytorch-UNet/blob/master/train.py
-
 
 
 class ResnetBlock(nn.Module):
@@ -104,29 +103,8 @@ class UNetMsg(nn.Module):
         self.last_tanh = last_tanh
         self.connect_scale = 2 ** -0.5
 
-        # Set the normalization layer
-        if normalization == "batch":
-            norm_layer = nn.BatchNorm2d
-        elif normalization == "group":
-            norm_layer = partial(nn.GroupNorm, num_groups=8)
-        elif normalization == "layer":
-            norm_layer = nn.LayerNorm
-        elif normalization == "rms":
-            norm_layer = ChanRMSNorm
-        else:
-            raise NotImplementedError
-    
-        # Set the activation layer
-        if activation == "relu":
-            act_layer = nn.ReLU
-        elif activation == "leakyrelu":
-            act_layer = partial(nn.LeakyReLU, negative_slope=0.2)
-        elif activation == "gelu":
-            act_layer = nn.GELU
-        elif activation == "silu":
-            act_layer = nn.SiLU
-        else:
-            raise NotImplementedError
+        norm_layer = get_normalization(normalization)
+        act_layer = get_activation(activation)
 
         # Calculate the z_channels for each layer based on z_channels_mults
         z_channels = [self.z_channels * m for m in self.z_channels_mults]
