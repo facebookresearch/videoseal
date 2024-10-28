@@ -1,13 +1,11 @@
 """
 python -m videoseal.evals.full \
-    --checkpoint /private/home/hadyelsahar/work/code/videoseal/2024_logs/1013-hybrid-large-sweep-allaugs/_lambda_d=0.5_lambda_i=0.5_optimizer=AdamW,lr=5e-5_prop_img_vid=0.9_videowam_step_size=4_video_start=500_embedder_model=vae_small_bw/checkpoint.pth \
+    --checkpoint /private/home/hadyelsahar/work/code/videoseal/2024_logs/1016-hybrid-vs-ours/_lambda_d=0.5_lambda_i=0.5_optimizer=AdamW,lr=1e-4_videowam_step_size=4_video_start=500_embedder_model=unet_small2/checkpoint.pth \
     --dataset coco --is_video false \
     --dataset sa-v --is_video true --num_samples 1 \
 
 
     
-    /private/home/hadyelsahar/work/code/videoseal/2024_logs/1013-hybrid-large-sweep-allaugs/_lambda_d=0.5_lambda_i=0.5_optimizer=AdamW,lr=5e-5_prop_img_vid=0.9_videowam_step_size=4_video_start=500_embedder_model=vae_small_bw/checkpoint.pth
-    /private/home/hadyelsahar/work/code/videoseal/2024_logs/1013-hybrid-large-sweep-allaugs/_lambda_d=0.5_lambda_i=0.5_optimizer=AdamW,lr=5e-5_prop_img_vid=0.9_videowam_step_size=4_video_start=500_embedder_model=unet_small2/checkpoint.pth
     /private/home/hadyelsahar/work/code/videoseal/2024_logs/1016-hybrid-vs-ours/_lambda_d=0.5_lambda_i=0.5_optimizer=AdamW,lr=1e-4_videowam_step_size=4_video_start=500_embedder_model=unet_small2/checkpoint.pth
 """
 
@@ -89,8 +87,8 @@ def setup_model_from_checkpoint(ckpt_path):
     # Load the model weights
     if os.path.exists(ckpt_path):
         checkpoint = torch.load(ckpt_path, map_location='cpu', weights_only=True)
-        wam.load_state_dict(checkpoint['model'])
-        print("Model loaded successfully from", ckpt_path)
+        msg = wam.load_state_dict(checkpoint['model'], strict=False)
+        print("Model loaded successfully from", ckpt_path, f"with message: {msg}")
     else:
         msg = f"Checkpoint path does not exist:{ckpt_path}"
         raise FileNotFoundError(msg)

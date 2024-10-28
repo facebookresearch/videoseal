@@ -156,10 +156,11 @@ class Wam(nn.Module):
         if imgs.shape[-2:] != (self.img_size, self.img_size):
             imgs_res = F.interpolate(imgs, size=(self.img_size, self.img_size), 
                                      mode="bilinear", align_corners=False)
+        imgs_res = imgs_res.to(self.device)
 
         # generate watermarked images
         if self.embedder.yuv:  # take y channel only
-            imgs_res = self.rgb2yuv(imgs_res.to(self.device))[:, 0:1]
+            imgs_res = self.rgb2yuv[:, 0:1]
         preds_w = self.embedder(
             imgs_res, msgs.to(self.device))
 
