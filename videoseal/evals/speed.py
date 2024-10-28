@@ -6,13 +6,13 @@ from root directory:
 import argparse
 import os
 import time
+
 import omegaconf
 import pandas as pd
-from calflops import calculate_flops
-
 import torch
-from torch.utils.data import DataLoader
 import torch.nn.functional as F
+from calflops import calculate_flops
+from torch.utils.data import DataLoader
 from torchvision.datasets import FakeData
 from torchvision.transforms import ToTensor
 
@@ -20,11 +20,13 @@ from ..utils import Timer, bool_inst
 from ..models import (Embedder, Extractor, build_embedder,
                               build_extractor)
 
+
 def sync(device):
     """ wait for the GPU to finish processing, before measuring time """
     if device.startswith('cuda'):
         torch.cuda.synchronize()
     return
+
 
 def get_flops(model, img_size, device):
     channels = 3
@@ -33,7 +35,7 @@ def get_flops(model, img_size, device):
         msgs = msgs.to(device)
         img_size = (1, channels, img_size, img_size)
         return calculate_flops(
-            model, 
+            model,
             args=[torch.randn(img_size), msgs],
             output_as_string=False,
             output_precision=4,
@@ -42,13 +44,13 @@ def get_flops(model, img_size, device):
     elif isinstance(model, Extractor):
         img_size = (1, channels, img_size, img_size)
         return calculate_flops(
-            model, 
+            model,
             args=[torch.randn(img_size)],
             output_as_string=False,
             output_precision=4,
             print_results=False
         )
-        
+
 
 @torch.no_grad()
 def benchmark_model(model, img_size, data_loader, device):
@@ -150,12 +152,15 @@ def main(args):
     for embedder_name in args.embedder_models.split(','):
         result = {'model': embedder_name}
         # build
+        if embedder_name not in embedder_cfg:
+            continue
         embedder_args = embedder_cfg[embedder_name]
         embedder = build_embedder(embedder_name, embedder_args, args.nbits)
         embedder = embedder.to(device)
         # flops
         if args.do_flops:
-            flops, macs, params = get_flops(embedder, args.img_size_work, device)
+            flops, macs, params = get_flops(
+                embedder, args.img_size_work, device)
             result.update({
                 'gflops': flops / 1e9,
                 'gmacs': macs / 1e9,
@@ -176,13 +181,16 @@ def main(args):
     for extractor_name in args.extractor_models.split(','):
         result = {'model': extractor_name}
         # build
+        if extractor_name not in extractor_cfg:
+            continue
         extractor_args = extractor_cfg[extractor_name]
         extractor = build_extractor(
             extractor_name, extractor_args, args.img_size_work, args.nbits)
         extractor = extractor.to(device)
         # flops
         if args.do_flops:
-            flops, macs, params = get_flops(extractor, args.img_size_work, device)
+            flops, macs, params = get_flops(
+                extractor, args.img_size_work, device)
             result.update({
                 'gflops': flops / 1e9,
                 'gmacs': macs / 1e9,
@@ -205,7 +213,8 @@ def main(args):
     print(df)
     if not os.path.exists(args.output_dir):
         os.makedirs(args.output_dir)
-    df.to_csv(os.path.join(args.output_dir, 'speed_results.csv'), index=False)
+    df.to_csv(os.path.join(args.output_dir, 'speed_results.csv'),
+              index=False, float_format='%.5f')
 
 
 if __name__ == '__main__':
@@ -228,6 +237,6 @@ if __name__ == '__main__':
                         help='Calculate FLOPS for each model')
     parser.add_argument('--do_speed', type=bool_inst, default=False,
                         help='Run speed benchmark for each model')
-    
+
     args = parser.parse_args()
     main(args)

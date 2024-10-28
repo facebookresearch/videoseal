@@ -791,8 +791,8 @@ def eval_one_epoch(
                                                                     mode='bilinear', align_corners=False, antialias=True)
                                 masks_aug = nn.functional.interpolate(masks_aug, size=(h, w),
                                                                     mode='bilinear', align_corners=False, antialias=True)
-                        selected_aug = str(transform_instance).lower()
-                        selected_aug += f"_{strength}"
+                        selected_aug = str(transform_instance) + f"_{strength}"
+                        selected_aug = selected_aug.replace(", ", "_")
 
                         # extract watermark
                         extract_time = time.time()

@@ -15,14 +15,13 @@
         "extractor_model": "sam_tiny",
         "img_size": 256,
         "img_size_extractor": 256,
-        "iter_per_epoch": 100,
+        "iter_per_epoch": 1000,
         "video_start": [
             0,
-            50
+            500
         ],
         "videowam_step_size": [
             4,
-            8,
             16
         ],
         "iter_per_valid": 10,
@@ -31,13 +30,15 @@
         "full_eval_freq": 5,
         "eval_freq": 5,
         "prop_img_vid": [
-            0.8,
-            0.5,
-            0.3
+            0.9,
+            0.5
         ],
         "epochs": 1000,
-        "optimizer": "AdamW,lr=1e-4",
-        "scheduler": "CosineLRScheduler,lr_min=1e-6,t_initial=100,warmup_lr_init=1e-6,warmup_t=5",
+        "optimizer": [
+            "AdamW,lr=1e-4",
+            "AdamW,lr=5e-5"
+        ],
+        "scheduler": "CosineLRScheduler,lr_min=1e-6,t_initial=1000,warmup_lr_init=5e-6,warmup_t=20",
         "seed": 999,
         "perceptual_loss": "mse",
         "lambda_i": [
