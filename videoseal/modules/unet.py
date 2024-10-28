@@ -6,11 +6,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-<<<<<<< HEAD
 from .common import ChanRMSNorm, Upsample, Downsample, get_activation, get_normalization
-=======
-from .common import ChanRMSNorm, Downsample, Upsample
->>>>>>> main
 
 # https://github.com/lucidrains/imagen-pytorch/blob/main/imagen_pytorch/imagen_pytorch.py
 # https://github.com/milesial/Pytorch-UNet/blob/master/train.py
@@ -90,7 +86,6 @@ class BottleNeck(nn.Module):
 
 
 class UNetMsg(nn.Module):
-<<<<<<< HEAD
     def __init__(self, 
         msg_processor: nn.Module,
         in_channels: int,
@@ -105,23 +100,6 @@ class UNetMsg(nn.Module):
         last_tanh: bool = True,
         zero_init: bool = False
     ):
-=======
-    def __init__(self,
-                 msg_processor: nn.Module,
-                 in_channels: int,
-                 out_channels: int,
-                 z_channels: int,
-                 num_blocks: int,
-                 activation: str,
-                 normalization: str,
-                 z_channels_mults: tuple[int],
-                 upsampling_type: str = 'bilinear',
-                 downsampling_type: str = 'bilinear',
-                 last_tanh: bool = True,
-                 zero_init: bool = False,
-                 bw: bool = False,
-                 ):
->>>>>>> main
         super(UNetMsg, self).__init__()
         self.msg_processor = msg_processor
         self.in_channels = in_channels
@@ -132,34 +110,8 @@ class UNetMsg(nn.Module):
         self.last_tanh = last_tanh
         self.connect_scale = 2 ** -0.5
 
-<<<<<<< HEAD
         norm_layer = get_normalization(normalization)
         act_layer = get_activation(activation)
-=======
-        # Set the normalization layer
-        if normalization == "batch":
-            norm_layer = nn.BatchNorm2d
-        elif normalization == "group":
-            norm_layer = partial(nn.GroupNorm, num_groups=8)
-        elif normalization == "layer":
-            norm_layer = nn.LayerNorm
-        elif normalization == "rms":
-            norm_layer = ChanRMSNorm
-        else:
-            raise NotImplementedError
-
-        # Set the activation layer
-        if activation == "relu":
-            act_layer = nn.ReLU
-        elif activation == "leakyrelu":
-            act_layer = partial(nn.LeakyReLU, negative_slope=0.2)
-        elif activation == "gelu":
-            act_layer = nn.GELU
-        elif activation == "silu":
-            act_layer = nn.SiLU
-        else:
-            raise NotImplementedError
->>>>>>> main
 
         # Calculate the z_channels for each layer based on z_channels_mults
         z_channels = [self.z_channels * m for m in self.z_channels_mults]
