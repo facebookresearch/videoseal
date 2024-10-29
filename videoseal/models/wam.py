@@ -160,7 +160,7 @@ class Wam(nn.Module):
 
         # generate watermarked images
         if self.embedder.yuv:  # take y channel only
-            imgs_res = self.rgb2yuv[:, 0:1]
+            imgs_res = self.rgb2yuv(imgs_res)[:, 0:1]
         preds_w = self.embedder(
             imgs_res, msgs.to(self.device))
 
