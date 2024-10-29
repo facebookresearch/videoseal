@@ -115,6 +115,22 @@ unet_small2_yuv:
     normalization: 'rms'
     z_channels_mults: [1, 2, 4, 8]
     last_tanh: True
+  
+unet_small2_yuv_idinit:
+  msg_processor:
+    nbits: 16
+    hidden_size: 32     # nbits * 2
+    msg_processor_type: 'binary+concat'
+  unet:
+    in_channels: 1
+    out_channels: 1
+    z_channels: 16
+    num_blocks: 8
+    activation: 'silu'
+    normalization: 'rms'
+    z_channels_mults: [1, 2, 4, 8]
+    last_tanh: True
+    id_init: True
 
 unet_small2_bw:
   msg_processor:

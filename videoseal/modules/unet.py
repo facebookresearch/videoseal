@@ -49,12 +49,12 @@ class ResnetBlock(nn.Module):
 
 
 class UBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, act_layer, norm_layer, upsampling_type='bilinear'):
+    def __init__(self, in_channels, out_channels, act_layer, norm_layer, upsampling_type='bilinear', id_init=False):
         super().__init__()
         self.up = Upsample(upsampling_type, in_channels,
                            out_channels, 2, act_layer)
         self.conv = ResnetBlock(
-            out_channels, out_channels, act_layer, norm_layer)
+            out_channels, out_channels, act_layer, norm_layer, id_init=id_init)
 
     def forward(self, x):
         x = self.up(x)
@@ -62,7 +62,7 @@ class UBlock(nn.Module):
 
 
 class DBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, act_layer, norm_layer, upsampling_type='bilinear'):
+    def __init__(self, in_channels, out_channels, act_layer, norm_layer, upsampling_type='bilinear', id_init=False):
         super().__init__()
         if upsampling_type == 'bilinear':
             self.down = nn.Conv2d(in_channels, out_channels,
@@ -70,7 +70,7 @@ class DBlock(nn.Module):
         else:
             self.down = Downsample(in_channels, out_channels, act_layer)
         self.conv = ResnetBlock(
-            out_channels, out_channels, act_layer, norm_layer)
+            out_channels, out_channels, act_layer, norm_layer, id_init=id_init)
 
     def forward(self, x):
         x = self.down(x)
@@ -84,13 +84,14 @@ class BottleNeck(nn.Module):
                  channels_out: int,
                  act_layer: nn.Module,
                  norm_layer: nn.Module,
+                 id_init: bool=False,
                  *args, **kwargs
                  ) -> None:
         super(BottleNeck, self).__init__()
         model = []
         for _ in range(num_blocks):
             model += [ResnetBlock(channels_in, channels_out,
-                                  act_layer, norm_layer)]
+                                  act_layer, norm_layer, id_init=id_init)]
             channels_in = channels_out
         self.model = nn.Sequential(*model)
 
@@ -111,7 +112,8 @@ class UNetMsg(nn.Module):
         upsampling_type: str = 'bilinear',
         downsampling_type: str = 'bilinear',
         last_tanh: bool = True,
-        zero_init: bool = False
+        zero_init: bool = False,
+        id_init: bool = False
     ):
         super(UNetMsg, self).__init__()
         self.msg_processor = msg_processor
@@ -131,24 +133,24 @@ class UNetMsg(nn.Module):
 
         # Initial convolution
         self.inc = ResnetBlock(
-            in_channels, z_channels[0], act_layer, norm_layer)
+            in_channels, z_channels[0], act_layer, norm_layer, id_init=id_init)
 
         # Downward path
         self.downs = nn.ModuleList()
         for ii in range(len(z_channels) - 1):
             self.downs.append(DBlock(
-                z_channels[ii], z_channels[ii + 1], act_layer, norm_layer, downsampling_type))
+                z_channels[ii], z_channels[ii + 1], act_layer, norm_layer, downsampling_type, id_init))
 
         # Message mixing and middle blocks
         z_channels[-1] = z_channels[-1] + self.msg_processor.hidden_size
         self.bottleneck = BottleNeck(
-            num_blocks, z_channels[-1], z_channels[-1], act_layer, norm_layer)
+            num_blocks, z_channels[-1], z_channels[-1], act_layer, norm_layer, id_init=id_init)
 
         # Upward path
         self.ups = nn.ModuleList()
         for ii in reversed(range(len(z_channels) - 1)):
             self.ups.append(UBlock(
-                2 * z_channels[ii + 1], z_channels[ii], act_layer, norm_layer, upsampling_type))
+                2 * z_channels[ii + 1], z_channels[ii], act_layer, norm_layer, upsampling_type, id_init))
 
         # Final output convolution
         self.outc = nn.Conv2d(z_channels[0], out_channels, 1)
