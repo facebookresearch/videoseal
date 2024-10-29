@@ -15,7 +15,7 @@ from .common import ChanRMSNorm, Upsample, Downsample, get_activation, get_norma
 class ResnetBlock(nn.Module):
     """Conv Norm Act * 2"""
 
-    def __init__(self, in_channels, out_channels, act_layer, norm_layer, mid_channels=None):
+    def __init__(self, in_channels, out_channels, act_layer, norm_layer, mid_channels=None, id_init=False):
         super().__init__()
         if not mid_channels:
             mid_channels = out_channels
@@ -30,9 +30,22 @@ class ResnetBlock(nn.Module):
             act_layer()
         )
         self.res_conv = nn.Conv2d(in_channels, out_channels, kernel_size=1)
+        if id_init:
+            self._id_init(self.res_conv)
 
     def forward(self, x):
         return self.double_conv(x) + self.res_conv(x)
+
+    def _id_init(self, m):
+        if isinstance(m, nn.Conv2d):
+            with torch.no_grad():
+                in_channels, out_channels, h, w = m.weight.size()
+                if in_channels == out_channels:
+                    identity_kernel = torch.eye(in_channels).view(in_channels, in_channels, 1, 1)
+                    m.weight.copy_(identity_kernel)
+                    if m.bias is not None:
+                        nn.init.zeros_(m.bias)
+        return m
 
 
 class UBlock(nn.Module):

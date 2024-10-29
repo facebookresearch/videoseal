@@ -255,7 +255,7 @@ def main(params):
     embedder_params = embedder_cfg[params.embedder_model]
     embedder = build_embedder(params.embedder_model,
                               embedder_params, params.nbits)
-    # print(embedder)
+    print(embedder)
     print(
         f'embedder: {sum(p.numel() for p in embedder.parameters() if p.requires_grad) / 1e6:.1f}M parameters')
 
