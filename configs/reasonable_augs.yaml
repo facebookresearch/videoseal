@@ -56,4 +56,4 @@ augs_params:
     min_factor: -0.1
     max_factor: 0.1
   video_compression:
-    crf_values: [17, 28, 34, 40]
+    crf_values: [17, 28, 34]
