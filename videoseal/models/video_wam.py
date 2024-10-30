@@ -172,6 +172,7 @@ class VideoWam(Wam):
         }
         return outputs
 
+    @torch.no_grad()
     def embed(
         self,
         imgs: torch.Tensor,
