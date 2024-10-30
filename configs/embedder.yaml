@@ -355,6 +355,51 @@ vae_big:
     dropout: 0.0
     tanh_out: True
 
+patchmixer_tiny:
+  msg_processor:
+    nbits: 16
+    hidden_size: 16     # nbits 
+    msg_processor_type: 'binary+concat'
+  patchmixer:
+    in_channels: 3
+    out_channels: 3
+    z_channels: 96
+    num_blocks: 8
+    activation: 'silu'
+    normalization: 'layer'
+    z_channels_mults: [1, 1, 2]
+    last_tanh: True
+
+patchmixer_tiny_bw:
+  msg_processor:
+    nbits: 16
+    hidden_size: 16     # nbits 
+    msg_processor_type: 'binary+concat'
+  patchmixer:
+    in_channels: 3
+    out_channels: 1
+    z_channels: 96
+    num_blocks: 8
+    activation: 'silu'
+    normalization: 'layer'
+    z_channels_mults: [1, 1, 2]
+    last_tanh: True
+
+patchmixer_tiny_yuv:
+  msg_processor:
+    nbits: 16
+    hidden_size: 16     # nbits 
+    msg_processor_type: 'binary+concat'
+  patchmixer:
+    in_channels: 1
+    out_channels: 1
+    z_channels: 96
+    num_blocks: 8
+    activation: 'silu'
+    normalization: 'layer'
+    z_channels_mults: [1, 1, 2]
+    last_tanh: True
+
 patchmixer_small:
   msg_processor:
     nbits: 16
@@ -363,7 +408,7 @@ patchmixer_small:
   patchmixer:
     in_channels: 3
     out_channels: 3
-    z_channels: 64
+    z_channels: 192
     num_blocks: 8
     activation: 'silu'
     normalization: 'layer'
@@ -378,7 +423,7 @@ patchmixer_small_bw:
   patchmixer:
     in_channels: 3
     out_channels: 1
-    z_channels: 64
+    z_channels: 192
     num_blocks: 8
     activation: 'silu'
     normalization: 'layer'
@@ -393,7 +438,7 @@ patchmixer_small_yuv:
   patchmixer:
     in_channels: 1
     out_channels: 1
-    z_channels: 64
+    z_channels: 192
     num_blocks: 8
     activation: 'silu'
     normalization: 'layer'
