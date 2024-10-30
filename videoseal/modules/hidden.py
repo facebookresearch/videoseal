@@ -44,14 +44,14 @@ class HiddenEncoder(nn.Module):
         norm_layer = get_normalization(normalization)
         act_layer = get_activation(activation)
 
-        layers = [ConvBNRelu(in_channels, z_channels, norm_layer, act_layer)]
+        layers = [ConvBNRelu(in_channels, z_channels, act_layer, norm_layer)]
 
         for _ in range(num_blocks-1):
-            layer = ConvBNRelu(z_channels, z_channels, norm_layer, act_layer)
+            layer = ConvBNRelu(z_channels, z_channels, act_layer, norm_layer)
             layers.append(layer)
 
         self.conv_bns = nn.Sequential(*layers)
-        self.after_concat_layer = ConvBNRelu(z_channels + in_channels + num_bits, z_channels, norm_layer, act_layer)
+        self.after_concat_layer = ConvBNRelu(z_channels + in_channels + num_bits, z_channels, act_layer, norm_layer)
 
         self.final_layer = nn.Conv2d(z_channels, out_channels, kernel_size=1)
 
@@ -97,9 +97,9 @@ class HiddenDecoder(nn.Module):
         norm_layer = get_normalization(normalization)
         act_layer = get_activation(activation)
 
-        layers = [ConvBNRelu(in_channels, z_channels, norm_layer, act_layer)]
+        layers = [ConvBNRelu(in_channels, z_channels, act_layer, norm_layer)]
         for _ in range(num_blocks):
-            layers.append(ConvBNRelu(z_channels, z_channels, norm_layer, act_layer))
+            layers.append(ConvBNRelu(z_channels, z_channels, act_layer, norm_layer))
         self.layers = nn.Sequential(*layers)
 
         self.pixelwise = pixelwise

@@ -44,10 +44,10 @@
         "gres":             "gpu:4",
         "nodes":            "1",
         "tasks-per-node":   "4",
-        "partition":        "learnfair",
+        "partition":        "devlab",
         "cpus-per-task":    "10",
         "time":             4320,
-        "mem-per-cpu":      "10G"
+        "mem-per-cpu":      "6G"
     },
     "meta": {
         "group": "",

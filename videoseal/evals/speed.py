@@ -28,8 +28,7 @@ def sync(device):
     return
 
 
-def get_flops(model, img_size, device):
-    channels = 3
+def get_flops(model, channels, img_size, device):
     if isinstance(model, Embedder):
         msgs = model.get_random_msg(bsz=1)
         msgs = msgs.to(device)
@@ -159,8 +158,9 @@ def main(args):
         embedder = embedder.to(device)
         # flops
         if args.do_flops:
+            channels = 1 if 'yuv' in embedder_name else 3
             flops, macs, params = get_flops(
-                embedder, args.img_size_work, device)
+                embedder, channels, args.img_size_work, device)
             result.update({
                 'gflops': flops / 1e9,
                 'gmacs': macs / 1e9,
@@ -189,8 +189,9 @@ def main(args):
         extractor = extractor.to(device)
         # flops
         if args.do_flops:
+            channels = 1 if 'yuv' in extractor_name else 3
             flops, macs, params = get_flops(
-                extractor, args.img_size_work, device)
+                extractor, channels, args.img_size_work, device)
             result.update({
                 'gflops': flops / 1e9,
                 'gmacs': macs / 1e9,

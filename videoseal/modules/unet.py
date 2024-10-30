@@ -37,6 +37,9 @@ class ResnetBlock(nn.Module):
         return self.double_conv(x) + self.res_conv(x)
 
     def _id_init(self, m):
+        """
+        Initialize the weights of the residual convolution to be the identity
+        """
         if isinstance(m, nn.Conv2d):
             with torch.no_grad():
                 in_channels, out_channels, h, w = m.weight.size()
