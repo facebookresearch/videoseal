@@ -10,7 +10,10 @@ python -m videoseal.evals.full \
 """
 
 
+from dataclasses import dataclass
 import json
+from pathlib import Path
+from typing import Any, Dict
 import omegaconf
 import argparse
 import os
@@ -37,15 +40,18 @@ from ..utils.image import create_diff_img
 from ..utils.display import save_vid
 
 
-def setup_model_from_checkpoint(ckpt_path):
-    """
-    # Example usage
-    ckpt_path = '/checkpoint/pfz/2024_logs/0911_vseal_pw/extractor_model=sam_tiny/checkpoint.pth'
-    exp_dir = '/checkpoint/pfz/2024_logs/0911_vseal_pw'
-    exp_name = '_extractor_model=sam_tiny'
+@dataclass
+class SubModelConfig:
+    model: str
+    params: omegaconf.DictConfig
 
-    wam = load_model_from_checkpoint(exp_dir, exp_name)
-    """
+@dataclass
+class VideoWamConfig:
+    args: omegaconf.DictConfig
+    embedder: SubModelConfig
+    extractor: SubModelConfig
+
+def get_config_from_checkpoint(ckpt_path: Path) -> VideoWamConfig:
     exp_dir, exp_name = os.path.dirname(ckpt_path).rsplit('/', 1)
     logfile_path = os.path.join(exp_dir, 'logs', exp_name + '.stdout')
 
@@ -56,9 +62,11 @@ def setup_model_from_checkpoint(ckpt_path):
                 params = json.loads(line.split('__log__:')[1].strip())
                 break
 
-    # Create an argparse Namespace object from the parameters
-    args = argparse.Namespace(**params)
-    
+    # Create an omegaconf OmegaConf object from the parameters
+    args = omegaconf.OmegaConf.create(params)
+    if (not isinstance(args, omegaconf.DictConfig)):
+        raise Exception("Expected logfile to contain params dictionary.")
+
     # embedder
     embedder_cfg = omegaconf.OmegaConf.load(args.embedder_config)
     args.embedder_model = args.embedder_model or embedder_cfg.model
@@ -67,10 +75,19 @@ def setup_model_from_checkpoint(ckpt_path):
     extractor_cfg = omegaconf.OmegaConf.load(args.extractor_config)
     args.extractor_model = args.extractor_model or extractor_cfg.model
     extractor_params = extractor_cfg[args.extractor_model]
+
+    return VideoWamConfig(
+        args=args,
+        embedder=SubModelConfig(model=args.embedder_model, params=embedder_params),
+        extractor=SubModelConfig(model=args.extractor_model, params=extractor_params),
+    )
+
+def setup_model(config: VideoWamConfig, ckpt_path: Path) -> VideoWam:
+    args = config.args
     
     # Build models
-    embedder = build_embedder(args.embedder_model, embedder_params, args.nbits)
-    extractor = build_extractor(extractor_cfg.model, extractor_params, args.img_size_extractor, args.nbits)
+    embedder = build_embedder(config.embedder.model, config.embedder.params, args.nbits)
+    extractor = build_extractor(config.extractor.model, config.extractor.params, args.img_size_extractor, args.nbits)
     augmenter = get_dummy_augmenter()  # does nothing
     
     # build attenuation
@@ -100,6 +117,17 @@ def setup_model_from_checkpoint(ckpt_path):
     
     return wam
 
+def setup_model_from_checkpoint(ckpt_path):
+    """
+    # Example usage
+    ckpt_path = '/checkpoint/pfz/2024_logs/0911_vseal_pw/extractor_model=sam_tiny/checkpoint.pth'
+    exp_dir = '/checkpoint/pfz/2024_logs/0911_vseal_pw'
+    exp_name = '_extractor_model=sam_tiny'
+
+    wam = load_model_from_checkpoint(exp_dir, exp_name)
+    """
+    config = get_config_from_checkpoint(ckpt_path)
+    return setup_model(config, ckpt_path)
 
 def setup_dataset(args):
     try:
@@ -301,8 +329,6 @@ def evaluate(
             f.write(','.join(map(str, metrics.values())) + '\n')
             f.flush()
     return all_metrics
-
-
 
 def main():
     parser = argparse.ArgumentParser(description='Evaluate a model on a dataset')
