@@ -33,8 +33,7 @@
         "optimizer": "AdamW,lr=1e-4",
         "scheduler": "CosineLRScheduler,lr_min=1e-6,t_initial=1000,warmup_lr_init=1e-7,warmup_t=20",
         "seed": [
-            444,
-            111
+            444
         ],
         "perceptual_loss": "mse",
         "lambda_i": [
@@ -68,7 +67,7 @@
     },
     "meta": {
         "group": "",
-        "name": "1030-videoseal0.2",
+        "name": "1031-videoseal0.2-noclamp",
         "dest-arg": "yes",
         "dest-name": "output_dir"
     }
