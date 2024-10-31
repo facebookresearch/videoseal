@@ -1,0 +1,28 @@
+name: "embedder"
+backend: "python"
+parameters: {
+  key: "EXECUTION_ENV_PATH",
+  value: {
+    string_value: "$$TRITON_MODEL_DIRECTORY/env.tar.gz"
+  }
+}
+instance_group {
+  count: 1
+  kind: KIND_GPU
+}
+dynamic_batching {
+}
+input [
+  {
+    name: "video"
+    data_type: TYPE_STRING
+    dims: [1]
+  }
+]
+output [
+  {
+    name: "watermarked_video"
+    data_type: TYPE_STRING
+    dims: [1]
+  }
+]
