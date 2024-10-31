@@ -1,4 +1,5 @@
 import base64
+from contextlib import ExitStack
 import json
 import math
 import tempfile
@@ -35,6 +36,11 @@ class TritonPythonModel(TritonPythonModelBase):
                 json.loads(args["model_config"]), "watermarked_video"
             )["data_type"]
         )
+        self.xray_video_dtype = pb_utils.triton_string_to_numpy(
+            pb_utils.get_output_config_by_name(
+                json.loads(args["model_config"]), "xray_video"
+            )["data_type"]
+        )
 
     def execute(self, requests):
         return [self._process_request(request) for request in requests]
@@ -54,14 +60,38 @@ class TritonPythonModel(TritonPythonModelBase):
             if isinstance(vid, list):
                 return
 
-        with tempfile.NamedTemporaryFile(suffix=".mp4") as temp_watermarked_video:
+        with ExitStack() as stack:
+            temp_watermarked_video = stack.push(
+                tempfile.NamedTemporaryFile(suffix=".mp4")
+            )
+            temp_xray_video = stack.push(tempfile.NamedTemporaryFile(suffix=".mp4"))
             outputs = self.wam.embed(vid, is_video=True)
             imgs_w = outputs["imgs_w"].cpu()  # type: ignore TODO: Fix VideoWam.embed type hints
+
+            # Compute min and max values, reshape, and normalize
+            diff = imgs_w - vid
+            min_vals = (
+                diff.view(diff.shape[0], diff.shape[1], -1)
+                .min(dim=2, keepdim=True)[0]
+                .view(diff.shape[0], diff.shape[1], 1, 1)
+            )
+            max_vals = (
+                diff.view(diff.shape[0], diff.shape[1], -1)
+                .max(dim=2, keepdim=True)[0]
+                .view(diff.shape[0], diff.shape[1], 1, 1)
+            )
+            normalized_diff = (diff - min_vals) / (max_vals - min_vals)
+
             save_vid(imgs_w, temp_watermarked_video.name, math.floor(fps))
+            save_vid(normalized_diff, temp_xray_video.name, math.floor(fps))
+
             temp_watermarked_video.seek(0)
+            temp_xray_video.seek(0)
+
             watermarked_video_b64 = base64.b64encode(
                 temp_watermarked_video.read()
             ).decode("utf-8")
+            xray_video_b64 = base64.b64encode(temp_xray_video.read()).decode("utf-8")
             return pb_utils.InferenceResponse(
                 output_tensors=[
                     pb_utils.Tensor(
@@ -69,6 +99,10 @@ class TritonPythonModel(TritonPythonModelBase):
                         np.array(
                             [watermarked_video_b64], dtype=self.watermarked_video_dtype
                         ),
-                    )
+                    ),
+                    pb_utils.Tensor(
+                        "xray_video",
+                        np.array([xray_video_b64], dtype=self.xray_video_dtype),
+                    ),
                 ]
             )

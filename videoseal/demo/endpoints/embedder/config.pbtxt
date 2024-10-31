@@ -24,5 +24,10 @@ output [
     name: "watermarked_video"
     data_type: TYPE_STRING
     dims: [1]
+  },
+  {
+    name: "xray_video"
+    data_type: TYPE_STRING
+    dims: [1]
   }
 ]
