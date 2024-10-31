@@ -126,7 +126,7 @@ class Wam(nn.Module):
         # interpolate
         imgs_res = imgs.clone()
         if imgs.shape[-2:] != (self.img_size, self.img_size):
-            imgs_res = F.interpolate(imgs, size=(self.img_size, self.img_size), 
+            imgs_res = F.interpolate(imgs, size=(self.img_size, self.img_size),
                                      mode="bilinear", align_corners=False)
 
         # generate watermarked images
@@ -135,15 +135,15 @@ class Wam(nn.Module):
 
         # interpolate back
         if imgs.shape[-2:] != (self.img_size, self.img_size):
-            deltas_w = F.interpolate(deltas_w, size=imgs.shape[-2:], 
-                                    mode="bilinear", align_corners=False)
+            deltas_w = F.interpolate(deltas_w, size=imgs.shape[-2:],
+                                     mode="bilinear", align_corners=False)
         deltas_w = deltas_w.to(imgs.device)
         imgs_w = self.scaling_i * imgs + self.scaling_w * deltas_w
         if self.attenuation is not None:
             imgs_w = self.attenuation(imgs, imgs_w)
         if self.clamp:
             imgs_w = imgs_w.clamp(0, 1)
-        
+
         outputs = {
             "msgs": msgs,  # original messages: b k
             "deltas_w": deltas_w,  # predicted watermarks: b c h w
