@@ -50,7 +50,7 @@
             0.1,
             0.5
         ],
-        "clamp": false,
+        "wm_clamp": false,
         "balanced": true,
         "workers": 0,
         "master_port": "__SAMPLE__(10000, 20000)"
