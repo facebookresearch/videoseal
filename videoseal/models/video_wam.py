@@ -46,6 +46,7 @@ class VideoWam(Wam):
         clamp: bool = True,
         chunk_size: int = 8,
         step_size: int = 4,
+        blending_method: str = "additive"
     ) -> None:
         """
         Initializes the VideoWam model.
@@ -69,6 +70,7 @@ class VideoWam(Wam):
             scaling_i=scaling_i,
             img_size=img_size,
             clamp=clamp,
+            blending_method=blending_method
         )
         # video settings
         self.chunk_size = chunk_size  # encode 8 frames/imgs at a time

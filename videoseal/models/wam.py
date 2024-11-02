@@ -12,6 +12,7 @@ from ..data.transforms import RGB2YUV, rgb_to_yuv, yuv_to_rgb
 from ..modules.jnd import JND
 from .embedder import Embedder
 from .extractor import Extractor
+from .blender import Blender
 
 
 class Wam(nn.Module):
@@ -31,6 +32,7 @@ class Wam(nn.Module):
         scaling_i: float = 1.0,
         clamp: bool = True,
         img_size: int = 256,
+        blending_method: str = "additive",
     ) -> None:
         """
         WAM (watermark-anything models) model that combines an embedder, a detector, and an augmenter.
@@ -60,6 +62,9 @@ class Wam(nn.Module):
         self.img_size = img_size
         self.rgb2yuv = RGB2YUV()
 
+        assert blending_method in Blender.AVAILABLE_BLENDING_METHODS
+        self.blender = Blender(self.scaling_i, self.scaling_w, method=blending_method, attenuation=self.attenuation)
+
     def get_random_msg(self, bsz: int = 1, nb_repetitions=1) -> torch.Tensor:
         return self.embedder.get_random_msg(bsz, nb_repetitions)  # b x k
 
@@ -78,17 +83,13 @@ class Wam(nn.Module):
         """
         if preds_w.shape[1] == 1:
             preds_w = preds_w.repeat(1, 3, 1, 1)
-            imgs_w = self.scaling_i * imgs + self.scaling_w * preds_w
             # # or equivalently
             # imgs_w = rgb_to_yuv(imgs)
             # imgs_w[:, 0:1] = self.scaling_i * imgs_w[:, 0:1] + self.scaling_w * preds_w
             # imgs_w = yuv_to_rgb(imgs_w)
-        else:
-            imgs_w = self.scaling_i * imgs + self.scaling_w * preds_w
-        if self.attenuation is not None:
-            imgs_w = self.attenuation(imgs, imgs_w)
-        if self.clamp:
-            imgs_w = imgs_w.clamp(0, 1)
+
+        imgs_w = self.blender(imgs,preds_w)
+
         return imgs_w
 
     def forward(
