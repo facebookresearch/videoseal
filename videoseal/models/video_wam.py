@@ -171,6 +171,7 @@ class VideoWam(Wam):
         }
         return outputs
 
+    @torch.no_grad()
     def embed(
         self,
         imgs: torch.Tensor,
@@ -216,14 +217,14 @@ class VideoWam(Wam):
             deltas_in_ck = outputs["preds_w"]  # n 3 h w
             deltas_in_ck = torch.repeat_interleave(
                 deltas_in_ck, step_size, dim=0)  # f 3 h w
-            
+
             # at the end of video there might be more deltas than needed
             deltas_in_ck = deltas_in_ck[:len(all_imgs_in_ck)]
 
             # create watermarked imgs
             all_imgs_in_ck_w = self.blend(all_imgs_in_ck, deltas_in_ck)
             imgs_w[start: end, ...] = all_imgs_in_ck_w  # n 3 h w
-            
+
         outputs = {
             "imgs_w": imgs_w,  # watermarked imgs: f 3 h w
             "msgs": msgs[0:1].repeat(len(imgs), 1),  # original messages: f k

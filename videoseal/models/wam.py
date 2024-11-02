@@ -7,8 +7,8 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from ..data.transforms import rgb_to_yuv, yuv_to_rgb, RGB2YUV
 from ..augmentation.augmenter import Augmenter
+from ..data.transforms import RGB2YUV, rgb_to_yuv, yuv_to_rgb
 from ..modules.jnd import JND
 from .embedder import Embedder
 from .extractor import Extractor
@@ -154,7 +154,7 @@ class Wam(nn.Module):
         # interpolate
         imgs_res = imgs.clone()
         if imgs.shape[-2:] != (self.img_size, self.img_size):
-            imgs_res = F.interpolate(imgs, size=(self.img_size, self.img_size), 
+            imgs_res = F.interpolate(imgs, size=(self.img_size, self.img_size),
                                      mode="bilinear", align_corners=False)
         imgs_res = imgs_res.to(self.device)
 
@@ -166,11 +166,11 @@ class Wam(nn.Module):
 
         # interpolate back
         if imgs.shape[-2:] != (self.img_size, self.img_size):
-            preds_w = F.interpolate(preds_w, size=imgs.shape[-2:], 
+            preds_w = F.interpolate(preds_w, size=imgs.shape[-2:],
                                     mode="bilinear", align_corners=False)
         preds_w = preds_w.to(imgs.device)
         imgs_w = self.blend(imgs, preds_w)
-        
+
         outputs = {
             "msgs": msgs,  # original messages: b k
             "preds_w": preds_w,  # predicted watermarks: b c h w

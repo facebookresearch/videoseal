@@ -45,7 +45,8 @@ import videoseal.utils as utils
 import videoseal.utils.dist as udist
 import videoseal.utils.logger as ulogger
 import videoseal.utils.optim as uoptim
-from videoseal.augmentation import get_validation_augs_subset, get_validation_augs
+from videoseal.augmentation import (get_validation_augs,
+                                    get_validation_augs_subset)
 from videoseal.augmentation.augmenter import Augmenter
 from videoseal.augmentation.geometric import (Crop, HorizontalFlip, Identity,
                                               Perspective, Resize, Rotate)
@@ -108,7 +109,7 @@ def get_parser():
     aa("--augmentation_config", type=str, default="configs/all_augs.yaml",
        help="Path to the augmentation config file")
     aa("--num_augs", type=int, default=1,
-         help="Number of augmentations to apply")
+       help="Number of augmentations to apply")
     aa("--extractor_config", type=str, default="configs/extractor.yaml",
        help="Path to the extractor config file")
     aa("--attenuation_config", type=str, default="configs/attenuation.yaml",
@@ -126,7 +127,7 @@ def get_parser():
     aa("--img_size_extractor", type=int,
        default=256, help="Images are resized to this size before being fed to the extractor")
     aa("--img_size_val", type=int, default=256,
-         help="Size of the input images for data preprocessing, at inference time the images are resized to this size")
+       help="Size of the input images for data preprocessing, at inference time the images are resized to this size")
     aa("--attenuation", type=str, default="None", help="Attenuation model to use")
     aa("--scaling_w", type=float, default=0.2,
        help="Scaling factor for the watermark in the embedder model")
@@ -145,9 +146,9 @@ def get_parser():
        help="Optimizer (default: AdamW,lr=1e-4)")
     aa("--optimizer_d", type=str, default=None,
        help="Discriminator optimizer. If None uses the same params (default: None)")
-    aa("--scheduler", type=str, default="None", 
+    aa("--scheduler", type=str, default="None",
        help="Scheduler (default: None)")
-    aa('--epochs', default=100, type=int, 
+    aa('--epochs', default=100, type=int,
        help='Number of total epochs to run')
     aa('--iter_per_epoch', default=10000, type=int,
        help='Number of iterations per epoch, made for very large datasets')
@@ -181,7 +182,8 @@ def get_parser():
     aa('--batch_size', default=32, type=int, help='Batch size')
     aa('--batch_size_eval', default=32, type=int, help='Batch size for evaluation')
     aa('--batch_size_video', default=4, type=int, help='Batch size')
-    aa('--batch_size_video_eval', default=4, type=int, help='Batch size for evaluation')
+    aa('--batch_size_video_eval', default=4,
+       type=int, help='Batch size for evaluation')
     aa('--workers', default=8, type=int, help='Number of data loading workers')
     aa('--frames_per_clip', default=32, type=int,
        help='Number of frames per clip for video datasets')
@@ -337,8 +339,10 @@ def main(params):
     print('optimizer_d: %s' % optimizer_d)
 
     # Data loaders
-    train_transform, train_mask_transform = get_resize_transform(params.img_size)
-    val_transform, val_mask_transform = get_resize_transform(params.img_size_val)
+    train_transform, train_mask_transform = get_resize_transform(
+        params.img_size)
+    val_transform, val_mask_transform = get_resize_transform(
+        params.img_size_val)
 
     image_train_loader = image_val_loader = video_train_loader = video_val_loader = None
 
@@ -414,6 +418,10 @@ def main(params):
 
     # specific thing to do if distributed training
     if params.distributed:
+
+        # if model has batch norm convert it to sync batchnorm in distributed mode
+        wam = nn.SyncBatchNorm.convert_sync_batchnorm(wam)
+
         wam_ddp = nn.parallel.DistributedDataParallel(
             wam, device_ids=[params.local_rank])
         image_detection_loss.discriminator = nn.parallel.DistributedDataParallel(
@@ -492,9 +500,11 @@ def main(params):
             for epoch_modality, epoch_val_loader in val_loaders:
                 if epoch_val_loader is not None:
                     if (epoch % params.full_eval_freq == 0 and epoch > 0) or (epoch == params.epochs-1):
-                        augs = get_validation_augs(epoch_modality == Modalities.VIDEO)
-                    else: 
-                        augs = get_validation_augs_subset(epoch_modality == Modalities.VIDEO)
+                        augs = get_validation_augs(
+                            epoch_modality == Modalities.VIDEO)
+                    else:
+                        augs = get_validation_augs_subset(
+                            epoch_modality == Modalities.VIDEO)
                     val_stats = eval_one_epoch(wam, epoch_val_loader, epoch_modality, image_detection_loss,
                                                epoch, augs, validation_masks, params, tensorboard=tensorboard)
                     log_stats = {
@@ -650,7 +660,8 @@ def train_one_epoch(
                     tensorboard.add_images("TRAIN/IMAGES/diff", create_diff_img(
                         imgs, outputs["imgs_w"]), epoch)
                     save_image(outputs["imgs_aug"], aug_path, nrow=8)
-                    tensorboard.add_images("TRAIN/IMAGES/aug", outputs["imgs_aug"], epoch)
+                    tensorboard.add_images(
+                        "TRAIN/IMAGES/aug", outputs["imgs_aug"], epoch)
 
         # end accumulate gradients batches
         # add optimizer step
@@ -788,9 +799,9 @@ def eval_one_epoch(
                                 imgs_masked, masks, strength)
                             if imgs_aug.shape[-2:] != (h, w):
                                 imgs_aug = nn.functional.interpolate(imgs_aug, size=(h, w),
-                                                                    mode='bilinear', align_corners=False, antialias=True)
+                                                                     mode='bilinear', align_corners=False, antialias=True)
                                 masks_aug = nn.functional.interpolate(masks_aug, size=(h, w),
-                                                                    mode='bilinear', align_corners=False, antialias=True)
+                                                                      mode='bilinear', align_corners=False, antialias=True)
                         selected_aug = str(transform_instance) + f"_{strength}"
                         selected_aug = selected_aug.replace(", ", "_")
 
@@ -815,8 +826,10 @@ def eval_one_epoch(
                             aug_log_stats[f'bit_acc'] = bit_accuracy_
 
                         if params.lambda_det > 0:
-                            iou0 = iou(mask_preds, masks, label=0).mean().item()
-                            iou1 = iou(mask_preds, masks, label=1).mean().item()
+                            iou0 = iou(mask_preds, masks,
+                                       label=0).mean().item()
+                            iou1 = iou(mask_preds, masks,
+                                       label=1).mean().item()
                             aug_log_stats.update({
                                 f'acc': accuracy(mask_preds, masks).mean().item(),
                                 f'miou': (iou0 + iou1) / 2,
@@ -824,7 +837,7 @@ def eval_one_epoch(
 
                         current_key = f"mask={mask_id}_aug={selected_aug}"
                         aug_log_stats = {f"{k}_{current_key}": v for k,
-                                        v in aug_log_stats.items()}
+                                         v in aug_log_stats.items()}
 
                         torch.cuda.synchronize()
                         metric_logger.update(**aug_log_stats)
