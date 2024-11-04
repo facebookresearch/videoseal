@@ -28,8 +28,7 @@ def sync(device):
     return
 
 
-def get_flops(model, img_size, device):
-    channels = 3
+def get_flops(model, channels, img_size, device):
     if isinstance(model, Embedder):
         msgs = model.get_random_msg(bsz=1)
         msgs = msgs.to(device)
@@ -75,7 +74,6 @@ def benchmark_model(model, img_size, data_loader, device):
             # normalize
             timer.start()
             sync(device)
-            end_time = time.time()
             times_norm.append(timer.end())
             # forward pass
             if isinstance(model, Embedder):
@@ -87,12 +85,10 @@ def benchmark_model(model, img_size, data_loader, device):
                 timer.start()
                 _ = model(imgs)
             sync(device)
-            end_time = time.time()
             times.append(timer.end())
             # unnormalize
             timer.start()
             sync(device)
-            end_time = time.time()
             times_norm[-1] += timer.end()
             # interpolate
             timer.start()
@@ -118,12 +114,15 @@ def benchmark_model(model, img_size, data_loader, device):
     return results
 
 
-def get_data_loader(batch_size, img_size, num_workers, nsamples):
+def get_data_loader(batch_size, img_size, channels, num_workers, nsamples):
 
     transform = ToTensor()
     total_size = nsamples * batch_size
-    dataset = FakeData(size=total_size, image_size=(
-        3, img_size, img_size), transform=transform)
+    dataset = FakeData(
+        size=total_size, 
+        image_size=(channels, img_size, img_size), 
+        transform=transform
+    )
     loader = DataLoader(dataset, batch_size=batch_size,
                         num_workers=num_workers, shuffle=False)
     return loader
@@ -131,8 +130,6 @@ def get_data_loader(batch_size, img_size, num_workers, nsamples):
 
 def main(args):
     device = args.device.lower()
-    data_loader = get_data_loader(
-        args.batch_size, args.img_size, args.workers, args.nsamples)
 
     embedder_cfg = omegaconf.OmegaConf.load(args.embedder_config)
     extractor_cfg = omegaconf.OmegaConf.load(args.extractor_config)
@@ -159,8 +156,9 @@ def main(args):
         embedder = embedder.to(device)
         # flops
         if args.do_flops:
+            channels = 1 if 'yuv' in embedder_name else 3
             flops, macs, params = get_flops(
-                embedder, args.img_size_work, device)
+                embedder, channels, args.img_size_work, device)
             result.update({
                 'gflops': flops / 1e9,
                 'gmacs': macs / 1e9,
@@ -168,6 +166,8 @@ def main(args):
             })
         # benchmark
         if args.do_speed:
+            channels = 1 if 'yuv' in embedder_name else 3
+            data_loader = get_data_loader(args.batch_size, args.img_size, channels, args.workers, args.nsamples)
             embedder_stats = benchmark_model(
                 embedder, args.img_size_work, data_loader, device)
             result.update({
@@ -189,8 +189,9 @@ def main(args):
         extractor = extractor.to(device)
         # flops
         if args.do_flops:
+            channels = 1 if 'yuv' in extractor_name else 3
             flops, macs, params = get_flops(
-                extractor, args.img_size_work, device)
+                extractor, channels, args.img_size_work, device)
             result.update({
                 'gflops': flops / 1e9,
                 'gmacs': macs / 1e9,
@@ -198,6 +199,8 @@ def main(args):
             })
         # benchmark
         if args.do_speed:
+            channels = 1 if 'yuv' in extractor_name else 3
+            data_loader = get_data_loader(args.batch_size, args.img_size, channels, args.workers, args.nsamples)
             extractor_stats = benchmark_model(
                 extractor, args.img_size_work, data_loader, device)
             result.update({

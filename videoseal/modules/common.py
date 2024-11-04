@@ -175,21 +175,21 @@ class ChanRMSNorm(nn.Module):
         return F.normalize(x, dim = 1) * self.scale * self.gamma
 
 
-def get_normalization(normalization):
+def get_normalization(normalization: str):
     """ Set the normalization layer """
-    if normalization == "batch":
+    if normalization.startswith("batch"):
         norm_layer = nn.BatchNorm2d
-    elif normalization == "group":
-        norm_layer = partial(nn.GroupNorm, num_groups=8)
-    elif normalization == "layer":
-        norm_layer = nn.LayerNorm
-    elif normalization == "rms":
+    elif normalization.startswith("group"):
+        norm_layer = lambda num_channels: nn.GroupNorm(num_groups=8, num_channels=num_channels)
+    elif normalization.startswith("layer"):
+        norm_layer = LayerNorm
+    elif normalization.startswith("rms"):
         norm_layer = ChanRMSNorm
     else:
         raise NotImplementedError
     return norm_layer
 
-def get_activation(activation):
+def get_activation(activation: str):
     """ Set the activation layer """
     if activation == "relu":
         act_layer = nn.ReLU
