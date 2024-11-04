@@ -111,6 +111,10 @@ def build_lr_scheduler(
 def restart_from_checkpoint(ckp_path, run_variables=None, **kwargs):
     """
     Re-start from checkpoint
+    Args:
+        ckp_path: path to the checkpoint
+        run_variables: dictionary of variables to re-load
+        kwargs: dictionary of objects to re-load. The key is the name of the object in the checkpoint file, the value is the object to load.
     """
     if not os.path.isfile(ckp_path):
         return
