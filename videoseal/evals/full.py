@@ -1,13 +1,11 @@
 """
 python -m videoseal.evals.full \
-    --checkpoint /private/home/hadyelsahar/work/code/videoseal/2024_logs/1013-hybrid-large-sweep-allaugs/_lambda_d=0.5_lambda_i=0.5_optimizer=AdamW,lr=5e-5_prop_img_vid=0.9_videowam_step_size=4_video_start=500_embedder_model=vae_small_bw/checkpoint.pth \
+    --checkpoint /private/home/hadyelsahar/work/code/videoseal/2024_logs/1016-hybrid-vs-ours/_lambda_d=0.5_lambda_i=0.5_optimizer=AdamW,lr=1e-4_videowam_step_size=4_video_start=500_embedder_model=unet_small2/checkpoint.pth \
     --dataset coco --is_video false \
     --dataset sa-v --is_video true --num_samples 1 \
 
 
     
-    /private/home/hadyelsahar/work/code/videoseal/2024_logs/1013-hybrid-large-sweep-allaugs/_lambda_d=0.5_lambda_i=0.5_optimizer=AdamW,lr=5e-5_prop_img_vid=0.9_videowam_step_size=4_video_start=500_embedder_model=vae_small_bw/checkpoint.pth
-    /private/home/hadyelsahar/work/code/videoseal/2024_logs/1013-hybrid-large-sweep-allaugs/_lambda_d=0.5_lambda_i=0.5_optimizer=AdamW,lr=5e-5_prop_img_vid=0.9_videowam_step_size=4_video_start=500_embedder_model=unet_small2/checkpoint.pth
     /private/home/hadyelsahar/work/code/videoseal/2024_logs/1016-hybrid-vs-ours/_lambda_d=0.5_lambda_i=0.5_optimizer=AdamW,lr=1e-4_videowam_step_size=4_video_start=500_embedder_model=unet_small2/checkpoint.pth
 """
 
@@ -30,15 +28,11 @@ from ..data.datasets import ImageFolder, VideoDataset, CocoImageIDWrapper
 from ..models import VideoWam, build_embedder, build_extractor
 from ..augmentation import get_validation_augs
 from ..augmentation.augmenter import get_dummy_augmenter
-from ..augmentation.video import H264
-from ..augmentation.valuemetric import JPEG
 from ..evals.metrics import psnr, ssim, bd_rate
-from ..utils import Timer
+from ..utils import Timer, bool_inst
 from ..utils.data import parse_dataset_params, Modalities
 from ..utils.image import create_diff_img
 from ..utils.display import save_vid
-
-import videoseal.utils as utils
 
 
 def setup_model_from_checkpoint(ckpt_path):
@@ -93,8 +87,8 @@ def setup_model_from_checkpoint(ckpt_path):
     # Load the model weights
     if os.path.exists(ckpt_path):
         checkpoint = torch.load(ckpt_path, map_location='cpu', weights_only=True)
-        wam.load_state_dict(checkpoint['model'])
-        print("Model loaded successfully from", ckpt_path)
+        msg = wam.load_state_dict(checkpoint['model'], strict=False)
+        print("Model loaded successfully from", ckpt_path, f"with message: {msg}")
     else:
         msg = f"Checkpoint path does not exist:{ckpt_path}"
         raise FileNotFoundError(msg)
@@ -314,7 +308,7 @@ def main():
     group = parser.add_argument_group('Dataset')
     group.add_argument("--dataset", type=str, 
                        choices=["coco", "coco-stuff-blurred", "sa-v"], help="Name of the dataset.")
-    group.add_argument('--is_video', type=utils.bool_inst, default=False, 
+    group.add_argument('--is_video', type=bool_inst, default=False, 
                        help='Whether the data is video')
     group.add_argument('--short_edge_size', type=int, default=-1, 
                        help='Resizes the short edge of the image to this size at loading time, and keep the aspect ratio. If -1, no resizing.')
@@ -334,9 +328,9 @@ def main():
     group = parser.add_argument_group('Experiment')
     group.add_argument("--output_dir", type=str, default="output/", help="Output directory for logs and images (Default: /output)")
     group.add_argument('--save_first', type=int, default=-1, help='Number of images/videos to save')
-    group.add_argument('--bdrate', type=utils.bool_inst, default=True, help='Whether to compute BD-rate')
-    group.add_argument('--decoding', type=utils.bool_inst, default=True, help='Whether to evaluate decoding metrics')
-    group.add_argument('--detection', type=utils.bool_inst, default=False, help='Whether to evaluate detection metrics')
+    group.add_argument('--bdrate', type=bool_inst, default=True, help='Whether to compute BD-rate')
+    group.add_argument('--decoding', type=bool_inst, default=True, help='Whether to evaluate decoding metrics')
+    group.add_argument('--detection', type=bool_inst, default=False, help='Whether to evaluate detection metrics')
 
     args = parser.parse_args()
 

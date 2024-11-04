@@ -275,8 +275,7 @@ class VAEDecoder(nn.Module):
         num_res_blocks: int, 
         attn_resolutions: list[int], 
         dropout: float = 0.0, 
-        resamp_with_conv: bool = True, 
-        in_channels: int, 
+        resamp_with_conv: bool = True,
         resolution: int, 
         z_channels: int, 
         give_pre_end: bool = False, 
@@ -293,7 +292,6 @@ class VAEDecoder(nn.Module):
         self.num_resolutions = len(ch_mult)
         self.num_res_blocks = num_res_blocks
         self.resolution = resolution
-        self.in_channels = in_channels
         self.give_pre_end = give_pre_end
         self.tanh_out = tanh_out
         self.bw = bw

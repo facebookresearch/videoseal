@@ -5,13 +5,13 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from lpips import LPIPS
-from videoseal.modules.discriminator import NLayerDiscriminator
 
 from .dists import DISTS
 from .jndloss import JNDLoss
 from .perceptual import PerceptualLoss
 from .watson_fft import ColorWrapper, WatsonDistanceFft
 from .watson_vgg import WatsonDistanceVgg
+from ..modules.discriminator import NLayerDiscriminator
 
 
 def hinge_d_loss(logits_real, logits_fake):

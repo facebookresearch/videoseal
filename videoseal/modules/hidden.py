@@ -2,26 +2,21 @@
 import torch
 from torch import nn
 
+from .common import get_activation, get_normalization
+
 
 class ConvBNRelu(nn.Module):
     """
     Building block used in HiDDeN network. Is a sequence of Convolution, Batch Normalization, and ReLU activation
     """
-    def __init__(self, channels_in, channels_out, normalization):
+    def __init__(self, channels_in, channels_out, act_layer, norm_layer):
 
         super(ConvBNRelu, self).__init__()
-        
-        if normalization == "batch":
-            norm_layer = nn.BatchNorm2d(channels_out)
-        elif normalization == "group":
-            norm_layer = nn.GroupNorm(4, channels_out)
-        else:
-            raise NotImplementedError
 
         self.layers = nn.Sequential(
             nn.Conv2d(channels_in, channels_out, 3, stride=1, padding=1),
-            norm_layer,
-            nn.GELU()
+            norm_layer(channels_out),
+            act_layer()
         )
 
     def forward(self, x):
@@ -32,19 +27,33 @@ class HiddenEncoder(nn.Module):
     """
     Inserts a watermark into an image.
     """
-    def __init__(self, num_blocks, num_bits, z_channels, last_tanh=True, normalization="batch"):
+    def __init__(
+        self, 
+        num_blocks, 
+        num_bits, 
+        in_channels, 
+        out_channels, 
+        z_channels, 
+        activation: str,
+        normalization: str,
+        last_tanh=True
+    ):
         super(HiddenEncoder, self).__init__()
         self.num_bits = num_bits
-        layers = [ConvBNRelu(3, z_channels, normalization)]
+
+        norm_layer = get_normalization(normalization)
+        act_layer = get_activation(activation)
+
+        layers = [ConvBNRelu(in_channels, z_channels, act_layer, norm_layer)]
 
         for _ in range(num_blocks-1):
-            layer = ConvBNRelu(z_channels, z_channels, normalization)
+            layer = ConvBNRelu(z_channels, z_channels, act_layer, norm_layer)
             layers.append(layer)
 
         self.conv_bns = nn.Sequential(*layers)
-        self.after_concat_layer = ConvBNRelu(z_channels + 3 + num_bits, z_channels, normalization)
+        self.after_concat_layer = ConvBNRelu(z_channels + in_channels + num_bits, z_channels, act_layer, norm_layer)
 
-        self.final_layer = nn.Conv2d(z_channels, 3, kernel_size=1)
+        self.final_layer = nn.Conv2d(z_channels, out_channels, kernel_size=1)
 
         self.last_tanh = last_tanh
         self.tanh = nn.Tanh()
@@ -72,13 +81,25 @@ class HiddenDecoder(nn.Module):
     The input image may have various kinds of noise applied to it,
     such as Crop, JpegCompression, and so on. See Noise layers for more.
     """
-    def __init__(self, num_blocks, num_bits, z_channels, normalization="batch", pixelwise=False):
+    def __init__(
+        self, 
+        num_blocks: int, 
+        num_bits: int, 
+        in_channels: int, 
+        z_channels: int, 
+        normalization: str, 
+        activation: str, 
+        pixelwise:bool =False
+    ):
         super(HiddenDecoder, self).__init__()
         self.num_bits = num_bits
 
-        layers = [ConvBNRelu(3, z_channels, normalization)]
+        norm_layer = get_normalization(normalization)
+        act_layer = get_activation(activation)
+
+        layers = [ConvBNRelu(in_channels, z_channels, act_layer, norm_layer)]
         for _ in range(num_blocks):
-            layers.append(ConvBNRelu(z_channels, z_channels, normalization))
+            layers.append(ConvBNRelu(z_channels, z_channels, act_layer, norm_layer))
         self.layers = nn.Sequential(*layers)
 
         self.pixelwise = pixelwise
@@ -89,7 +110,7 @@ class HiddenDecoder(nn.Module):
 
     def forward(self, img_w):
         x = self.layers(img_w) # b d h w
-        if not self.pixelwise:  # not pixelwise
+        if not self.pixelwise:  # global pooling
             x = x.mean(dim=[-2, -1])  # b d      
         x = self.linear(x) # b l+1 ...
         return x

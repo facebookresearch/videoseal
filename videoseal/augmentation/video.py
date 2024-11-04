@@ -89,11 +89,11 @@ class VideoCompression(nn.Module):
         """
         self.crf = crf or self.crf
 
-        input_frames = self._preprocess_frames(frames)
+        input_frames = self._preprocess_frames(frames)  # convert to np.uint8
         with io.BytesIO() as buffer:
             buffer = self._compress_frames(buffer, input_frames)
             output_frames = self._decompress_frames(buffer)
-        output_frames = self._postprocess_frames(output_frames)
+        output_frames = self._postprocess_frames(output_frames) 
         output_frames = output_frames.to(frames.device)
 
         compressed_frames = frames + (output_frames - frames).detach()

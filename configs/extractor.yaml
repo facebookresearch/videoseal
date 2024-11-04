@@ -3,27 +3,35 @@ model: sam_small
 hidden:
   num_blocks: 8
   num_bits: 16
+  in_channels: 3
   z_channels: 64
   normalization: 'group'
+  activation: 'gelu'
 
 hidden_pw:
   num_blocks: 8
   num_bits: 16
+  in_channels: 3
   z_channels: 64
   normalization: 'group'
+  activation: 'gelu'
   pixelwise: True  # return msg per pixel (k h w)
 
 hidden_bn:
   num_blocks: 8
   num_bits: 16
+  in_channels: 3
   z_channels: 64
   normalization: 'batch'
+  activation: 'gelu'
 
 hidden_bn_pw:
   num_blocks: 8
   num_bits: 16
+  in_channels: 3
   z_channels: 64
   normalization: 'batch'
+  activation: 'gelu'
   pixelwise: True  # return msg per pixel (k h w)
 
 sam_tiny:

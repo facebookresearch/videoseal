@@ -1,4 +1,5 @@
 
+from functools import partial
 import einops
 import torch
 import torch.nn as nn
@@ -172,3 +173,32 @@ class ChanRMSNorm(nn.Module):
 
     def forward(self, x):
         return F.normalize(x, dim = 1) * self.scale * self.gamma
+
+
+def get_normalization(normalization: str):
+    """ Set the normalization layer """
+    if normalization.startswith("batch"):
+        norm_layer = nn.BatchNorm2d
+    elif normalization.startswith("group"):
+        norm_layer = lambda num_channels: nn.GroupNorm(num_groups=8, num_channels=num_channels)
+    elif normalization.startswith("layer"):
+        norm_layer = LayerNorm
+    elif normalization.startswith("rms"):
+        norm_layer = ChanRMSNorm
+    else:
+        raise NotImplementedError
+    return norm_layer
+
+def get_activation(activation: str):
+    """ Set the activation layer """
+    if activation == "relu":
+        act_layer = nn.ReLU
+    elif activation == "leakyrelu":
+        act_layer = partial(nn.LeakyReLU, negative_slope=0.2)
+    elif activation == "gelu":
+        act_layer = nn.GELU
+    elif activation == "silu":
+        act_layer = nn.SiLU
+    else:
+        raise NotImplementedError
+    return act_layer
