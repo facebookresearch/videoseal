@@ -6,6 +6,7 @@ from ..modules.hidden import HiddenEncoder
 from ..modules.msg_processor import MsgProcessor
 from ..modules.unet import UNetMsg
 from ..modules.vae import VAEDecoder, VAEEncoder
+from ..modules.patchmixer import PatchmixerMsg
 
 
 class Embedder(nn.Module):
@@ -81,6 +82,44 @@ class VAEEmbedder(Embedder):
         latents = self.encoder(imgs)
         latents_w = self.msg_processor(latents, msgs)
         imgs_w = self.decoder(latents_w)
+        return imgs_w
+
+
+class PatchmixerEmbedder(Embedder):
+    """
+    Inserts a watermark into an image.
+    """
+
+    def __init__(
+        self,
+        patchmixer: nn.Module,
+        msg_processor: MsgProcessor
+    ) -> None:
+        super(PatchmixerEmbedder, self).__init__()
+        self.patchmixer = patchmixer
+        self.msg_processor = msg_processor
+
+    def get_random_msg(self, bsz: int = 1, nb_repetitions=1) -> torch.Tensor:
+        return self.msg_processor.get_random_msg(bsz, nb_repetitions)  # b x k
+
+    def get_last_layer(self) -> torch.Tensor:
+        last_layer = self.patchmixer.last_layer.weight
+        return last_layer
+
+    def forward(
+        self,
+        imgs: torch.Tensor,
+        msgs: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        Args:
+            imgs: (torch.Tensor) Batched images with shape BxCxHxW
+            msgs: (torch.Tensor) Batched messages with shape BxL, or empty tensor.
+        Returns:
+            The watermarked images.
+        """
+        imgs = self.preprocess(imgs)  # put in [-1, 1]
+        imgs_w = self.patchmixer(imgs, msgs)
         return imgs_w
 
 
@@ -185,6 +224,14 @@ def build_embedder(name, cfg, nbits):
         # build the encoder, decoder and msg processor
         hidden_encoder = HiddenEncoder(**cfg)
         embedder = HiddenEmbedder(hidden_encoder)
+    elif name.startswith('patchmixer'):
+        # updates some cfg
+        cfg.msg_processor.nbits = nbits
+        cfg.msg_processor.hidden_size = nbits
+        # build the encoder, decoder and msg processor
+        msg_processor = MsgProcessor(**cfg.msg_processor)
+        patchmixer = PatchmixerMsg(msg_processor=msg_processor, **cfg.patchmixer)
+        embedder = PatchmixerEmbedder(patchmixer, msg_processor)
     else:
         raise NotImplementedError(f"Model {name} not implemented")
     embedder.yuv = True if 'yuv' in name else False

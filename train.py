@@ -259,7 +259,7 @@ def main(params):
     embedder_params = embedder_cfg[params.embedder_model]
     embedder = build_embedder(params.embedder_model,
                               embedder_params, params.nbits)
-    # print(embedder)
+    print(embedder)
     print(
         f'embedder: {sum(p.numel() for p in embedder.parameters() if p.requires_grad) / 1e6:.1f}M parameters')
 
@@ -403,11 +403,14 @@ def main(params):
             params.resume_from,
             model=wam,
         )
-    to_restore = {"epoch": 0}
+    to_restore = {
+        "epoch": 0, 
+    }
     uoptim.restart_from_checkpoint(
         os.path.join(params.output_dir, "checkpoint.pth"),
         run_variables=to_restore,
         model=wam,
+        discriminator=image_detection_loss.discriminator,
         optimizer=optimizer,
         optimizer_d=optimizer_d,
         scheduler=scheduler,
@@ -526,9 +529,11 @@ def main(params):
             dist.barrier()  # Ensures all processes wait until the main node finishes validation
 
         print("Saving Checkpoint..")
+        discrim_no_ddp = image_detection_loss.discriminator.module if params.distributed else image_detection_loss.discriminator
         save_dict = {
             'epoch': epoch + 1,
             'model': wam.state_dict(),
+            'discriminator': discrim_no_ddp.state_dict(),
             'optimizer': optimizer.state_dict(),
             'optimizer_d': optimizer_d.state_dict(),
             'scheduler': scheduler.state_dict() if scheduler is not None else None,
