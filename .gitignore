@@ -6,3 +6,6 @@ core*
 *egg-info
 *.pth
 *.mp4
+
+# Track videos in test directories
+!**/tests/**/*.mp4

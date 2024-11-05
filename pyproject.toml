@@ -43,6 +43,7 @@ dependencies = [
     "isort",
     "flake8",
     "pre-commit",
+    "conda-pack",
   ]
 
 [tool.flake8]
