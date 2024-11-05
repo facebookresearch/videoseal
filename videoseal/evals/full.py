@@ -23,8 +23,10 @@ from torchvision.utils import save_image
 import torchvision.transforms as transforms
 import tqdm
 
+
 from .metrics import vmaf_on_tensor, bit_accuracy, iou, accuracy
 from ..data.datasets import ImageFolder, VideoDataset, CocoImageIDWrapper
+from ..modules.jnd import JND
 from ..models import VideoWam, build_embedder, build_extractor
 from ..augmentation import get_validation_augs
 from ..augmentation.augmenter import get_dummy_augmenter
@@ -57,9 +59,6 @@ def setup_model_from_checkpoint(ckpt_path):
     # Create an argparse Namespace object from the parameters
     args = argparse.Namespace(**params)
     
-    # Load configurations
-    for path in [args.embedder_config, args.extractor_config, args.augmentation_config]:
-        path = os.path.join(exp_dir, "code", path)
     # embedder
     embedder_cfg = omegaconf.OmegaConf.load(args.embedder_config)
     args.embedder_model = args.embedder_model or embedder_cfg.model
@@ -68,16 +67,22 @@ def setup_model_from_checkpoint(ckpt_path):
     extractor_cfg = omegaconf.OmegaConf.load(args.extractor_config)
     args.extractor_model = args.extractor_model or extractor_cfg.model
     extractor_params = extractor_cfg[args.extractor_model]
-    # augmenter
-    augmenter_cfg = omegaconf.OmegaConf.load(args.augmentation_config)
     
     # Build models
     embedder = build_embedder(args.embedder_model, embedder_params, args.nbits)
     extractor = build_extractor(extractor_cfg.model, extractor_params, args.img_size_extractor, args.nbits)
     augmenter = get_dummy_augmenter()  # does nothing
     
+    # build attenuation
+    if args.attenuation.lower() != "none":
+        attenuation_cfg = omegaconf.OmegaConf.load(args.attenuation_config)
+        attenuation = JND(**attenuation_cfg[args.attenuation])
+    else:
+        attenuation = None
+
     # Build the complete model
     wam = VideoWam(embedder, extractor, augmenter, 
+                attenuation=attenuation,
                 scaling_w=args.scaling_w, scaling_i=args.scaling_i, 
                 img_size=args.img_size,
                 chunk_size=args.videowam_chunk_size,
@@ -318,6 +323,10 @@ def main():
                           help='Number of samples to evaluate')
     
     group = parser.add_argument_group('Model parameters to override. If not provided, the checkpoint values are used.')
+    group.add_argument("--attenuation_config", type=str, default="configs/attenuation.yaml",
+       help="Path to the attenuation config file")
+    group.add_argument("--attenuation", type=str, default="None",
+                        help="Attenuation model to use")
     group.add_argument("--scaling_w", type=float, default=None,
                         help="Scaling factor for the watermark in the embedder model")
     group.add_argument('--videowam_chunk_size', type=int, default=None, 
@@ -337,6 +346,8 @@ def main():
     # Setup the model
     model = setup_model_from_checkpoint(args.checkpoint)
     model.eval()
+    
+    # Override model parameters in args
     model.scaling_w = args.scaling_w or model.scaling_w
     model.chunk_size = args.videowam_chunk_size or model.chunk_size
     model.step_size = args.videowam_step_size or model.step_size
@@ -345,6 +356,15 @@ def main():
     avail_device = 'cuda' if torch.cuda.is_available() else 'cpu'
     device = args.device or avail_device
     model.to(device)
+
+    # Override attenuation build
+    # should be on CPU to operate on high resolution videos
+    if args.attenuation.lower() != "none":
+        attenuation_cfg = omegaconf.OmegaConf.load(args.attenuation_config)
+        attenuation = JND(**attenuation_cfg[args.attenuation])
+    else:
+        attenuation = None
+    model.attenuation = attenuation
 
     # Setup the dataset    
     dataset = setup_dataset(args)
