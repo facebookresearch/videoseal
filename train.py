@@ -468,10 +468,10 @@ def main(params):
     print('training...')
     start_time = time.time()
     for epoch in range(start_epoch, params.epochs):
-        log_stats = {'epoch': epoch}
-
         epoch_modality = modalities[epoch]
         assert epoch_modality in [Modalities.IMAGE, Modalities.VIDEO]
+        log_stats = {'epoch': epoch, 'modality': epoch_modality}
+
         epoch_train_loader = video_train_loader if epoch_modality == Modalities.VIDEO else image_train_loader
         epoch_val_loader = video_val_loader if epoch_modality == Modalities.VIDEO else image_val_loader
 
