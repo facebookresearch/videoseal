@@ -56,6 +56,8 @@ class Blender(nn.Module):
 
         # Apply attenuation if specified
         if self.attentuation is not None:
+            # attentuations is sometimes on cpu or gpu
+            self.attentuation.to(imgs.device)
             blended_output = self.attentuation(imgs, preds_w)
 
         # Clamp output if specified
