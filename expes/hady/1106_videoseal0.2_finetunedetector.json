@@ -24,6 +24,11 @@
         "img_size_extractor": 256,
         "iter_per_epoch": 1000,
         "video_start": [
+            100,
+            1000
+        ],
+        "finetune_detector_start": [
+            100,
             1000
         ],
         "videowam_step_size": [
