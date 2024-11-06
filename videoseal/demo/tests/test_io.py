@@ -1,8 +1,10 @@
+import io
 from pathlib import Path
 
 from decord import VideoReader, cpu
+import numpy as np
 
-from videoseal.demo.io import DemoVideoBatchReader
+from videoseal.demo.io import DemoVideoBatchReader, DemoVideoWriter
 
 
 def test_batch_reader():
@@ -20,3 +22,24 @@ def test_batch_reader():
             else:
                 assert len(frames) > 0 and len(frames) <= batch_size
         assert num_frames_processed == num_frames
+
+
+def test_writer():
+    width = 10
+    height = 20
+    num_frames = 1
+    fps = 30
+    frame_data = np.zeros((num_frames, height, width, 3), dtype=np.uint8)
+
+    with io.BytesIO() as video_io:
+        with DemoVideoWriter(video_io, fps, width, height) as writer:
+            writer.write(frame_data)
+
+        video_io.seek(0)
+        vr = VideoReader(video_io)
+        output_fps = vr.get_avg_fps()
+        output_height, output_width = vr[0].shape[:2]
+
+        assert output_fps == fps
+        assert output_width == width
+        assert output_height == height
