@@ -17,6 +17,18 @@ input [
     name: "video"
     data_type: TYPE_STRING
     dims: [1]
+  },
+  {
+    name: "num_pixels_per_batch"
+    data_type: TYPE_UINT8
+    dims: [1]
+    optional: true
+  },
+  {
+    name: "num_video_reader_threads"
+    data_type: TYPE_UINT8
+    dims: [1]
+    optional: true
   }
 ]
 output [
