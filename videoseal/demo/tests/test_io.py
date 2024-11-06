@@ -1,6 +1,7 @@
 import io
 from pathlib import Path
 
+import numpy as np
 from decord import VideoReader, cpu
 import numpy as np
 
@@ -43,3 +44,30 @@ def test_writer():
         assert output_fps == fps
         assert output_width == width
         assert output_height == height
+
+
+def test_writer_crf():
+    width = 10
+    height = 20
+    num_frames = 60
+    fps = 30
+    frame_data = (np.random.random((num_frames, height, width, 3)) * 255).astype(
+        np.uint8
+    )
+
+    with io.BytesIO() as low_crf_io:
+        with DemoVideoWriter(
+            low_crf_io, fps, width, height, options={"crf": "10"}
+        ) as writer:
+            writer.write(frame_data)
+        low_crf_len = len(low_crf_io.getvalue())
+
+    with io.BytesIO() as high_crf_io:
+        with DemoVideoWriter(
+            high_crf_io, fps, width, height, options={"crf": "40"}
+        ) as writer:
+            writer.write(frame_data)
+        high_crf_len = len(high_crf_io.getvalue())
+
+    # low crf encoding should produce a larger file size
+    assert low_crf_len > high_crf_len
