@@ -86,6 +86,8 @@ def get_dataset_parser(parser):
                        help="Percentage of images in the hybrid dataset 0.5 means for each 5 epochs of images 5 video epoch is made. Only applicable if both --image_dataset and --video_dataset are provided.")
     group.add_argument("--video_start", type=int, default=50,
                        help="Number of epochs before starting video training")
+    group.add_argument("--finetune_detector_start", type=int, default=1000,
+                       help="Number of epochs afterwhich the generator is frozen and detector is finetuned")
     return parser
 
 
@@ -404,7 +406,7 @@ def main(params):
             model=wam,
         )
     to_restore = {
-        "epoch": 0, 
+        "epoch": 0,
     }
     uoptim.restart_from_checkpoint(
         os.path.join(params.output_dir, "checkpoint.pth"),
@@ -562,6 +564,10 @@ def train_one_epoch(
     is_video = (epoch_modality == Modalities.VIDEO)
 
     wam.train()
+
+    # freeze the embedder and train only the detector
+    if epoch > params.finetune_detector_start:
+        wam.freeze_module("embedder")
 
     header = f'Train - Epoch: [{epoch}/{params.epochs}] - Modality: {epoch_modality}'
     metric_logger = ulogger.MetricLogger(delimiter="  ")

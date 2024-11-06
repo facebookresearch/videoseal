@@ -10,9 +10,9 @@ from torch.nn import functional as F
 from ..augmentation.augmenter import Augmenter
 from ..data.transforms import RGB2YUV, rgb_to_yuv, yuv_to_rgb
 from ..modules.jnd import JND
+from .blender import Blender
 from .embedder import Embedder
 from .extractor import Extractor
-from .blender import Blender
 
 
 class Wam(nn.Module):
@@ -21,6 +21,19 @@ class Wam(nn.Module):
     def device(self):
         """Return the device of the model."""
         return next(self.parameters()).device
+
+    def freeze_module(self, module_name):
+        """
+        This function allows doing sleep awake style training between embedder and 
+        detector "model.freeze_module('embedder')"
+        """
+        for param in getattr(self, module_name).parameters():
+            param.requires_grad = False
+
+    def unfreeze_module(self, module_name):
+        "model.unfreeze_module('embedder')"
+        for param in getattr(self, module_name).parameters():
+            param.requires_grad = True
 
     def __init__(
         self,
@@ -63,7 +76,8 @@ class Wam(nn.Module):
         self.rgb2yuv = RGB2YUV()
 
         assert blending_method in Blender.AVAILABLE_BLENDING_METHODS
-        self.blender = Blender(self.scaling_i, self.scaling_w, method=blending_method, attenuation=self.attenuation)
+        self.blender = Blender(self.scaling_i, self.scaling_w,
+                               method=blending_method, attenuation=self.attenuation)
 
     def get_random_msg(self, bsz: int = 1, nb_repetitions=1) -> torch.Tensor:
         return self.embedder.get_random_msg(bsz, nb_repetitions)  # b x k
@@ -88,7 +102,7 @@ class Wam(nn.Module):
             # imgs_w[:, 0:1] = self.scaling_i * imgs_w[:, 0:1] + self.scaling_w * preds_w
             # imgs_w = yuv_to_rgb(imgs_w)
 
-        imgs_w = self.blender(imgs,preds_w)
+        imgs_w = self.blender(imgs, preds_w)
 
         return imgs_w
 
