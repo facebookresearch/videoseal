@@ -66,21 +66,9 @@ class TritonPythonModel(TritonPythonModelBase):
             )
             temp_xray_video = stack.push(tempfile.NamedTemporaryFile(suffix=".mp4"))
             outputs = self.wam.embed(vid, is_video=True)
-            imgs_w = outputs["imgs_w"].cpu()  # type: ignore TODO: Fix VideoWam.embed type hints
+            imgs_w = outputs["imgs_w"].cpu()
 
-            # Compute min and max values, reshape, and normalize
-            diff = imgs_w - vid
-            min_vals = (
-                diff.view(diff.shape[0], diff.shape[1], -1)
-                .min(dim=2, keepdim=True)[0]
-                .view(diff.shape[0], diff.shape[1], 1, 1)
-            )
-            max_vals = (
-                diff.view(diff.shape[0], diff.shape[1], -1)
-                .max(dim=2, keepdim=True)[0]
-                .view(diff.shape[0], diff.shape[1], 1, 1)
-            )
-            normalized_diff = (diff - min_vals) / (max_vals - min_vals)
+            normalized_diff = self._get_xray(imgs_w, vid)
 
             save_vid(imgs_w, temp_watermarked_video.name, math.floor(fps))
             save_vid(normalized_diff, temp_xray_video.name, math.floor(fps))
@@ -106,3 +94,21 @@ class TritonPythonModel(TritonPythonModelBase):
                     ),
                 ]
             )
+
+    def _get_xray(
+        self, vid: torch.Tensor, watermarked_vid: torch.Tensor
+    ) -> torch.Tensor:
+        # Compute min and max values, reshape, and normalize
+        vid_xray = torch.abs(watermarked_vid - vid)
+        min_vals = (
+            vid_xray.view(vid_xray.shape[0], vid_xray.shape[1], -1)
+            .min(dim=2, keepdim=True)[0]
+            .view(vid_xray.shape[0], vid_xray.shape[1], 1, 1)
+        )
+        max_vals = (
+            vid_xray.view(vid_xray.shape[0], vid_xray.shape[1], -1)
+            .max(dim=2, keepdim=True)[0]
+            .view(vid_xray.shape[0], vid_xray.shape[1], 1, 1)
+        )
+        # Normalize in-place to save memory / time
+        return vid_xray.subtract_(min_vals).divide_(max_vals.subtract_(min_vals))
