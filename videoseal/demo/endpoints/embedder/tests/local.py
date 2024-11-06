@@ -7,7 +7,7 @@ from typing import Any, Dict
 
 import requests
 
-TEST_CASES = ["request.json"]
+TEST_CASES = ["request.json", "request_with_message.json"]
 
 
 def transform_test_data_into_request_data(data: Dict[str, Any]):
@@ -34,9 +34,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         prog="local", description="Test local Triton server endpoint"
     )
-    parser.add_argument(
-        "-o", "--output-dir", default=os.getcwd()
-    )
+    parser.add_argument("-o", "--output-dir", default=os.getcwd())
     args = parser.parse_args()
     output_dir = Path(args.output_dir)
     dir_path = Path(os.path.dirname(os.path.realpath(__file__)))
@@ -52,8 +50,11 @@ if __name__ == "__main__":
             data=json.dumps(data),
         )
         for output in response.json()["outputs"]:
-            video_name = f'{test_case.rsplit(".", 1)[0]}_{output["name"]}.mp4'
-            video_data = output["data"][0]
-            with open(output_dir / video_name, "wb") as out_file:
-                print(f"Writing {out_file.name}")
-                out_file.write(base64.b64decode(video_data))
+            if "video" in output["name"]:
+                video_name = f'{test_case.rsplit(".", 1)[0]}_{output["name"]}.mp4'
+                video_data = output["data"][0]
+                with open(output_dir / video_name, "wb") as out_file:
+                    print(f"Writing {out_file.name}")
+                    out_file.write(base64.b64decode(video_data))
+            else:
+                print(f'{output["name"]}: {json.dumps(output["data"])}')
