@@ -285,7 +285,7 @@ def main(params):
     # build attenuation
     if params.attenuation.lower() != "none":
         attenuation_cfg = omegaconf.OmegaConf.load(params.attenuation_config)
-        attenuation = JND(**attenuation_cfg[params.attenuation])
+        attenuation = JND(**attenuation_cfg[params.attenuation]).to(device)
     else:
         attenuation = None
     print(f'attenuation: {attenuation}')
