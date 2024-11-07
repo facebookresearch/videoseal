@@ -1,8 +1,12 @@
 import math
+from typing import IO
 
+import av
 import numpy as np
+from av.video.frame import PictureType
 from decord import VideoReader
 from numpy.typing import NDArray
+
 
 class DemoVideoBatchReader:
     def __init__(
@@ -28,3 +32,27 @@ class DemoVideoBatchReader:
         return self.video_reader.get_batch(
             range(frame_i_low, frame_i_high),
         ).asnumpy()
+
+
+class DemoVideoWriter:
+    def __init__(self, output_video_file: IO, fps: int, width: int, height: int):
+        self.container = av.open(output_video_file, mode="w", format="mp4")
+        self.stream = self.container.add_stream("h264", rate=fps)
+        self.stream.pix_fmt = "yuv420p"
+        self.stream.width = width
+        self.stream.height = height
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, type, value, traceback):
+        for packet in self.stream.encode():
+            self.container.mux(packet)
+        self.container.close()
+
+    def write(self, video: NDArray[np.uint8]):
+        for frame in video:
+            frame = av.VideoFrame.from_ndarray(frame, format="rgb24")
+            frame.pict_type = PictureType.NONE
+            for packet in self.stream.encode(frame):
+                self.container.mux(packet)
