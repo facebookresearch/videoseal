@@ -6,12 +6,12 @@ import torch.nn as nn
 import torch.nn.functional as F
 from lpips import LPIPS
 
+from ..modules.discriminator import NLayerDiscriminator
 from .dists import DISTS
 from .jndloss import JNDLoss
 from .perceptual import PerceptualLoss
 from .watson_fft import ColorWrapper, WatsonDistanceFft
 from .watson_vgg import WatsonDistanceVgg
-from ..modules.discriminator import NLayerDiscriminator
 
 
 def hinge_d_loss(logits_real, logits_fake):
@@ -105,36 +105,40 @@ class LPIPSWithDiscriminator(nn.Module):
                 inputs: torch.Tensor, reconstructions: torch.Tensor,
                 masks: torch.Tensor, msgs: torch.Tensor, preds: torch.Tensor,
                 optimizer_idx: int, global_step: int,
-                last_layer=None, cond=None,
+                last_layer=None, cond=None, freeze_embedder=False, freeze_detector=False,
                 ):
-
+        """
+        Args:
+            freeze_generator (bool, optional): used for finetuning the detector if true don't calculate wn generator losses i.e. perceptual and disc loss.
+            freeze_detector (bool, optional): used for finetuning the generator if true don't calculate wm detection losses i.e. decoding losses 
+        """
         if optimizer_idx == 0:  # embedder update
             weights = {}
             losses = {}
             # perceptual loss
-            if self.percep_weight > 0:
+            if self.percep_weight > 0 and not freeze_embedder:
                 losses["percep"] = self.perceptual_loss(
                     imgs=inputs.contiguous(),
                     imgs_w=reconstructions.contiguous(),
                 ).mean()
                 weights["percep"] = self.percep_weight
             # discriminator loss
-            if self.disc_weight > 0:
+            if self.disc_weight > 0 and not freeze_embedder:
                 logits_fake = self.discriminator(reconstructions.contiguous())
                 disc_factor = adopt_weight(
                     1.0, global_step, threshold=self.discriminator_iter_start)
                 losses["disc"] = - logits_fake.mean()
                 weights["disc"] = disc_factor * self.disc_weight
             # detection loss
-            if self.detect_weight > 0:
+            if self.detect_weight > 0 and not freeze_detector:
                 detection_loss = self.detection_loss(
-                    preds[:, 0:1].contiguous(), 
+                    preds[:, 0:1].contiguous(),
                     masks.contiguous(),
                 ).mean()
                 losses["detect"] = detection_loss
                 weights["detect"] = self.detect_weight
             # decoding loss
-            if self.decode_weight > 0:
+            if self.decode_weight > 0 and not freeze_detector:
                 msg_preds = preds[:, 1:]  # b nbits ...
                 if msg_preds.dim() == 2:  # extract predicts msg
                     decoding_loss = self.decoding_loss(
@@ -143,12 +147,16 @@ class LPIPSWithDiscriminator(nn.Module):
                     ).mean()
                 else:  # extract predicts msg per pixel
                     masks = masks.expand_as(msg_preds).bool()  # b nbits h w
-                    bsz, nbits, h, w = msg_preds.size()    
-                    msg_targs = msgs.unsqueeze(-1).unsqueeze(-1).expand_as(msg_preds) # b nbits h w
-                    msg_preds_ = msg_preds.masked_select(masks).view(bsz, nbits, -1)  # b 1 h w -> b nbits n
-                    msg_targs_ = msg_targs.masked_select(masks).view(bsz, nbits, -1)  # b 1 h w -> b nbits n
+                    bsz, nbits, h, w = msg_preds.size()
+                    # b nbits h w
+                    msg_targs = msgs.unsqueeze(
+                        -1).unsqueeze(-1).expand_as(msg_preds)
+                    msg_preds_ = msg_preds.masked_select(masks).view(
+                        bsz, nbits, -1)  # b 1 h w -> b nbits n
+                    msg_targs_ = msg_targs.masked_select(masks).view(
+                        bsz, nbits, -1)  # b 1 h w -> b nbits n
                     decoding_loss = self.decoding_loss(
-                        msg_preds_.contiguous(), 
+                        msg_preds_.contiguous(),
                         msg_targs_.contiguous().float()
                     ).mean()
                 losses["decode"] = decoding_loss

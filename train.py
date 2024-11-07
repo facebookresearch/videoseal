@@ -567,9 +567,11 @@ def train_one_epoch(
     wam.train()
 
     # freeze the embedder and train only the detector
+    is_frozen_embedder = False
     if epoch >= params.finetune_detector_start:
         if not params.distributed:
             wam.freeze_module("embedder")
+            is_frozen_embedder = True
         else:
             wam.module.freeze_module("embedder")
 
@@ -619,6 +621,7 @@ def train_one_epoch(
                     outputs["masks"], outputs["msgs"], outputs["preds"],
                     optimizer_idx, epoch,
                     last_layer=last_layer,
+                    freeze_embedder=is_frozen_embedder,
                 )
                 # Scale loss for accumulation so lr is not affected
                 loss = loss / accumulation_steps
