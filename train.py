@@ -433,7 +433,8 @@ def main(params):
         wam_ddp = nn.parallel.DistributedDataParallel(
             wam, device_ids=[params.local_rank])
         image_detection_loss.discriminator = nn.parallel.DistributedDataParallel(
-            image_detection_loss.discriminator, device_ids=[params.local_rank]
+            image_detection_loss.discriminator, device_ids=[
+                params.local_rank], find_unused_parameters=True
         )
         wam = wam_ddp.module
     else:
@@ -566,7 +567,7 @@ def train_one_epoch(
     wam.train()
 
     # freeze the embedder and train only the detector
-    if epoch > params.finetune_detector_start:
+    if epoch >= params.finetune_detector_start:
         if not params.distributed:
             wam.freeze_module("embedder")
         else:
