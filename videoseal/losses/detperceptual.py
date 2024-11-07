@@ -116,12 +116,9 @@ class LPIPSWithDiscriminator(nn.Module):
         """
         if optimizer_idx == 0:  # embedder update
 
-            # training only embedder in this case the
-            # gan like discriminator (disc) should be frozen
-            self.discriminator.eval()
-
             weights = {}
             losses = {}
+
             # perceptual loss
             if self.percep_weight > 0 and not self.freeze_embedder:
                 losses["percep"] = self.perceptual_loss(
@@ -129,9 +126,20 @@ class LPIPSWithDiscriminator(nn.Module):
                     imgs_w=reconstructions.contiguous(),
                 ).mean()
                 weights["percep"] = self.percep_weight
+
             # discriminator loss
             if self.disc_weight > 0 and not self.freeze_embedder:
-                logits_fake = self.discriminator(reconstructions.contiguous())
+
+                # training only embedder in this case the
+                # gan like discriminator (disc) should be frozen
+                # this is ensured by adding no_grad() to
+                # prevent loss from backprob to the discriminator
+                # loss flows normally to the geneator of reconstructions
+                self.discriminator.eval()
+                with torch.no_grad():
+                    logits_fake = self.discriminator(
+                        reconstructions.contiguous())
+
                 disc_factor = adopt_weight(
                     1.0, global_step, threshold=self.discriminator_iter_start)
                 losses["disc"] = - logits_fake.mean()
