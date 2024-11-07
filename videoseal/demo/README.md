@@ -63,7 +63,8 @@ docker run \
   tritonserver --model-repository /mnt/models
 ```
 
-> [!NOTE] You may have to add `sudo` to the above command if you don't have sufficient permissions.
+> [!NOTE]
+> You may have to add `sudo` to the above command if you don't have sufficient permissions.
 
 Once the server is running, you can test against it with any prepared inputs in the endpoint's `test` directory.
 
