@@ -71,6 +71,37 @@ device = torch.device(
     'cuda') if torch.cuda.is_available() else torch.device('cpu')
 
 
+def freeze_embedder(wam: Wam, image_detection_loss: LPIPSWithDiscriminator, params):
+    """
+    To be called only once when you need to freeze the embedder 
+    Freezes the embedder of a model
+    Turnoff losses associated to the embedder
+    Reinitializes the Distributed Data Parallel (DDP) .
+
+    """
+
+    # Remove the current DDP wrapper, if it exists
+    if isinstance(wam, nn.parallel.DistributedDataParallel):
+        wam = wam.module  # unwrap the model from DDP
+
+    if isinstance(image_detection_loss, nn.parallel.DistributedDataParallel):
+        image_detection_loss = image_detection_loss.module  # unwrap the model from DDP
+
+    wam.freeze_module("embedder")
+    image_detection_loss.freeze_embedder = True
+
+    if params.distributed:
+
+        wam = nn.parallel.DistributedDataParallel(
+            wam, device_ids=[params.local_rank], find_unused_parameters=True)
+        image_detection_loss.discriminator = nn.parallel.DistributedDataParallel(
+            image_detection_loss.discriminator, device_ids=[
+                params.local_rank], find_unused_parameters=True
+        )
+
+    return wam, image_detection_loss
+
+
 def get_dataset_parser(parser):
     """
     Adds dataset-related arguments to the parser.
@@ -431,7 +462,7 @@ def main(params):
         wam = nn.SyncBatchNorm.convert_sync_batchnorm(wam)
 
         wam_ddp = nn.parallel.DistributedDataParallel(
-            wam, device_ids=[params.local_rank])
+            wam, device_ids=[params.local_rank], find_unused_parameters=True)
         image_detection_loss.discriminator = nn.parallel.DistributedDataParallel(
             image_detection_loss.discriminator, device_ids=[
                 params.local_rank], find_unused_parameters=True
@@ -483,6 +514,15 @@ def main(params):
     start_time = time.time()
     for epoch in range(start_epoch, params.epochs):
         log_stats = {'epoch': epoch}
+
+        # freeze embdder, turn off embddder loss and refresh DDP
+        if epoch == params.finetune_detector_start:
+            wam_ddp, image_detection_loss = freeze_embedder(
+                wam_ddp, image_detection_loss, params)
+            if params.distributed:
+                wam = wam_ddp.module
+            else:
+                wam = wam_ddp
 
         epoch_modality = modalities[epoch]
         assert epoch_modality in [Modalities.IMAGE, Modalities.VIDEO]
@@ -566,15 +606,6 @@ def train_one_epoch(
 
     wam.train()
 
-    # freeze the embedder and train only the detector
-    is_frozen_embedder = False
-    if epoch >= params.finetune_detector_start:
-        if not params.distributed:
-            wam.freeze_module("embedder")
-            is_frozen_embedder = True
-        else:
-            wam.module.freeze_module("embedder")
-
     header = f'Train - Epoch: [{epoch}/{params.epochs}] - Modality: {epoch_modality}'
     metric_logger = ulogger.MetricLogger(delimiter="  ")
 
@@ -621,7 +652,6 @@ def train_one_epoch(
                     outputs["masks"], outputs["msgs"], outputs["preds"],
                     optimizer_idx, epoch,
                     last_layer=last_layer,
-                    freeze_embedder=is_frozen_embedder,
                 )
                 # Scale loss for accumulation so lr is not affected
                 loss = loss / accumulation_steps

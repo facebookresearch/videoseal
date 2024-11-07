@@ -53,6 +53,8 @@ class LPIPSWithDiscriminator(nn.Module):
         self.detect_weight = detect_weight
         self.disc_weight = disc_weight
         self.decode_weight = decode_weight
+        self.freeze_embedder = False
+        self.freeze_detector = False
 
         # self.perceptual_loss = PerceptualLoss(percep_loss=percep_loss).to(torch.device("cuda"))
         self.perceptual_loss = PerceptualLoss(percep_loss=percep_loss)
@@ -105,7 +107,7 @@ class LPIPSWithDiscriminator(nn.Module):
                 inputs: torch.Tensor, reconstructions: torch.Tensor,
                 masks: torch.Tensor, msgs: torch.Tensor, preds: torch.Tensor,
                 optimizer_idx: int, global_step: int,
-                last_layer=None, cond=None, freeze_embedder=False, freeze_detector=False,
+                last_layer=None, cond=None,
                 ):
         """
         Args:
@@ -116,21 +118,21 @@ class LPIPSWithDiscriminator(nn.Module):
             weights = {}
             losses = {}
             # perceptual loss
-            if self.percep_weight > 0 and not freeze_embedder:
+            if self.percep_weight > 0 and not self.freeze_embedder:
                 losses["percep"] = self.perceptual_loss(
                     imgs=inputs.contiguous(),
                     imgs_w=reconstructions.contiguous(),
                 ).mean()
                 weights["percep"] = self.percep_weight
             # discriminator loss
-            if self.disc_weight > 0 and not freeze_embedder:
+            if self.disc_weight > 0 and not self.freeze_embedder:
                 logits_fake = self.discriminator(reconstructions.contiguous())
                 disc_factor = adopt_weight(
                     1.0, global_step, threshold=self.discriminator_iter_start)
                 losses["disc"] = - logits_fake.mean()
                 weights["disc"] = disc_factor * self.disc_weight
             # detection loss
-            if self.detect_weight > 0 and not freeze_detector:
+            if self.detect_weight > 0 and not self.freeze_detector:
                 detection_loss = self.detection_loss(
                     preds[:, 0:1].contiguous(),
                     masks.contiguous(),
@@ -138,7 +140,7 @@ class LPIPSWithDiscriminator(nn.Module):
                 losses["detect"] = detection_loss
                 weights["detect"] = self.detect_weight
             # decoding loss
-            if self.decode_weight > 0 and not freeze_detector:
+            if self.decode_weight > 0 and not self.freeze_detector:
                 msg_preds = preds[:, 1:]  # b nbits ...
                 if msg_preds.dim() == 2:  # extract predicts msg
                     decoding_loss = self.decoding_loss(
