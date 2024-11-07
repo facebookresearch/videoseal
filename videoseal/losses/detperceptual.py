@@ -164,7 +164,8 @@ class LPIPSWithDiscriminator(nn.Module):
                 losses["decode"] = decoding_loss
                 weights["decode"] = self.decode_weight
             # calculate adaptive weights
-            if last_layer is not None and self.balanced:
+            # turn off adaptive weights if any of the detector or embedder losses are turned off
+            if last_layer is not None and self.balanced and not self.freeze_embedder and not self.freeze_detector:
                 scales = self.calculate_adaptive_weights(
                     losses=losses.values(),
                     weights=weights.values(),
