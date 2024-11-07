@@ -4,6 +4,7 @@ from typing import IO
 import av
 import numpy as np
 from av.video.frame import PictureType
+from av.video.stream import VideoStream
 from decord import VideoReader
 from numpy.typing import NDArray
 
@@ -35,12 +36,23 @@ class DemoVideoBatchReader:
 
 
 class DemoVideoWriter:
-    def __init__(self, output_video_file: IO, fps: int, width: int, height: int):
+    def __init__(
+        self,
+        output_video_file: IO,
+        fps: int,
+        width: int,
+        height: int,
+        video_codec: str = "libx264",
+        options: dict = {},
+    ):
         self.container = av.open(output_video_file, mode="w", format="mp4")
-        self.stream = self.container.add_stream("h264", rate=fps)
-        self.stream.pix_fmt = "yuv420p"
-        self.stream.width = width
-        self.stream.height = height
+        stream = self.container.add_stream(video_codec, rate=fps, options=options)
+        if not isinstance(stream, VideoStream):
+            return
+        stream.pix_fmt = "yuv420p" if video_codec != "libx264rgb" else "rgb24"
+        stream.width = width
+        stream.height = height
+        self.stream = stream
 
     def __enter__(self):
         return self
