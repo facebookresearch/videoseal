@@ -115,6 +115,11 @@ class LPIPSWithDiscriminator(nn.Module):
             freeze_detector (bool, optional): used for finetuning the generator if true don't calculate wm detection losses i.e. decoding losses 
         """
         if optimizer_idx == 0:  # embedder update
+
+            # training only embedder in this case the
+            # gan like discriminator (disc) should be frozen
+            self.discriminator.eval()
+
             weights = {}
             losses = {}
             # perceptual loss
@@ -185,7 +190,13 @@ class LPIPSWithDiscriminator(nn.Module):
             return total_loss, log
 
         if optimizer_idx == 1:  # discriminator update
+
+            # training only embedder in this case the
+            # gan like discriminator (disc) should be in train mode
+            self.discriminator.train()
+
             if cond is None:
+                # detach here prevents gradient leakage to any module other than the discriminator
                 logits_real = self.discriminator(inputs.contiguous().detach())
                 logits_fake = self.discriminator(
                     reconstructions.contiguous().detach())
@@ -212,4 +223,5 @@ class LPIPSWithDiscriminator(nn.Module):
         """
         super().to(device)
         self.perceptual_loss = self.perceptual_loss.to(device)
+        return self
         return self
