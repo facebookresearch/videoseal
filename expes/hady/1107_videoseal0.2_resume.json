@@ -88,7 +88,7 @@
     },
     "meta": {
         "group": "",
-        "name": "1106-videoseal0.2-finetuneddetector",
+        "name": "1106-videoseal0.2-finetuneresume",
         "dest-arg": "yes",
         "dest-name": "output_dir"
     }
