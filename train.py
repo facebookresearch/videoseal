@@ -567,7 +567,10 @@ def train_one_epoch(
 
     # freeze the embedder and train only the detector
     if epoch > params.finetune_detector_start:
-        wam.freeze_module("embedder")
+        if not params.distributed:
+            wam.freeze_module("embedder")
+        else:
+            wam.module.freeze_module("embedder")
 
     header = f'Train - Epoch: [{epoch}/{params.epochs}] - Modality: {epoch_modality}'
     metric_logger = ulogger.MetricLogger(delimiter="  ")
