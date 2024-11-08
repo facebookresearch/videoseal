@@ -93,11 +93,10 @@ def freeze_embedder(wam: Wam, image_detection_loss: LPIPSWithDiscriminator, para
     if params.distributed:
 
         wam = nn.parallel.DistributedDataParallel(
-            wam, device_ids=[params.local_rank], find_unused_parameters=True)
+            wam, device_ids=[params.local_rank])
         image_detection_loss.discriminator = nn.parallel.DistributedDataParallel(
             image_detection_loss.discriminator, device_ids=[
-                params.local_rank], find_unused_parameters=True
-        )
+                params.local_rank])
 
     return wam, image_detection_loss
 
@@ -462,11 +461,10 @@ def main(params):
         wam = nn.SyncBatchNorm.convert_sync_batchnorm(wam)
 
         wam_ddp = nn.parallel.DistributedDataParallel(
-            wam, device_ids=[params.local_rank], find_unused_parameters=True)
+            wam, device_ids=[params.local_rank])
         image_detection_loss.discriminator = nn.parallel.DistributedDataParallel(
             image_detection_loss.discriminator, device_ids=[
-                params.local_rank], find_unused_parameters=True
-        )
+                params.local_rank])
         wam = wam_ddp.module
     else:
         wam_ddp = wam
