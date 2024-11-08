@@ -1,18 +1,19 @@
 import base64
-from contextlib import ExitStack
+import io
 import json
 import math
-import tempfile
+from contextlib import ExitStack
 from pathlib import Path
+from typing import BinaryIO, Tuple
 
 import numpy as np
 import torch
 import triton_python_backend_utils as pb_utils  # type: ignore
+from decord import VideoReader, cpu
 
-from videoseal.data.datasets import VideoDataset
 from videoseal.demo.triton import TritonPythonModelBase
 from videoseal.demo.utils import load_video_wam
-from videoseal.utils.display import get_fps, save_vid
+from videoseal.demo.io import DemoVideoBatchReader, DemoVideoWriter
 
 
 class TritonPythonModel(TritonPythonModelBase):
@@ -49,51 +50,92 @@ class TritonPythonModel(TritonPythonModelBase):
     @torch.no_grad()
     def _process_request(self, request):
         video_b64 = self.get_singleton_input(request, "video")
-        if video_b64 is None:
+        num_pixels_per_batch = self.get_singleton_input(
+            request, "num_pixels_per_batch"
+        ) or (8 * 1024 * 1024)
+        num_video_reader_threads = (
+            self.get_singleton_input(request, "num_video_reader_threads") or 8
+        )
+        if (
+            video_b64 is None
+            or not isinstance(num_pixels_per_batch, int)
+            or not isinstance(num_video_reader_threads, int)
+        ):
             return
 
-        with tempfile.NamedTemporaryFile(suffix=".mp4") as temp_video:
-            temp_video.write(base64.b64decode(video_b64))
-            temp_video.seek(0)
-            fps, _ = get_fps(temp_video.name)
-            vid, _ = VideoDataset.load_full_video_decord(temp_video.name)
-            if isinstance(vid, list):
-                return
-
         with ExitStack() as stack:
-            temp_watermarked_video = stack.push(
-                tempfile.NamedTemporaryFile(suffix=".mp4")
+            video_io = stack.push(io.BytesIO(base64.b64decode(video_b64)))
+            watermarked_video_io = stack.push(io.BytesIO())
+            xray_video_io = stack.push(io.BytesIO())
+
+            self._write_output_videos(
+                video_io,
+                watermarked_video_io,
+                xray_video_io,
+                num_pixels_per_batch,
+                num_video_reader_threads,
             )
-            temp_xray_video = stack.push(tempfile.NamedTemporaryFile(suffix=".mp4"))
-            outputs = self.wam.embed(vid, is_video=True)
-            imgs_w = outputs["imgs_w"].cpu()
-
-            normalized_diff = self._get_xray(imgs_w, vid)
-
-            save_vid(imgs_w, temp_watermarked_video.name, math.floor(fps))
-            save_vid(normalized_diff, temp_xray_video.name, math.floor(fps))
-
-            temp_watermarked_video.seek(0)
-            temp_xray_video.seek(0)
 
             watermarked_video_b64 = base64.b64encode(
-                temp_watermarked_video.read()
+                watermarked_video_io.getvalue()
             ).decode("utf-8")
-            xray_video_b64 = base64.b64encode(temp_xray_video.read()).decode("utf-8")
-            return pb_utils.InferenceResponse(
-                output_tensors=[
-                    pb_utils.Tensor(
-                        "watermarked_video",
-                        np.array(
-                            [watermarked_video_b64], dtype=self.watermarked_video_dtype
-                        ),
+            xray_video_b64 = base64.b64encode(xray_video_io.getvalue()).decode("utf-8")
+
+        return pb_utils.InferenceResponse(
+            output_tensors=[
+                pb_utils.Tensor(
+                    "watermarked_video",
+                    np.array(
+                        [watermarked_video_b64], dtype=self.watermarked_video_dtype
                     ),
-                    pb_utils.Tensor(
-                        "xray_video",
-                        np.array([xray_video_b64], dtype=self.xray_video_dtype),
-                    ),
-                ]
+                ),
+                pb_utils.Tensor(
+                    "xray_video",
+                    np.array([xray_video_b64], dtype=self.xray_video_dtype),
+                ),
+            ]
+        )
+
+    def _write_output_videos(
+        self,
+        video_io: BinaryIO,
+        watermarked_video_io: BinaryIO,
+        xray_video_io: BinaryIO,
+        num_pixels_per_batch: int,
+        num_video_reader_threads: int,
+    ):
+        video_reader = VideoReader(
+            video_io, num_threads=num_video_reader_threads, ctx=cpu()
+        )
+        fps = math.floor(video_reader.get_avg_fps())
+        height, width = video_reader[0].shape[:2]
+        batch_size = math.floor(num_pixels_per_batch / (height * width))
+        with ExitStack() as stack:
+            watermarked_video_writer = stack.push(
+                DemoVideoWriter(
+                    watermarked_video_io, fps=fps, width=width, height=height
+                )
             )
+            xray_video_writer = stack.push(
+                DemoVideoWriter(xray_video_io, fps=fps, width=width, height=height)
+            )
+            for frames in DemoVideoBatchReader(video_reader, batch_size=batch_size):
+                frames = torch.from_numpy(frames).to(self.device)
+                watermarked_frames, xray_frames = self._embed(frames)
+                watermarked_video_writer.write(watermarked_frames.cpu().numpy())
+                xray_video_writer.write(xray_frames.cpu().numpy())
+
+    def _embed(self, frames: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        normalized_frames = frames.float().permute(0, 3, 1, 2) / 255.0
+        outputs = self.wam.embed(normalized_frames, is_video=True)
+        normalized_watermarked_frames = outputs["imgs_w"]
+        normalized_xray_frames = self._get_xray(
+            normalized_frames, normalized_watermarked_frames
+        )
+        return (
+            (normalized_watermarked_frames.permute(0, 2, 3, 1) * 255).to(torch.uint8),
+            (normalized_xray_frames.permute(0, 2, 3, 1) * 255).to(torch.uint8),
+        )
 
     def _get_xray(
         self, vid: torch.Tensor, watermarked_vid: torch.Tensor
