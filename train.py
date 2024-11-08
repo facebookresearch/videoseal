@@ -118,6 +118,7 @@ def get_dataset_parser(parser):
                        help="Number of epochs before starting video training")
     group.add_argument("--finetune_detector_start", type=int, default=1000,
                        help="Number of epochs afterwhich the generator is frozen and detector is finetuned")
+
     return parser
 
 
@@ -186,6 +187,8 @@ def get_parser():
        help='Number of total epochs to run')
     aa('--iter_per_epoch', default=10000, type=int,
        help='Number of iterations per epoch, made for very large datasets')
+    aa('--sleep_wake', type=utils.bool_inst, default=False,
+       help='If True and lambda_d > 0 then do epoch optimize 0 and epoch optimizer 1 otherwise optimize them simultaneously')
     aa('--iter_per_valid', default=None, type=int,
        help='Number of iterations per eval, made for very large eval datasets if None eval on all dataset')
     aa('--resume_from', default=None, type=str,
@@ -630,9 +633,14 @@ def train_one_epoch(
             batch_masks = batch_masks.unsqueeze(0)
             batch_imgs = batch_imgs.unsqueeze(0)
 
+        if params.sleep_wake and params.lambda_d > 0:
+            optimizer_ids_for_epoch = [epoch % 2]
+        else:
+            optimizer_ids_for_epoch = [1, 0]
+
         # reset the optimizer gradients before accum gradients
-        for optimizer in optimizers:
-            optimizer.zero_grad()
+        for optimizer_idx in optimizer_ids_for_epoch:
+            optimizers[optimizer_idx].zero_grad()
 
         # accumulate gradients
         for acc_it in range(accumulation_steps):
@@ -649,7 +657,7 @@ def train_one_epoch(
             ) if not params.distributed else wam.module.embedder.get_last_layer()
 
             # index 1 for discriminator, 0 for embedder/extractor
-            for optimizer_idx in [1, 0]:
+            for optimizer_idx in optimizer_ids_for_epoch:
                 if params.lambda_d == 0 and optimizer_idx == 1:
                     continue
                 loss, logs = image_detection_loss(
@@ -721,8 +729,8 @@ def train_one_epoch(
 
         # end accumulate gradients batches
         # add optimizer step
-        for optimizer in optimizers:
-            optimizer.step()
+        for optimizer_idx in optimizer_ids_for_epoch:
+            optimizers[optimizer_idx].step()
 
     metric_logger.synchronize_between_processes()
     print("Averaged {} stats:".format('train'), metric_logger)
