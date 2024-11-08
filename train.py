@@ -211,7 +211,8 @@ def get_parser():
        help='Weight for the discriminator loss')
     aa('--disc_num_layers', default=2, type=int,
        help='Number of layers for the discriminator')
-
+    aa('--disc_hinge_on_logits_fake', type=utils.bool_inst, default=False,
+       help='If True then loss_disc (to embedder) will have a hinge loss otherwise just pure -logits_fake.mean() (experimental)')
     group = parser.add_argument_group('Loading parameters')
     aa('--batch_size', default=32, type=int, help='Batch size')
     aa('--batch_size_eval', default=32, type=int, help='Batch size for evaluation')
@@ -336,7 +337,7 @@ def main(params):
         disc_weight=params.lambda_d, percep_weight=params.lambda_i,
         detect_weight=params.lambda_det, decode_weight=params.lambda_dec,
         disc_start=params.disc_start, disc_num_layers=params.disc_num_layers,
-        percep_loss=params.perceptual_loss
+        percep_loss=params.perceptual_loss, disc_hinge_on_logits_fake=params.disc_hinge_on_logits_fake
     ).to(device)
     print(image_detection_loss)
     # print(f"discriminator: {sum(p.numel() for p in image_detection_loss.discriminator.parameters() if p.requires_grad) / 1e3:.1f}K parameters")

@@ -41,7 +41,7 @@ class LPIPSWithDiscriminator(nn.Module):
                  balanced=True, total_norm=0.0,
                  disc_weight=1.0, percep_weight=1.0, detect_weight=1.0, decode_weight=0.0,
                  disc_start=0, disc_num_layers=3, disc_in_channels=3, disc_loss="hinge", use_actnorm=False,
-                 percep_loss="lpips"
+                 percep_loss="lpips", disc_hinge_on_logits_fake=False
                  ):
         super().__init__()
         assert disc_loss in ["hinge", "vanilla"]
@@ -55,6 +55,7 @@ class LPIPSWithDiscriminator(nn.Module):
         self.decode_weight = decode_weight
         self.freeze_embedder = False
         self.freeze_detector = False
+        self.disc_hinge_on_logits_fake = disc_hinge_on_logits_fake
 
         # self.perceptual_loss = PerceptualLoss(percep_loss=percep_loss).to(torch.device("cuda"))
         self.perceptual_loss = PerceptualLoss(percep_loss=percep_loss)
@@ -150,7 +151,13 @@ class LPIPSWithDiscriminator(nn.Module):
 
                 disc_factor = adopt_weight(
                     1.0, global_step, threshold=self.discriminator_iter_start)
-                losses["disc"] = - logits_fake.mean()
+
+                if not self.disc_hinge_on_logits_fake:
+                    losses["disc"] = - logits_fake.mean()
+                else:
+                    margin = 0.2
+                    losses["disc"] = torch.mean(F.relu(margin - logits_fake))
+
                 weights["disc"] = disc_factor * self.disc_weight
             # detection loss
             if self.detect_weight > 0 and not self.freeze_detector:
@@ -239,5 +246,4 @@ class LPIPSWithDiscriminator(nn.Module):
         """
         super().to(device)
         self.perceptual_loss = self.perceptual_loss.to(device)
-        return self
         return self
