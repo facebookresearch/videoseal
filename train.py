@@ -371,7 +371,10 @@ def main(params):
         model_params=[*image_detection_loss.discriminator.parameters()],
         **optim_params_d
     )
+    scheduler_d = uoptim.build_lr_scheduler(
+        optimizer=optimizer_d, **scheduler_params)
     print('optimizer_d: %s' % optimizer_d)
+    print('scheduler_d: %s' % scheduler_d)
 
     # Data loaders
     train_transform, train_mask_transform = get_resize_transform(
@@ -446,6 +449,7 @@ def main(params):
         optimizer=optimizer,
         optimizer_d=optimizer_d,
         scheduler=scheduler,
+        scheduler_d=scheduler_d
     )
     start_epoch = to_restore["epoch"]
     for param_group in optimizer.param_groups:
@@ -529,6 +533,7 @@ def main(params):
 
         if scheduler is not None:
             scheduler.step(epoch)
+            scheduler_d.step(epoch)
         if scaling_scheduler is not None:
             scaling_scheduler.step(epoch)
 
@@ -578,6 +583,7 @@ def main(params):
             'optimizer': optimizer.state_dict(),
             'optimizer_d': optimizer_d.state_dict(),
             'scheduler': scheduler.state_dict() if scheduler is not None else None,
+            'scheduler_d': scheduler_d.state_dict() if scheduler_d is not None else None,
         }
         udist.save_on_master(save_dict, os.path.join(
             params.output_dir, 'checkpoint.pth'))
