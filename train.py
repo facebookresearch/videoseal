@@ -187,7 +187,7 @@ def get_parser():
        help='Number of total epochs to run')
     aa('--iter_per_epoch', default=10000, type=int,
        help='Number of iterations per epoch, made for very large datasets')
-    aa('--sleep_wake', type=utils.bool_inst, default=False,
+    aa('--sleepwake', type=utils.bool_inst, default=False,
        help='If True and lambda_d > 0 then do epoch optimize 0 and epoch optimizer 1 otherwise optimize them simultaneously')
     aa('--iter_per_valid', default=None, type=int,
        help='Number of iterations per eval, made for very large eval datasets if None eval on all dataset')
@@ -633,7 +633,7 @@ def train_one_epoch(
             batch_masks = batch_masks.unsqueeze(0)
             batch_imgs = batch_imgs.unsqueeze(0)
 
-        if params.sleep_wake and params.lambda_d > 0:
+        if params.sleepwake and params.lambda_d > 0:
             optimizer_ids_for_epoch = [epoch % 2]
         else:
             optimizer_ids_for_epoch = [1, 0]
