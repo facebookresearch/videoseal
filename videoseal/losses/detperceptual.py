@@ -84,7 +84,8 @@ class LPIPSWithDiscriminator(nn.Module):
             try:
                 grads.append(torch.autograd.grad(
                     loss, last_layer, retain_graph=True)[0])
-            except:
+            except Exception as e:
+                print(f"Error computing gradient: {str(e)}")
                 grads.append(torch.zeros_like(last_layer))
         grad_norms = [torch.norm(grad) for grad in grads]
 
