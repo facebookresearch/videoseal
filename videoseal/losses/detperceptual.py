@@ -79,6 +79,7 @@ class LPIPSWithDiscriminator(nn.Module):
     ) -> list:
         # calculate gradients for each loss
         grads = []
+
         for loss in losses:
             # allows for the computation of gradients w.r.t. intermediate layers if possible
             try:
@@ -132,14 +133,20 @@ class LPIPSWithDiscriminator(nn.Module):
             if self.disc_weight > 0 and not self.freeze_embedder:
 
                 # training only embedder in this case the
-                # gan like discriminator (disc) should be frozen
+                # gan like discriminator(disc) should be frozen
                 # this is ensured by adding no_grad() to
                 # prevent loss from backprob to the discriminator
                 # loss flows normally to the geneator of reconstructions
                 self.discriminator.eval()
-                with torch.no_grad():
-                    logits_fake = self.discriminator(
-                        reconstructions.contiguous())
+
+                for param in self.discriminator.parameters():
+                    param.requires_grad = False
+
+                logits_fake = self.discriminator(
+                    reconstructions.contiguous())
+
+                for param in self.discriminator.parameters():
+                    param.requires_grad = True
 
                 disc_factor = adopt_weight(
                     1.0, global_step, threshold=self.discriminator_iter_start)
@@ -202,7 +209,7 @@ class LPIPSWithDiscriminator(nn.Module):
 
             # training only embedder in this case the
             # gan like discriminator (disc) should be in train mode
-            self.discriminator.train()
+            # self.discriminator.train()
 
             if cond is None:
                 # detach here prevents gradient leakage to any module other than the discriminator
