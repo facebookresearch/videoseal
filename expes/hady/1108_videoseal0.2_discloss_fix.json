@@ -19,13 +19,14 @@
         ],
         "img_size": 256,
         "img_size_extractor": 256,
-        "iter_per_epoch": 1000,
+        "iter_per_epoch": 500,
         "video_start": [
-            0,
-            10
+            500,
+            1000
         ],
         "finetune_detector_start": [
-            100
+            500,
+            800
         ],
         "videowam_step_size": [
             4
@@ -88,7 +89,7 @@
     },
     "meta": {
         "group": "",
-        "name": "1108-videoseal0.2-discloss-fix",
+        "name": "1108-videoseal0.2-discloss-fix-hing-sleepwake",
         "dest-arg": "yes",
         "dest-name": "output_dir"
     }
