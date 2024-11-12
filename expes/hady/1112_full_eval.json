@@ -1,0 +1,42 @@
+{
+    "cmd": "python -m videoseal.evals.full",
+    "git": "git@github.com:fairinternal/videoseal.git",
+    "preload": "MKL_THREADING_LAYER=GNU",
+    "commit": "1102-blenderfunctions",
+    "precmd": [],
+    "params": {
+        "is_video": {
+            "false": {
+                "dataset": "coco-stuff-blurred"
+            },
+            "true": {
+                "dataset": "sa-v"
+            }
+        },
+        "num_samples": 100,
+        "save_first": 10,
+        "checkpoint": [
+            "/private/home/hadyelsahar/work/code/videoseal/2024_logs_large-exp/1111-videoseal0.2-archsearch-4nodes/_attenuation=None_nbits=64_finetune_detector_start=800_embedder_model=unet_small2_quant/checkpoint.pth",
+            "/private/home/hadyelsahar/work/code/videoseal/2024_logs_large-exp/1111-videoseal0.2-archsearch-4nodes/_attenuation=None_nbits=64_finetune_detector_start=800_embedder_model=unet_small2_quant/checkpoint_500.pth",
+            "/private/home/hadyelsahar/work/code/videoseal/2024_logs_large-exp/1111-videoseal0.2-archsearch-4nodes/_attenuation=None_nbits=64_finetune_detector_start=800_embedder_model=unet_small2_quant/checkpoint_800.pth",
+            "/private/home/hadyelsahar/work/code/videoseal/2024_logs_large-exp/1111-videoseal0.2-archsearch-4nodes/_attenuation=None_nbits=64_finetune_detector_start=500_embedder_model=unet_small2_quant/checkpoint.pth",
+            "/private/home/hadyelsahar/work/code/videoseal/2024_logs_large-exp/1111-videoseal0.2-archsearch-4nodes/_attenuation=None_nbits=64_finetune_detector_start=1000_embedder_model=unet_small2_quant/checkpoint.pth",
+        ]
+    },
+    "machine": {
+        "constraint": "volta32gb",
+        "gres": "gpu:1",
+        "nodes": "1",
+        "tasks-per-node": "1",
+        "partition": "learnfair",
+        "cpus-per-task": "10",
+        "time": 4320,
+        "mem-per-cpu": "10G"
+    },
+    "meta": {
+        "group": "",
+        "name": "1111_vseal0.2vs0.1_evalfull",
+        "dest-arg": "yes",
+        "dest-name": "output_dir"
+    }
+}
