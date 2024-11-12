@@ -7,13 +7,18 @@ from pathlib import Path
 from typing import BinaryIO, Tuple
 
 import numpy as np
+from omegaconf import OmegaConf
 import torch
 import triton_python_backend_utils as pb_utils  # type: ignore
 from decord import VideoReader, cpu
 
-from videoseal.demo.triton import TritonPythonModelBase
-from videoseal.demo.utils import load_video_wam
 from videoseal.demo.io import DemoVideoBatchReader, DemoVideoWriter
+from videoseal.demo.triton import TritonPythonModelBase
+from videoseal.demo.utils import (
+    decode_message_tensor,
+    encode_message_tensor,
+    load_video_wam,
+)
 
 
 class TritonPythonModel(TritonPythonModelBase):
@@ -28,10 +33,20 @@ class TritonPythonModel(TritonPythonModelBase):
         config_path = checkpoints_dir / "unet.yaml"
         checkpoint_path = checkpoints_dir / "unet.pt"
 
-        self.wam = load_video_wam(config_path, checkpoint_path)
+        self.wam, self.config = load_video_wam(config_path, checkpoint_path)
         self.wam.eval()
         self.wam.to(self.device)
 
+        self.key_dtype = pb_utils.triton_string_to_numpy(
+            pb_utils.get_output_config_by_name(json.loads(args["model_config"]), "key")[
+                "data_type"
+            ]
+        )
+        self.message_dtype = pb_utils.triton_string_to_numpy(
+            pb_utils.get_output_config_by_name(
+                json.loads(args["model_config"]), "message"
+            )["data_type"]
+        )
         self.watermarked_video_dtype = pb_utils.triton_string_to_numpy(
             pb_utils.get_output_config_by_name(
                 json.loads(args["model_config"]), "watermarked_video"
@@ -49,7 +64,14 @@ class TritonPythonModel(TritonPythonModelBase):
     @torch.inference_mode()
     @torch.no_grad()
     def _process_request(self, request):
+        n_message_bits = self.config.args.nbits
         video_b64 = self.get_singleton_input(request, "video")
+        key = self.get_singleton_input(request, "key") or self._random_binary_string(
+            28
+        ).encode("utf-8")
+        message = self.get_singleton_input(request, "message") or (
+            self._random_binary_string(n_message_bits - len(key)).encode("utf-8")
+        )
         num_pixels_per_batch = self.get_singleton_input(
             request, "num_pixels_per_batch"
         ) or (8 * 1024 * 1024)
@@ -58,10 +80,16 @@ class TritonPythonModel(TritonPythonModelBase):
         )
         if (
             video_b64 is None
+            or not isinstance(key, bytes)
+            or not isinstance(message, bytes)
             or not isinstance(num_pixels_per_batch, int)
             or not isinstance(num_video_reader_threads, int)
         ):
             return
+
+        message_tensor = encode_message_tensor(
+            key.decode("utf-8"), message.decode("utf-8"), nbits=n_message_bits
+        )
 
         with ExitStack() as stack:
             video_io = stack.push(io.BytesIO(base64.b64decode(video_b64)))
@@ -72,6 +100,7 @@ class TritonPythonModel(TritonPythonModelBase):
                 video_io,
                 watermarked_video_io,
                 xray_video_io,
+                message_tensor,
                 num_pixels_per_batch,
                 num_video_reader_threads,
             )
@@ -80,6 +109,8 @@ class TritonPythonModel(TritonPythonModelBase):
                 watermarked_video_io.getvalue()
             ).decode("utf-8")
             xray_video_b64 = base64.b64encode(xray_video_io.getvalue()).decode("utf-8")
+
+        output_key, output_message = decode_message_tensor(message_tensor)
 
         return pb_utils.InferenceResponse(
             output_tensors=[
@@ -93,6 +124,14 @@ class TritonPythonModel(TritonPythonModelBase):
                     "xray_video",
                     np.array([xray_video_b64], dtype=self.xray_video_dtype),
                 ),
+                pb_utils.Tensor(
+                    "key",
+                    np.array([output_key], dtype=self.key_dtype),
+                ),
+                pb_utils.Tensor(
+                    "message",
+                    np.array([output_message], dtype=self.message_dtype),
+                ),
             ]
         )
 
@@ -101,6 +140,7 @@ class TritonPythonModel(TritonPythonModelBase):
         video_io: BinaryIO,
         watermarked_video_io: BinaryIO,
         xray_video_io: BinaryIO,
+        message: torch.Tensor,
         num_pixels_per_batch: int,
         num_video_reader_threads: int,
     ):
@@ -121,13 +161,19 @@ class TritonPythonModel(TritonPythonModelBase):
             )
             for frames in DemoVideoBatchReader(video_reader, batch_size=batch_size):
                 frames = torch.from_numpy(frames).to(self.device)
-                watermarked_frames, xray_frames = self._embed(frames)
+                watermarked_frames, xray_frames = self._embed(frames, message)
                 watermarked_video_writer.write(watermarked_frames.cpu().numpy())
                 xray_video_writer.write(xray_frames.cpu().numpy())
 
-    def _embed(self, frames: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def _embed(
+        self, frames: torch.Tensor, message: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         normalized_frames = frames.float().permute(0, 3, 1, 2) / 255.0
-        outputs = self.wam.embed(normalized_frames, is_video=True)
+        outputs = self.wam.embed(
+            normalized_frames,
+            msgs=message.unsqueeze(0),
+            is_video=True,
+        )
         normalized_watermarked_frames = outputs["imgs_w"]
         normalized_xray_frames = self._get_xray(
             normalized_frames, normalized_watermarked_frames
@@ -154,3 +200,6 @@ class TritonPythonModel(TritonPythonModelBase):
         )
         # Normalize in-place to save memory / time
         return vid_xray.subtract_(min_vals).divide_(max_vals.subtract_(min_vals))
+
+    def _random_binary_string(self, length: int) -> str:
+        return "".join([str(bit) for bit in np.random.randint(0, 2, length)])

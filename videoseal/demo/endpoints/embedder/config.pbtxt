@@ -29,6 +29,18 @@ input [
     data_type: TYPE_UINT8
     dims: [1]
     optional: true
+  },
+  {
+    name: "key"
+    data_type: TYPE_STRING
+    dims: [1]
+    optional: true
+  },
+  {
+    name: "message"
+    data_type: TYPE_STRING
+    dims: [1]
+    optional: true
   }
 ]
 output [
@@ -39,6 +51,16 @@ output [
   },
   {
     name: "xray_video"
+    data_type: TYPE_STRING
+    dims: [1]
+  },
+  {
+    name: "key"
+    data_type: TYPE_STRING
+    dims: [1]
+  },
+  {
+    name: "message"
     data_type: TYPE_STRING
     dims: [1]
   }
