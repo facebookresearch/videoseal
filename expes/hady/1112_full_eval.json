@@ -16,11 +16,12 @@
         "num_samples": 100,
         "save_first": 10,
         "checkpoint": [
+            "/private/home/hadyelsahar/work/code/videoseal/2024_logs/videoseal0.1/_lambda_d=0.5_lambda_i=0.0_optimizer=AdamW,lr=1e-4_videowam_step_size=4_video_start=500_embedder_model=hidden/checkpoint.pth",
             "/private/home/hadyelsahar/work/code/videoseal/2024_logs_large-exp/1111-videoseal0.2-archsearch-4nodes/_attenuation=None_nbits=64_finetune_detector_start=800_embedder_model=unet_small2_quant/checkpoint.pth",
-            "/private/home/hadyelsahar/work/code/videoseal/2024_logs_large-exp/1111-videoseal0.2-archsearch-4nodes/_attenuation=None_nbits=64_finetune_detector_start=800_embedder_model=unet_small2_quant/checkpoint_500.pth",
-            "/private/home/hadyelsahar/work/code/videoseal/2024_logs_large-exp/1111-videoseal0.2-archsearch-4nodes/_attenuation=None_nbits=64_finetune_detector_start=800_embedder_model=unet_small2_quant/checkpoint_800.pth",
+            "/private/home/hadyelsahar/work/code/videoseal/2024_logs_large-exp/1111-videoseal0.2-archsearch-4nodes/_attenuation=None_nbits=64_finetune_detector_start=800_embedder_model=unet_small2_quant/checkpoint500.pth",
+            "/private/home/hadyelsahar/work/code/videoseal/2024_logs_large-exp/1111-videoseal0.2-archsearch-4nodes/_attenuation=None_nbits=64_finetune_detector_start=800_embedder_model=unet_small2_quant/checkpoint800.pth",
             "/private/home/hadyelsahar/work/code/videoseal/2024_logs_large-exp/1111-videoseal0.2-archsearch-4nodes/_attenuation=None_nbits=64_finetune_detector_start=500_embedder_model=unet_small2_quant/checkpoint.pth",
-            "/private/home/hadyelsahar/work/code/videoseal/2024_logs_large-exp/1111-videoseal0.2-archsearch-4nodes/_attenuation=None_nbits=64_finetune_detector_start=1000_embedder_model=unet_small2_quant/checkpoint.pth",
+            "/private/home/hadyelsahar/work/code/videoseal/2024_logs_large-exp/1111-videoseal0.2-archsearch-4nodes/_attenuation=None_nbits=64_finetune_detector_start=1000_embedder_model=unet_small2_quant/checkpoint.pth"
         ]
     },
     "machine": {
@@ -35,7 +36,7 @@
     },
     "meta": {
         "group": "",
-        "name": "1111_vseal0.2vs0.1_evalfull",
+        "name": "1112_vseal0.2vs0.1_evalfull",
         "dest-arg": "yes",
         "dest-name": "output_dir"
     }
