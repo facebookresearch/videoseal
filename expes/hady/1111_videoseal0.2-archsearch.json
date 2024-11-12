@@ -84,7 +84,7 @@
         ],
         "attenuation": [
             "None",
-            "JND_1_1"
+            "jnd_1_1"
         ],
         "balanced": [
             true
