@@ -6,9 +6,6 @@
     "precmd": [],
     "params": {
         "is_video": {
-            "false": {
-                "dataset": "coco-stuff-blurred"
-            },
             "true": {
                 "dataset": "sa-v"
             }
