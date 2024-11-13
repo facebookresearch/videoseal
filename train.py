@@ -100,8 +100,6 @@ def get_parser():
        help="Name of the extractor model")
     aa("--extractor_model", type=str, default=None,
        help="Name of the extractor model")
-    aa("--layerscale_init", type=float, default=None,
-         help="Initial value for the layer scale")
 
     group = parser.add_argument_group('Augmentation parameters')
     aa("--augmentation_config", type=str, default="configs/all_augs.yaml",
@@ -245,8 +243,7 @@ def main(params):
     params.embedder_model = params.embedder_model or embedder_cfg.model
     embedder_params = embedder_cfg[params.embedder_model]
     embedder = build_embedder(params.embedder_model,
-                            embedder_params, params.nbits,
-                            layerscale_init=params.layerscale_init,
+                            embedder_params, params.nbits
                 )
     print(embedder)
     print(
