@@ -154,13 +154,13 @@ def get_parser():
     aa("--extractor_model", type=str, default=None,
        help="Name of the extractor model")
     aa("--layerscale_init", type=float, default=None,
-         help="Initial value for the layer scale")
+       help="Initial value for the layer scale")
 
     group = parser.add_argument_group('Augmentation parameters')
     aa("--augmentation_config", type=str, default="configs/all_augs.yaml",
        help="Path to the augmentation config file")
     aa("--num_augs", type=int, default=1,
-         help="Number of augmentations to apply")
+       help="Number of augmentations to apply")
 
     group = parser.add_argument_group('Image and watermark parameters')
     aa("--nbits", type=int, default=32,
@@ -304,9 +304,9 @@ def main(params):
     params.embedder_model = params.embedder_model or embedder_cfg.model
     embedder_params = embedder_cfg[params.embedder_model]
     embedder = build_embedder(params.embedder_model,
-                            embedder_params, params.nbits,
-                            layerscale_init=params.layerscale_init,
-                )
+                              embedder_params, params.nbits,
+                              layerscale_init=params.layerscale_init,
+                              )
     print(embedder)
     print(
         f'embedder: {sum(p.numel() for p in embedder.parameters() if p.requires_grad) / 1e6:.1f}M parameters')
@@ -532,10 +532,6 @@ def main(params):
     start_time = time.time()
     for epoch in range(start_epoch, params.epochs):
 
-
-<< << << < HEAD
-        log_stats = {'epoch': epoch}
-
         # freeze embdder, turn off embddder loss and refresh DDP
         if epoch == params.finetune_detector_start:
             wam_ddp, image_detection_loss = freeze_embedder(
@@ -545,8 +541,6 @@ def main(params):
             else:
                 wam = wam_ddp
 
-== == == =
->>>>>> > 1b99dda45bf6ba324c28f4b1e468b373e61afb25
         epoch_modality = modalities[epoch]
         assert epoch_modality in [Modalities.IMAGE, Modalities.VIDEO]
         log_stats = {'epoch': epoch, 'modality': epoch_modality}
