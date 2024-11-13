@@ -101,27 +101,6 @@ def freeze_embedder(wam: Wam, image_detection_loss: LPIPSWithDiscriminator, para
     return wam, image_detection_loss
 
 
-def get_dataset_parser(parser):
-    """
-    Adds dataset-related arguments to the parser.
-    Args:
-        parser (argparse.ArgumentParser): The parser to add arguments to.
-    """
-    group = parser.add_argument_group('Dataset parameters')
-    group.add_argument("--image_dataset", type=str,
-                       choices=["coco", "coco-stuff-blurred"], help="Name of the image dataset.")
-    group.add_argument("--video_dataset", type=str,
-                       choices=["sa-v"], help="Name of the video dataset.")
-    group.add_argument("--prop_img_vid", type=float, default=0.5,
-                       help="Percentage of images in the hybrid dataset 0.5 means for each 5 epochs of images 5 video epoch is made. Only applicable if both --image_dataset and --video_dataset are provided.")
-    group.add_argument("--video_start", type=int, default=50,
-                       help="Number of epochs before starting video training")
-    group.add_argument("--finetune_detector_start", type=int, default=1000,
-                       help="Number of epochs afterwhich the generator is frozen and detector is finetuned")
-
-    return parser
-
-
 def get_parser():
     parser = argparse.ArgumentParser()
 
@@ -137,6 +116,8 @@ def get_parser():
         help="Percentage of images in the hybrid dataset 0.5 means for each 5 epochs of images 5 video epoch is made. Only applicable if both --image_dataset and --video_dataset are provided.")
     aa("--video_start", type=int, default=50,
         help="Number of epochs before starting video training")
+    aa("--finetune_detector_start", type=int, default=1000,
+       help="Number of epochs afterwhich the generator is frozen and detector is finetuned")
 
     group = parser.add_argument_group('Experiments parameters')
     aa("--output_dir", type=str, default="output/",
@@ -304,9 +285,7 @@ def main(params):
     params.embedder_model = params.embedder_model or embedder_cfg.model
     embedder_params = embedder_cfg[params.embedder_model]
     embedder = build_embedder(params.embedder_model,
-                              embedder_params, params.nbits,
-                              layerscale_init=params.layerscale_init,
-                              )
+                              embedder_params, params.nbits)
     print(embedder)
     print(
         f'embedder: {sum(p.numel() for p in embedder.parameters() if p.requires_grad) / 1e6:.1f}M parameters')
