@@ -1,21 +1,21 @@
-from functools import partial
-from collections import OrderedDict
-from math import ceil
-from os.path import join
 import argparse
 import datetime
 import json
-import numpy as np
 import os
 import shutil
 import subprocess
 import tempfile
 import time
-import pandas as pd
+from collections import OrderedDict
+from functools import partial
+from math import ceil
+from os.path import join
 
+import numpy as np
+import pandas as pd
 from src.date import GMT1
-from src.functions import cmdPre, loadlist, savelist
-from src.functions import run_command, getuser, replaceMacros, bool_flag, linearize_params
+from src.functions import (bool_flag, cmdPre, getuser, linearize_params,
+                           loadlist, replaceMacros, run_command, savelist)
 from src.params import enumerateParams, generateExt
 
 basename = os.path.basename
@@ -103,7 +103,10 @@ def ckpt_default():
     year = datetime.date.today().year
     user = getuser()
     if IS_FAIR_CLUSTER:
-        return f"/checkpoint/{user}/{year}_logs/"
+        if user == "hadyelsahar":
+            return f"/large_experiments/meres/{user}/{year}_logs/"
+        else:
+            return f"/checkpoint/{user}/{year}_logs/"
     elif IS_AWS_CLUSTER:
         return f"/fsx-checkpoints/{user}/{year}_logs/"
     else:

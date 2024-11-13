@@ -1,0 +1,86 @@
+{
+    "cmd": "python train.py",
+    "git": "/private/home/hadyelsahar/work/code/videoseal/videoseal",
+    "preload": "MKL_THREADING_LAYER=GNU",
+    "commit": "1102-blenderfunctions",
+    "precmd": [],
+    "params": {
+        "image_dataset": "coco",
+        "video_dataset": "sa-v",
+        "augmentation_config": "configs/reasonable_augs.yaml",
+        "embedder_model": [
+            "unet_small2_quant",
+            "unet_medium2_quant",
+            "unet_medium_deep2_quant",
+            "unet_large2_quant"
+        ],
+        "extractor_model": [
+            "sam_tiny",
+            "sam_small"
+        ],
+        "img_size": 256,
+        "img_size_extractor": 256,
+        "iter_per_epoch": 1000,
+        "blending_method": [
+            "additive"
+        ],
+        "video_start": [
+            1000
+        ],
+        "videowam_step_size": [
+            4
+        ],
+        "iter_per_valid": 10,
+        "batch_size": 32,
+        "batch_size_eval": 32,
+        "full_eval_freq": 5,
+        "eval_freq": 5,
+        "prop_img_vid": [
+            0.5
+        ],
+        "epochs": 1000,
+        "optimizer": [
+            "AdamW,lr=1e-4"
+        ],
+        "scheduler": "CosineLRScheduler,lr_min=1e-6,t_initial=1000,warmup_lr_init=1e-8,warmup_t=20",
+        "seed": [
+            444
+        ],
+        "perceptual_loss": "mse",
+        "lambda_i": [
+            0.5
+        ],
+        "lambda_d": [
+            0.0,
+            0.5
+        ],
+        "lambda_det": 0.0,
+        "lambda_dec": 1.0,
+        "nbits": 64,
+        "scaling_i": 1.0,
+        "scaling_w": [
+            0.1
+        ],
+        "balanced": [
+            true
+        ],
+        "workers": 0,
+        "master_port": "__SAMPLE__(10000, 20000)"
+    },
+    "machine": {
+        "constraint": "volta32gb",
+        "gres": "gpu:8",
+        "nodes": "1",
+        "tasks-per-node": "8",
+        "partition": "devlab,learnaccel,nllb,ust",
+        "cpus-per-task": "10",
+        "time": 4320,
+        "mem-per-cpu": "20G"
+    },
+    "meta": {
+        "group": "",
+        "name": "1105-videoseal0.2-scalinglaws",
+        "dest-arg": "yes",
+        "dest-name": "output_dir"
+    }
+}

@@ -1,0 +1,35 @@
+{
+    "cmd": "python -m videoseal.evals.full",
+    "git": "git@github.com:fairinternal/videoseal.git",
+    "preload": "MKL_THREADING_LAYER=GNU",
+    "commit": "1102-blenderfunctions",
+    "precmd": [],
+    "params": {
+        "is_video": {
+            "true": {
+                "dataset": "sa-v"
+            }
+        },
+        "num_samples": 100,
+        "save_first": 10,
+        "checkpoint": [
+            "/private/home/hadyelsahar/work/code/videoseal/2024_logs/1016-hybrid-vs-ours/_lambda_d=0.5_lambda_i=0.5_optimizer=AdamW,lr=1e-4_videowam_step_size=4_video_start=500_embedder_model=unet_small2/checkpoint.pth"
+        ]
+    },
+    "machine": {
+        "constraint": "volta32gb",
+        "gres": "gpu:1",
+        "nodes": "1",
+        "tasks-per-node": "1",
+        "partition": "learnfair",
+        "cpus-per-task": "10",
+        "time": 4320,
+        "mem-per-cpu": "10G"
+    },
+    "meta": {
+        "group": "",
+        "name": "1111_vseal0.1_evalfull",
+        "dest-arg": "yes",
+        "dest-name": "output_dir"
+    }
+}
