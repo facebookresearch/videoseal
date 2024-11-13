@@ -1,0 +1,16 @@
+{
+  "inputs": [
+    {
+      "name": "video",
+      "datatype": "BYTES",
+      "shape": [1],
+      "data": ["audiobox_watermarked.mp4"]
+    },
+    {
+      "name": "key",
+      "datatype": "BYTES",
+      "shape": [1],
+      "data": ["0000100001110110011001001000"]
+    }
+  ]
+}

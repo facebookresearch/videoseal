@@ -73,7 +73,7 @@ device = torch.device(
 
 def freeze_embedder(wam: Wam, image_detection_loss: LPIPSWithDiscriminator, params):
     """
-    To be called only once when you need to freeze the embedder 
+    To be called only once when you need to freeze the embedder
     Freezes the embedder of a model
     Turnoff losses associated to the embedder
     Reinitializes the Distributed Data Parallel (DDP) .
@@ -128,21 +128,23 @@ def get_parser():
     def aa(*args, **kwargs):
         group.add_argument(*args, **kwargs)
 
+    group = parser.add_argument_group('Dataset parameters')
+    aa("--image_dataset", type=str,
+        choices=["coco", "coco-stuff-blurred"], help="Name of the image dataset.")
+    aa("--video_dataset", type=str,
+        choices=["sa-v"], help="Name of the video dataset.")
+    aa("--prop_img_vid", type=float, default=0.5,
+        help="Percentage of images in the hybrid dataset 0.5 means for each 5 epochs of images 5 video epoch is made. Only applicable if both --image_dataset and --video_dataset are provided.")
+    aa("--video_start", type=int, default=50,
+        help="Number of epochs before starting video training")
+
     group = parser.add_argument_group('Experiments parameters')
-
-    # Dataset
-    parser = get_dataset_parser(parser)
-
     aa("--output_dir", type=str, default="output/",
        help="Output directory for logs and images (Default: /output)")
 
-    group = parser.add_argument_group('Config paths')
+    group = parser.add_argument_group('Embedder and extractor config')
     aa("--embedder_config", type=str, default="configs/embedder.yaml",
        help="Path to the embedder config file")
-    aa("--augmentation_config", type=str, default="configs/all_augs.yaml",
-       help="Path to the augmentation config file")
-    aa("--num_augs", type=int, default=1,
-       help="Number of augmentations to apply")
     aa("--extractor_config", type=str, default="configs/extractor.yaml",
        help="Path to the extractor config file")
     aa("--attenuation_config", type=str, default="configs/attenuation.yaml",
@@ -151,6 +153,14 @@ def get_parser():
        help="Name of the extractor model")
     aa("--extractor_model", type=str, default=None,
        help="Name of the extractor model")
+    aa("--layerscale_init", type=float, default=None,
+         help="Initial value for the layer scale")
+
+    group = parser.add_argument_group('Augmentation parameters')
+    aa("--augmentation_config", type=str, default="configs/all_augs.yaml",
+       help="Path to the augmentation config file")
+    aa("--num_augs", type=int, default=1,
+         help="Number of augmentations to apply")
 
     group = parser.add_argument_group('Image and watermark parameters')
     aa("--nbits", type=int, default=32,
@@ -294,7 +304,9 @@ def main(params):
     params.embedder_model = params.embedder_model or embedder_cfg.model
     embedder_params = embedder_cfg[params.embedder_model]
     embedder = build_embedder(params.embedder_model,
-                              embedder_params, params.nbits)
+                            embedder_params, params.nbits,
+                            layerscale_init=params.layerscale_init,
+                )
     print(embedder)
     print(
         f'embedder: {sum(p.numel() for p in embedder.parameters() if p.requires_grad) / 1e6:.1f}M parameters')
@@ -519,6 +531,9 @@ def main(params):
     print('training...')
     start_time = time.time()
     for epoch in range(start_epoch, params.epochs):
+
+
+<< << << < HEAD
         log_stats = {'epoch': epoch}
 
         # freeze embdder, turn off embddder loss and refresh DDP
@@ -530,10 +545,13 @@ def main(params):
             else:
                 wam = wam_ddp
 
+== == == =
+>>>>>> > 1b99dda45bf6ba324c28f4b1e468b373e61afb25
         epoch_modality = modalities[epoch]
         assert epoch_modality in [Modalities.IMAGE, Modalities.VIDEO]
+        log_stats = {'epoch': epoch, 'modality': epoch_modality}
+
         epoch_train_loader = video_train_loader if epoch_modality == Modalities.VIDEO else image_train_loader
-        epoch_val_loader = video_val_loader if epoch_modality == Modalities.VIDEO else image_val_loader
 
         if scheduler is not None:
             scheduler.step(epoch)
@@ -543,7 +561,6 @@ def main(params):
 
         if params.distributed:
             epoch_train_loader.sampler.set_epoch(epoch)
-            epoch_val_loader.sampler.set_epoch(epoch)
 
         train_stats = train_one_epoch(
             wam_ddp, optimizers, epoch_train_loader, epoch_modality, image_detection_loss, epoch, params, tensorboard=tensorboard)
@@ -794,11 +811,14 @@ def eval_one_epoch(
         for acc_it in range(accumulation_steps):
             imgs, masks = batch_imgs[acc_it], batch_masks[acc_it]
 
+            imgs = imgs.to(device)
+            masks = masks.to(device)
+
             # forward embedder
             embed_time = time.time()
             outputs = wam.embed(imgs, is_video=is_video)
             embed_time = (time.time() - embed_time) / imgs.shape[0]
-            msgs = outputs["msgs"]  # b k
+            msgs = outputs["msgs"].to(device)  # b k
             imgs_w = outputs["imgs_w"]  # b c h w
 
             if (epoch % params.saveimg_freq == 0) and it == acc_it == 0 and udist.is_main_process():

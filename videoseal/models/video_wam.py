@@ -233,6 +233,7 @@ class VideoWam(Wam):
         }
         return outputs
 
+    @torch.no_grad()
     def detect(
         self,
         imgs: torch.Tensor,
