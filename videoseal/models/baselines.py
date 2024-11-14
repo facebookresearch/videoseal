@@ -64,7 +64,7 @@ class BaselineHiddenExtractor(Extractor):
         """
         imgs = self.preprocess(imgs)
         msgs = self.decoder(imgs)  # b k
-        # add +1 to the last dimension to make it b k+1
+        # add +1 to the last dimension to make it b k+1 (WAM compatible)
         msgs = torch.cat([torch.zeros(msgs.size(0), 1).to(msgs.device), msgs], dim=1)
         return msgs
 
@@ -124,7 +124,73 @@ class BaselineMBRSExtractor(Extractor):
         """
         imgs = self.preprocess(imgs)
         msgs = self.decoder(imgs)  # b k
-        # add +1 to the last dimension to make it b k+1
+        # add +1 to the last dimension to make it b k+1 (WAM compatible)
+        msgs = torch.cat([torch.zeros(msgs.size(0), 1).to(msgs.device), msgs], dim=1)
+        return msgs
+
+
+class BaselineCINEmbedder(Embedder):
+    def __init__(
+        self,
+        encoder_path: str
+    ) -> None:
+        super(BaselineCINEmbedder, self).__init__()
+        self.encoder = torch.jit.load(encoder_path).eval()
+        self.nbits = 30
+        # the network is trained with the following normalization
+        self.preprocess = transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
+        self.postprocess = transforms.Normalize(mean=[-1, -1, -1],std=[2, 2, 2])
+
+    def get_random_msg(self, bsz: int = 1, nb_repetitions=1) -> torch.Tensor:
+        return torch.randint(0, 2, (bsz, self.nbits))
+
+    def forward(
+        self,
+        imgs: torch.Tensor,
+        msgs: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        Args:
+            imgs: (torch.Tensor) Batched images with shape BxCxHxW
+            msgs: (torch.Tensor) Batched messages with shape BxL, or empty tensor.
+        Returns:
+            The watermarked images.
+        """
+        msgs = msgs.float()
+        imgs_w = self.encoder(self.preprocess(imgs), msgs)
+        imgs_w = self.postprocess(imgs_w)
+        return imgs_w - imgs
+
+
+class BaselineCINExtractor(Extractor):
+    def __init__(
+        self,
+        decoder_path: str,
+    ) -> None:
+        """
+        CIN decoder:
+        - works at resolution 128x128
+        - outputs msgs ≈ between 0,1
+        """
+        super(BaselineCINExtractor, self).__init__()
+        self.decoder = torch.jit.load(decoder_path).eval()
+        # the network is trained with the following normalization
+        self.preprocess = transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
+
+    def forward(
+        self,
+        imgs: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        Args:
+            imgs: (torch.Tensor) Batched images with shape BxCxHxW
+        Returns:
+            The extracted messages.
+        """
+        imgs = self.preprocess(imgs)
+        # scale the output to be between -1,1
+        msgs = 2 * self.decoder(imgs) - 1 # b k
+        # add +1 to the last dimension to make it b k+1 (WAM compatible)
         msgs = torch.cat([torch.zeros(msgs.size(0), 1).to(msgs.device), msgs], dim=1)
         return msgs
 
@@ -152,6 +218,13 @@ def build_baseline(
         decoder_path = '/checkpoint/pfz/projects/videoseal/baselines/mbrs_256_m256_decoder.pt'
         embedder = BaselineMBRSEmbedder(encoder_path)
         extractor = BaselineMBRSExtractor(decoder_path)
+    elif method == 'cin':
+        scaling_w = 1.0
+        img_size = 128
+        encoder_path = '/checkpoint/pfz/projects/videoseal/baselines/cin_nsm_encoder.pt'
+        decoder_path = '/checkpoint/pfz/projects/videoseal/baselines/cin_nsm_decoder.pt'
+        embedder = BaselineCINEmbedder(encoder_path)
+        extractor = BaselineCINExtractor(decoder_path)
     else:
         raise ValueError(f'Unknown method: {method}')
     return VideoWam(
