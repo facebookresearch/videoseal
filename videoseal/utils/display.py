@@ -33,7 +33,7 @@ def save_img(img: Tensor, out_path: str) -> None:
     img_pil = torchvision.transforms.ToPILImage()(img)
     img_pil.save(out_path)
 
-def save_vid(vid: Tensor, out_path: str, fps: int) -> None:
+def save_vid(vid: Tensor, out_path: str, fps: int, crf: int = 23) -> None:
     """
     Saves a video tensor to a file.
 
@@ -45,7 +45,7 @@ def save_vid(vid: Tensor, out_path: str, fps: int) -> None:
                   W is the width.
     out_path (str): The output path for the saved video file.
     fps (int): Frames per second of the output video.
-    normalize (bool): Flag to determine whether to normalize the video tensor.
+    crf (int): Constant Rate Factor for the output video (default is 23).
 
     Raises:
     AssertionError: If the input tensor does not have the correct dimensions or channel size.
@@ -62,7 +62,8 @@ def save_vid(vid: Tensor, out_path: str, fps: int) -> None:
     vid = vid.to(torch.uint8).cpu()
 
     # Write the video file
-    torchvision.io.write_video(out_path, vid, fps=fps)
+    options = {"crf": f"{crf}"}
+    torchvision.io.write_video(out_path, vid, fps=fps, video_codec="libx264", options=options)
 
 
 def get_fps(video_path: Union[str, os.PathLike]) -> tuple:

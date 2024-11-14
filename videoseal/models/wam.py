@@ -134,6 +134,7 @@ class Wam(nn.Module):
         self,
         imgs: torch.Tensor,
         msgs: torch.Tensor = None,
+        interpolation: dict = {"mode": "bilinear", "align_corners": False, "antialias": False},
     ) -> dict:
         """
         Generates watermarked images from the input images and messages (used for inference).
@@ -155,7 +156,7 @@ class Wam(nn.Module):
         imgs_res = imgs.clone()
         if imgs.shape[-2:] != (self.img_size, self.img_size):
             imgs_res = F.interpolate(imgs, size=(self.img_size, self.img_size), 
-                                     mode="bilinear", align_corners=False)
+                                     **interpolation)
         imgs_res = imgs_res.to(self.device)
 
         # generate watermarked images
@@ -167,7 +168,7 @@ class Wam(nn.Module):
         # interpolate back
         if imgs.shape[-2:] != (self.img_size, self.img_size):
             preds_w = F.interpolate(preds_w, size=imgs.shape[-2:], 
-                                    mode="bilinear", align_corners=False)
+                                    **interpolation)
         preds_w = preds_w.to(imgs.device)
         imgs_w = self.blend(imgs, preds_w)
         
