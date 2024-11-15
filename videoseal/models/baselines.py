@@ -206,6 +206,7 @@ def build_baseline(
         chunk_size: int = 1,
         step_size: int = 1,
     ) -> VideoWam:
+    # /checkpoint/pfz/projects/videoseal/baselines/readme.md
     if method == 'hidden':
         scaling_w = 0.2
         encoder_path = '/checkpoint/pfz/projects/videoseal/baselines/hidden_encoder_48b.pt'
