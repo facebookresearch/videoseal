@@ -1,15 +1,15 @@
 
 import os
 import warnings
-from decord import VideoReader, cpu
 
 import torch
 import torch.nn.functional as F
+from decord import VideoReader, cpu
 from torch.utils.data import DataLoader, DistributedSampler
 
-from .transforms import default_transform
-from .datasets import ImageFolder, CocoImageIDWrapper, VideoDataset
 from ..utils.dist import is_dist_avail_and_initialized
+from .datasets import CocoImageIDWrapper, ImageFolder, VideoDataset
+from .transforms import default_transform
 
 
 def load_video(fname, num_workers=8):
@@ -39,6 +39,7 @@ def load_video(fname, num_workers=8):
     vid_np = vid_np.transpose(0, 3, 1, 2) / 255.0  # normalize to 0 - 1
     vid_pt = torch.from_numpy(vid_np).float()
     return vid_pt
+
 
 def get_dataloader(
     data_dir: str,
@@ -118,8 +119,12 @@ def get_dataloader_segmentation(
 ) -> DataLoader:
     """ Get dataloader for COCO dataset. """
     # Initialize the CocoDetection dataset
-    dataset = CocoImageIDWrapper(root=data_dir, annFile=ann_file, transform=transform, mask_transform=mask_transform,
-                                 random_nb_object=random_nb_object, multi_w=multi_w, max_nb_masks=max_nb_masks)
+    if ann_file is not None:
+        dataset = CocoImageIDWrapper(root=data_dir, annFile=ann_file, transform=transform, mask_transform=mask_transform,
+                                     random_nb_object=random_nb_object, multi_w=multi_w, max_nb_masks=max_nb_masks)
+    else:
+        dataset = ImageFolder(
+            path=data_dir, transform=transform, mask_transform=mask_transform)
 
     if is_dist_avail_and_initialized():
         sampler = DistributedSampler(dataset, shuffle=shuffle)
