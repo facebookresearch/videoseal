@@ -6,8 +6,7 @@
     "precmd": [],
     "params": {
         "image_dataset": [
-            "sa-1b-resized",
-            "coco-stuff-blurred"
+            "sa-1b-resized"
         ],
         "video_dataset": "sa-v",
         "augmentation_config": [
@@ -46,7 +45,8 @@
         ],
         "epochs": 1000,
         "optimizer": [
-            "AdamW,lr=1e-4"
+            "AdamW,lr=1e-4",
+            "AdamW,lr=1e-5"
         ],
         "scheduler": "CosineLRScheduler,lr_min=1e-6,t_initial=1000,warmup_lr_init=1e-8,warmup_t=20",
         "seed": [
@@ -65,7 +65,8 @@
             0.5
         ],
         "lambda_d": [
-            0.1
+            0.1,
+            0.5
         ],
         "lambda_det": [
             0.0
@@ -76,7 +77,8 @@
         ],
         "scaling_i": 1.0,
         "scaling_w": [
-            0.5
+            0.5,
+            0.1
         ],
         "attenuation": [
             "None"
