@@ -6,6 +6,10 @@ ifndef CONDA_ENV
 	CONDA_ENV:=videoseal-deploy
 endif
 
+ifndef CHECKPOINT_DIR
+	CHECKPOINT_DIR:=/checkpoint/radkins/videoseal/v0.1
+endif
+
 BUILD_DIR:=$(BUILD_DIR)/build
 MODEL_DIR:=$(BUILD_DIR)/models/embedder
 
@@ -34,5 +38,5 @@ $(MODEL_DIR)/1/model.py: model.py
 
 $(MODEL_DIR)/1/checkpoints/.marker:
 	mkdir -p $$(dirname $@)
-	cp /checkpoint/radkins/videoseal/* $$(dirname $@)
+	cp $(CHECKPOINT_DIR)/* $$(dirname $@)
 	touch $@

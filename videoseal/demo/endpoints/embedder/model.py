@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import BinaryIO, Tuple
 
 import numpy as np
-from omegaconf import OmegaConf
 import torch
 import triton_python_backend_utils as pb_utils  # type: ignore
 from decord import VideoReader, cpu
@@ -30,8 +29,8 @@ class TritonPythonModel(TritonPythonModelBase):
             args["model_version"],
             "checkpoints",
         )
-        config_path = checkpoints_dir / "unet.yaml"
-        checkpoint_path = checkpoints_dir / "unet.pt"
+        config_path = checkpoints_dir / "model.yaml"
+        checkpoint_path = checkpoints_dir / "model.pt"
 
         self.wam, self.config = load_video_wam(config_path, checkpoint_path)
         self.wam.eval()
