@@ -1,5 +1,4 @@
 train_dir: /datasets01/COCO-Stuff/042623/face_blurred/train_img/
 train_annotation_file: null
-val_dir: /datasets01/COCO-Stuff/042623/face_blurred/valid_img/
+val_dir: /datasets01/COCO-Stuff/042623/face_blurred/val_img/
 val_annotation_file: null
-
