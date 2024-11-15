@@ -1,25 +1,25 @@
 # Video dataset adapted from https://github.com/facebookresearch/jepa/blob/main/src/datasets/video_dataset.py
 
+import functools
 import glob
 import logging
 import os
-import warnings
-import tqdm
-import functools
 import random
-import numpy as np
-from decord import VideoReader, cpu
-from pycocotools import mask as maskUtils
+import warnings
 
+import numpy as np
 import torch
+import tqdm
+from decord import VideoReader, cpu
+from PIL import Image
+from pycocotools import mask as maskUtils
 from torch.utils.data import Dataset
-from torchvision.transforms import ToTensor
 from torchvision.datasets import CocoDetection
 from torchvision.datasets.folder import default_loader, is_image_file
+from torchvision.transforms import ToTensor
 
 from ..utils import suppress_output
 from ..utils.data import LRUDict
-
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -38,18 +38,27 @@ def get_image_paths(path):
 class ImageFolder:
     """An image folder dataset intended for self-supervised learning."""
 
-    def __init__(self, path, transform=None, loader=default_loader):
+    def __init__(self, path, transform=None, mask_transform=None):
         self.samples = get_image_paths(path)
-        self.loader = loader
         self.transform = transform
+        self.mask_transform = mask_transform
 
     def __getitem__(self, idx: int):
         assert 0 <= idx < len(self)
-        img = self.loader(self.samples[idx])
+        img = Image.open(self.samples[idx]).convert("RGB")
         img = ToTensor()(img)
+
         if self.transform:
-            return self.transform(img), 0
-        return img, 0
+            img = self.transform(img)
+
+        # Get MASKS
+        # TODO: Dummy mask of 1s
+        # TODO: implement mask transforms
+        mask = torch.ones_like(img, dtype=torch.bool)
+        if self.mask_transform is not None:
+            mask = self.mask_transform(mask)
+
+        return img, mask
 
     def __len__(self):
         return len(self.samples)
@@ -57,7 +66,7 @@ class ImageFolder:
 
 class CocoImageIDWrapper(CocoDetection):
     def __init__(
-        self, root, annFile, transform=None, mask_transform=None, 
+        self, root, annFile, transform=None, mask_transform=None,
         random_nb_object=True, max_nb_masks=4, multi_w=False
     ) -> None:
         """
@@ -170,9 +179,10 @@ class VideoDataset(Dataset):
         filter_long_videos: int | float = int(10**9),
         # Optional, specific duration in seconds for each clip
         duration: float = None,
-        output_resolution: tuple | int = (256, 256),  # Desired output resolution
+        output_resolution: tuple | int = (
+            256, 256),  # Desired output resolution
         num_workers: int = 1,  # numbers of cpu to run the preprocessing of each batch
-        subsample_frames: bool = True # if set to false return full video
+        subsample_frames: bool = True  # if set to false return full video
     ):
         self.folder_paths = folder_paths
         self.datasets_weights = datasets_weights
@@ -204,7 +214,7 @@ class VideoDataset(Dataset):
             logger.info("Found %d videos in %s", len(video_files), folder_path)
 
             for video_file in tqdm.tqdm(video_files,
-                                   desc=f"Processing videos in {folder_path}"):
+                                        desc=f"Processing videos in {folder_path}"):
                 self.videofiles.append(video_file)
 
             self.num_video_files_per_dataset.append(len(video_files))
@@ -228,17 +238,18 @@ class VideoDataset(Dataset):
             return self.get_clip(index)
         else:
             return self.get_vid(index)
-    
+
     def get_vid(self, index):
         video_file = self.videofiles[index]
         video, mask = self.load_full_video_decord(
-            video_file, 
+            video_file,
             num_workers=self.num_workers
         )
         if self.transform is not None:
             video = torch.stack([self.transform(frame) for frame in video])
         if self.mask_transform is not None:
-            mask = torch.stack([self.mask_transform(one_mask) for one_mask in mask])
+            mask = torch.stack([self.mask_transform(one_mask)
+                               for one_mask in mask])
         return video, mask
 
     def get_clip(self, index):
@@ -334,7 +345,6 @@ class VideoDataset(Dataset):
         mask = torch.ones_like(vid_pt[:, 0:1, ...])
         return vid_pt, mask
 
-
     def loadvideo_decord(self, sample):
         """ Load video content using Decord """
 
@@ -365,7 +375,8 @@ class VideoDataset(Dataset):
             else:
                 width = self.output_resolution[1]
                 height = self.output_resolution[0]
-            vr = VideoReader(fname, width=width, height=height, num_threads=self.num_workers, ctx=cpu(0))
+            vr = VideoReader(fname, width=width, height=height,
+                             num_threads=self.num_workers, ctx=cpu(0))
         except Exception:
             return [], None
 
@@ -447,9 +458,6 @@ class VideoDataset(Dataset):
 
     def __len__(self):
         return len(self.videofiles) * self.num_clips
-
-
-
 
 
 if __name__ == "__main__":

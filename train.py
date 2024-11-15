@@ -45,7 +45,8 @@ import videoseal.utils as utils
 import videoseal.utils.dist as udist
 import videoseal.utils.logger as ulogger
 import videoseal.utils.optim as uoptim
-from videoseal.augmentation import get_validation_augs_subset, get_validation_augs
+from videoseal.augmentation import (get_validation_augs,
+                                    get_validation_augs_subset)
 from videoseal.augmentation.augmenter import Augmenter
 from videoseal.augmentation.geometric import (Crop, HorizontalFlip, Identity,
                                               Perspective, Resize, Rotate)
@@ -69,6 +70,37 @@ from videoseal.utils.tensorboard import CustomTensorboardWriter
 device = torch.device(
     'cuda') if torch.cuda.is_available() else torch.device('cpu')
 
+
+def freeze_embedder(wam: Wam, image_detection_loss: LPIPSWithDiscriminator, params):
+    """
+    To be called only once when you need to freeze the embedder
+    Freezes the embedder of a model
+    Turnoff losses associated to the embedder
+    Reinitializes the Distributed Data Parallel (DDP) .
+
+    """
+
+    # Remove the current DDP wrapper, if it exists
+    if isinstance(wam, nn.parallel.DistributedDataParallel):
+        wam = wam.module  # unwrap the model from DDP
+
+    if isinstance(image_detection_loss, nn.parallel.DistributedDataParallel):
+        image_detection_loss = image_detection_loss.module  # unwrap the model from DDP
+
+    wam.freeze_module("embedder")
+    image_detection_loss.freeze_embedder = True
+
+    if params.distributed:
+
+        wam = nn.parallel.DistributedDataParallel(
+            wam, device_ids=[params.local_rank])
+        image_detection_loss.discriminator = nn.parallel.DistributedDataParallel(
+            image_detection_loss.discriminator, device_ids=[
+                params.local_rank])
+
+    return wam, image_detection_loss
+
+
 def get_parser():
     parser = argparse.ArgumentParser()
 
@@ -77,13 +109,15 @@ def get_parser():
 
     group = parser.add_argument_group('Dataset parameters')
     aa("--image_dataset", type=str,
-        choices=["coco", "coco-stuff-blurred"], help="Name of the image dataset.")
+        choices=["coco", "coco-stuff-blurred", "sa-1b"], help="Name of the image dataset.")
     aa("--video_dataset", type=str,
         choices=["sa-v"], help="Name of the video dataset.")
     aa("--prop_img_vid", type=float, default=0.5,
         help="Percentage of images in the hybrid dataset 0.5 means for each 5 epochs of images 5 video epoch is made. Only applicable if both --image_dataset and --video_dataset are provided.")
     aa("--video_start", type=int, default=50,
         help="Number of epochs before starting video training")
+    aa("--finetune_detector_start", type=int, default=1000,
+       help="Number of epochs afterwhich the generator is frozen and detector is finetuned")
 
     group = parser.add_argument_group('Experiments parameters')
     aa("--output_dir", type=str, default="output/",
@@ -105,7 +139,7 @@ def get_parser():
     aa("--augmentation_config", type=str, default="configs/all_augs.yaml",
        help="Path to the augmentation config file")
     aa("--num_augs", type=int, default=1,
-         help="Number of augmentations to apply")
+       help="Number of augmentations to apply")
 
     group = parser.add_argument_group('Image and watermark parameters')
     aa("--nbits", type=int, default=32,
@@ -115,8 +149,10 @@ def get_parser():
     aa("--img_size_extractor", type=int,
        default=256, help="Images are resized to this size before being fed to the extractor")
     aa("--img_size_val", type=int, default=256,
-         help="Size of the input images for data preprocessing, at inference time the images are resized to this size")
+       help="Size of the input images for data preprocessing, at inference time the images are resized to this size")
     aa("--attenuation", type=str, default="None", help="Attenuation model to use")
+    aa("--blending_method", type=str, default="additive",
+       help="The blending method to use. Options include: additive, multiplicative ..etc see Blender Class for more")
     aa("--scaling_w", type=float, default=0.2,
        help="Scaling factor for the watermark in the embedder model")
     aa("--scaling_w_schedule", type=str, default=None,
@@ -134,12 +170,14 @@ def get_parser():
        help="Optimizer (default: AdamW,lr=1e-4)")
     aa("--optimizer_d", type=str, default=None,
        help="Discriminator optimizer. If None uses the same params (default: None)")
-    aa("--scheduler", type=str, default="None", 
+    aa("--scheduler", type=str, default="None",
        help="Scheduler (default: None)")
-    aa('--epochs', default=100, type=int, 
+    aa('--epochs', default=100, type=int,
        help='Number of total epochs to run')
     aa('--iter_per_epoch', default=10000, type=int,
        help='Number of iterations per epoch, made for very large datasets')
+    aa('--sleepwake', type=utils.bool_inst, default=False,
+       help='If True and lambda_d > 0 then do epoch optimize 0 and epoch optimizer 1 otherwise optimize them simultaneously')
     aa('--iter_per_valid', default=None, type=int,
        help='Number of iterations per eval, made for very large eval datasets if None eval on all dataset')
     aa('--resume_from', default=None, type=str,
@@ -165,12 +203,14 @@ def get_parser():
        help='Weight for the discriminator loss')
     aa('--disc_num_layers', default=2, type=int,
        help='Number of layers for the discriminator')
-
+    aa('--disc_hinge_on_logits_fake', type=utils.bool_inst, default=False,
+       help='If True then loss_disc (to embedder) will have a hinge loss otherwise just pure -logits_fake.mean() (experimental)')
     group = parser.add_argument_group('Loading parameters')
     aa('--batch_size', default=32, type=int, help='Batch size')
     aa('--batch_size_eval', default=32, type=int, help='Batch size for evaluation')
     aa('--batch_size_video', default=4, type=int, help='Batch size')
-    aa('--batch_size_video_eval', default=4, type=int, help='Batch size for evaluation')
+    aa('--batch_size_video_eval', default=4,
+       type=int, help='Batch size for evaluation')
     aa('--workers', default=8, type=int, help='Number of data loading workers')
     aa('--frames_per_clip', default=32, type=int,
        help='Number of frames per clip for video datasets')
@@ -243,8 +283,8 @@ def main(params):
     params.embedder_model = params.embedder_model or embedder_cfg.model
     embedder_params = embedder_cfg[params.embedder_model]
     embedder = build_embedder(params.embedder_model,
-                            embedder_params, params.nbits
-                )
+                              embedder_params, params.nbits
+                              )
     print(embedder)
     print(
         f'embedder: {sum(p.numel() for p in embedder.parameters() if p.requires_grad) / 1e6:.1f}M parameters')
@@ -269,7 +309,7 @@ def main(params):
     # build attenuation
     if params.attenuation.lower() != "none":
         attenuation_cfg = omegaconf.OmegaConf.load(params.attenuation_config)
-        attenuation = JND(**attenuation_cfg[params.attenuation])
+        attenuation = JND(**attenuation_cfg[params.attenuation]).to(device)
     else:
         attenuation = None
     print(f'attenuation: {attenuation}')
@@ -279,7 +319,8 @@ def main(params):
                    params.scaling_w, params.scaling_i,
                    img_size=params.img_size,
                    chunk_size=params.videowam_chunk_size,
-                   step_size=params.videowam_step_size)
+                   step_size=params.videowam_step_size,
+                   blending_method=params.blending_method)
     wam.to(device)
     # print(wam)
 
@@ -289,7 +330,7 @@ def main(params):
         disc_weight=params.lambda_d, percep_weight=params.lambda_i,
         detect_weight=params.lambda_det, decode_weight=params.lambda_dec,
         disc_start=params.disc_start, disc_num_layers=params.disc_num_layers,
-        percep_loss=params.perceptual_loss
+        percep_loss=params.perceptual_loss, disc_hinge_on_logits_fake=params.disc_hinge_on_logits_fake
     ).to(device)
     print(image_detection_loss)
     # print(f"discriminator: {sum(p.numel() for p in image_detection_loss.discriminator.parameters() if p.requires_grad) / 1e3:.1f}K parameters")
@@ -324,11 +365,16 @@ def main(params):
         model_params=[*image_detection_loss.discriminator.parameters()],
         **optim_params_d
     )
+    scheduler_d = uoptim.build_lr_scheduler(
+        optimizer=optimizer_d, **scheduler_params)
     print('optimizer_d: %s' % optimizer_d)
+    print('scheduler_d: %s' % scheduler_d)
 
     # Data loaders
-    train_transform, train_mask_transform = get_resize_transform(params.img_size)
-    val_transform, val_mask_transform = get_resize_transform(params.img_size_val)
+    train_transform, train_mask_transform = get_resize_transform(
+        params.img_size)
+    val_transform, val_mask_transform = get_resize_transform(
+        params.img_size_val)
 
     image_train_loader = image_val_loader = video_train_loader = video_val_loader = None
 
@@ -387,7 +433,7 @@ def main(params):
             model=wam,
         )
     to_restore = {
-        "epoch": 0, 
+        "epoch": 0,
     }
     uoptim.restart_from_checkpoint(
         os.path.join(params.output_dir, "checkpoint.pth"),
@@ -397,6 +443,7 @@ def main(params):
         optimizer=optimizer,
         optimizer_d=optimizer_d,
         scheduler=scheduler,
+        scheduler_d=scheduler_d
     )
     start_epoch = to_restore["epoch"]
     for param_group in optimizer.param_groups:
@@ -407,11 +454,15 @@ def main(params):
 
     # specific thing to do if distributed training
     if params.distributed:
+
+        # if model has batch norm convert it to sync batchnorm in distributed mode
+        wam = nn.SyncBatchNorm.convert_sync_batchnorm(wam)
+
         wam_ddp = nn.parallel.DistributedDataParallel(
             wam, device_ids=[params.local_rank])
         image_detection_loss.discriminator = nn.parallel.DistributedDataParallel(
-            image_detection_loss.discriminator, device_ids=[params.local_rank]
-        )
+            image_detection_loss.discriminator, device_ids=[
+                params.local_rank])
         wam = wam_ddp.module
     else:
         wam_ddp = wam
@@ -458,6 +509,16 @@ def main(params):
     print('training...')
     start_time = time.time()
     for epoch in range(start_epoch, params.epochs):
+
+        # freeze embdder, turn off embddder loss and refresh DDP
+        if epoch == params.finetune_detector_start:
+            wam_ddp, image_detection_loss = freeze_embedder(
+                wam_ddp, image_detection_loss, params)
+            if params.distributed:
+                wam = wam_ddp.module
+            else:
+                wam = wam_ddp
+
         epoch_modality = modalities[epoch]
         assert epoch_modality in [Modalities.IMAGE, Modalities.VIDEO]
         log_stats = {'epoch': epoch, 'modality': epoch_modality}
@@ -466,6 +527,7 @@ def main(params):
 
         if scheduler is not None:
             scheduler.step(epoch)
+            scheduler_d.step(epoch)
         if scaling_scheduler is not None:
             scaling_scheduler.step(epoch)
 
@@ -483,9 +545,11 @@ def main(params):
             for epoch_modality, epoch_val_loader in val_loaders:
                 if epoch_val_loader is not None:
                     if (epoch % params.full_eval_freq == 0 and epoch > 0) or (epoch == params.epochs-1):
-                        augs = get_validation_augs(epoch_modality == Modalities.VIDEO)
-                    else: 
-                        augs = get_validation_augs_subset(epoch_modality == Modalities.VIDEO)
+                        augs = get_validation_augs(
+                            epoch_modality == Modalities.VIDEO)
+                    else:
+                        augs = get_validation_augs_subset(
+                            epoch_modality == Modalities.VIDEO)
                     val_stats = eval_one_epoch(wam, epoch_val_loader, epoch_modality, image_detection_loss,
                                                epoch, augs, validation_masks, params, tensorboard=tensorboard)
                     log_stats = {
@@ -512,6 +576,7 @@ def main(params):
             'optimizer': optimizer.state_dict(),
             'optimizer_d': optimizer_d.state_dict(),
             'scheduler': scheduler.state_dict() if scheduler is not None else None,
+            'scheduler_d': scheduler_d.state_dict() if scheduler_d is not None else None,
         }
         udist.save_on_master(save_dict, os.path.join(
             params.output_dir, 'checkpoint.pth'))
@@ -557,9 +622,14 @@ def train_one_epoch(
             batch_masks = batch_masks.unsqueeze(0)
             batch_imgs = batch_imgs.unsqueeze(0)
 
+        if params.sleepwake and params.lambda_d > 0:
+            optimizer_ids_for_epoch = [epoch % 2]
+        else:
+            optimizer_ids_for_epoch = [1, 0]
+
         # reset the optimizer gradients before accum gradients
-        for optimizer in optimizers:
-            optimizer.zero_grad()
+        for optimizer_idx in optimizer_ids_for_epoch:
+            optimizers[optimizer_idx].zero_grad()
 
         # accumulate gradients
         for acc_it in range(accumulation_steps):
@@ -576,7 +646,7 @@ def train_one_epoch(
             ) if not params.distributed else wam.module.embedder.get_last_layer()
 
             # index 1 for discriminator, 0 for embedder/extractor
-            for optimizer_idx in [1, 0]:
+            for optimizer_idx in optimizer_ids_for_epoch:
                 if params.lambda_d == 0 and optimizer_idx == 1:
                     continue
                 loss, logs = image_detection_loss(
@@ -643,12 +713,13 @@ def train_one_epoch(
                     tensorboard.add_images("TRAIN/IMAGES/diff", create_diff_img(
                         imgs, outputs["imgs_w"]), epoch)
                     save_image(outputs["imgs_aug"], aug_path, nrow=8)
-                    tensorboard.add_images("TRAIN/IMAGES/aug", outputs["imgs_aug"], epoch)
+                    tensorboard.add_images(
+                        "TRAIN/IMAGES/aug", outputs["imgs_aug"], epoch)
 
         # end accumulate gradients batches
         # add optimizer step
-        for optimizer in optimizers:
-            optimizer.step()
+        for optimizer_idx in optimizer_ids_for_epoch:
+            optimizers[optimizer_idx].step()
 
     metric_logger.synchronize_between_processes()
     print("Averaged {} stats:".format('train'), metric_logger)
@@ -784,9 +855,9 @@ def eval_one_epoch(
                                 imgs_masked, masks, strength)
                             if imgs_aug.shape[-2:] != (h, w):
                                 imgs_aug = nn.functional.interpolate(imgs_aug, size=(h, w),
-                                                                    mode='bilinear', align_corners=False, antialias=True)
+                                                                     mode='bilinear', align_corners=False, antialias=True)
                                 masks_aug = nn.functional.interpolate(masks_aug, size=(h, w),
-                                                                    mode='bilinear', align_corners=False, antialias=True)
+                                                                      mode='bilinear', align_corners=False, antialias=True)
                         selected_aug = str(transform_instance) + f"_{strength}"
                         selected_aug = selected_aug.replace(", ", "_")
 
@@ -811,8 +882,10 @@ def eval_one_epoch(
                             aug_log_stats[f'bit_acc'] = bit_accuracy_
 
                         if params.lambda_det > 0:
-                            iou0 = iou(mask_preds, masks, label=0).mean().item()
-                            iou1 = iou(mask_preds, masks, label=1).mean().item()
+                            iou0 = iou(mask_preds, masks,
+                                       label=0).mean().item()
+                            iou1 = iou(mask_preds, masks,
+                                       label=1).mean().item()
                             aug_log_stats.update({
                                 f'acc': accuracy(mask_preds, masks).mean().item(),
                                 f'miou': (iou0 + iou1) / 2,
@@ -820,7 +893,7 @@ def eval_one_epoch(
 
                         current_key = f"mask={mask_id}_aug={selected_aug}"
                         aug_log_stats = {f"{k}_{current_key}": v for k,
-                                        v in aug_log_stats.items()}
+                                         v in aug_log_stats.items()}
 
                         torch.cuda.synchronize()
                         metric_logger.update(**aug_log_stats)

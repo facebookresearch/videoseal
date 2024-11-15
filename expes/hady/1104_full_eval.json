@@ -1,0 +1,53 @@
+{
+    "cmd": "python -m videoseal.evals.full",
+    "git": "git@github.com:fairinternal/videoseal.git",
+    "preload": "MKL_THREADING_LAYER=GNU",
+    "commit": "1102-blenderfunctions",
+    "precmd": [],
+    "params": {
+        "is_video": {
+            "false": {
+                "dataset": "coco-stuff-blurred"
+            },
+            "true": {
+                "dataset": "sa-v"
+            }
+        },
+        "num_samples": 100,
+        "save_first": 10,
+        "checkpoint": [
+            "/private/home/hadyelsahar/work/code/videoseal/2024_logs_large-exp/1102-videoseal0.2-blendingmethods/_balanced=False_scaling_w=0.1_lambda_d=0.0_optimizer=AdamW,lr=1e-4_blending_method=9/checkpoint.pth",
+            "/private/home/hadyelsahar/work/code/videoseal/2024_logs_large-exp/1102-videoseal0.2-blendingmethods/_balanced=True_scaling_w=0.005_lambda_d=0.0_optimizer=AdamW,lr=1e-4_blending_method=5/checkpoint.pth",
+            "/private/home/hadyelsahar/work/code/videoseal/2024_logs_large-exp/1102-videoseal0.2-blendingmethods/_balanced=True_scaling_w=0.005_lambda_d=0.0_optimizer=AdamW,lr=1e-4_blending_method=7/checkpoint.pth",
+            "/private/home/hadyelsahar/work/code/videoseal/2024_logs_large-exp/1102-videoseal0.2-blendingmethods/_balanced=True_scaling_w=0.005_lambda_d=0.0_optimizer=AdamW,lr=1e-4_blending_method=8/checkpoint.pth",
+            "/private/home/hadyelsahar/work/code/videoseal/2024_logs_large-exp/1102-videoseal0.2-blendingmethods/_balanced=True_scaling_w=0.005_lambda_d=0.0_optimizer=AdamW,lr=5e-4_blending_method=5/checkpoint.pth",
+            "/private/home/hadyelsahar/work/code/videoseal/2024_logs_large-exp/1102-videoseal0.2-blendingmethods/_balanced=True_scaling_w=0.005_lambda_d=0.0_optimizer=AdamW,lr=5e-4_blending_method=7/checkpoint.pth",
+            "/private/home/hadyelsahar/work/code/videoseal/2024_logs_large-exp/1102-videoseal0.2-blendingmethods/_balanced=True_scaling_w=0.005_lambda_d=0.5_optimizer=AdamW,lr=1e-4_blending_method=8/checkpoint.pth",
+            "/private/home/hadyelsahar/work/code/videoseal/2024_logs_large-exp/1102-videoseal0.2-blendingmethods/_balanced=True_scaling_w=0.005_lambda_d=0.5_optimizer=AdamW,lr=5e-4_blending_method=5/checkpoint.pth",
+            "/private/home/hadyelsahar/work/code/videoseal/2024_logs_large-exp/1102-videoseal0.2-blendingmethods/_balanced=True_scaling_w=0.1_lambda_d=0.0_optimizer=AdamW,lr=1e-4_blending_method=0/checkpoint.pth",
+            "/private/home/hadyelsahar/work/code/videoseal/2024_logs_large-exp/1102-videoseal0.2-blendingmethods/_balanced=True_scaling_w=0.1_lambda_d=0.0_optimizer=AdamW,lr=1e-4_blending_method=1/checkpoint.pth",
+            "/private/home/hadyelsahar/work/code/videoseal/2024_logs_large-exp/1102-videoseal0.2-blendingmethods/_balanced=True_scaling_w=0.1_lambda_d=0.0_optimizer=AdamW,lr=1e-4_blending_method=5/checkpoint.pth",
+            "/private/home/hadyelsahar/work/code/videoseal/2024_logs_large-exp/1102-videoseal0.2-blendingmethods/_balanced=True_scaling_w=0.1_lambda_d=0.0_optimizer=AdamW,lr=1e-4_blending_method=6/checkpoint.pth",
+            "/private/home/hadyelsahar/work/code/videoseal/2024_logs_large-exp/1102-videoseal0.2-blendingmethods/_balanced=True_scaling_w=0.1_lambda_d=0.0_optimizer=AdamW,lr=1e-4_blending_method=7/checkpoint.pth",
+            "/private/home/hadyelsahar/work/code/videoseal/2024_logs_large-exp/1102-videoseal0.2-blendingmethods/_balanced=True_scaling_w=0.1_lambda_d=0.0_optimizer=AdamW,lr=1e-4_blending_method=8/checkpoint.pth",
+            "/private/home/hadyelsahar/work/code/videoseal/2024_logs_large-exp/1102-videoseal0.2-blendingmethods/_balanced=True_scaling_w=0.1_lambda_d=0.0_optimizer=AdamW,lr=5e-4_blending_method=0/checkpoint.pth",
+            "/private/home/hadyelsahar/work/code/videoseal/2024_logs_large-exp/1102-videoseal0.2-blendingmethods/_balanced=True_scaling_w=0.1_lambda_d=0.0_optimizer=AdamW,lr=5e-4_blending_method=1/checkpoint.pth"
+        ]
+    },
+    "machine": {
+        "constraint": "volta32gb",
+        "gres": "gpu:1",
+        "nodes": "1",
+        "tasks-per-node": "1",
+        "partition": "learnfair",
+        "cpus-per-task": "10",
+        "time": 4320,
+        "mem-per-cpu": "10G"
+    },
+    "meta": {
+        "group": "",
+        "name": "1104_vseal0.2_evalfull",
+        "dest-arg": "yes",
+        "dest-name": "output_dir"
+    }
+}

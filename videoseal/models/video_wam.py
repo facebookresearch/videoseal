@@ -46,6 +46,7 @@ class VideoWam(Wam):
         clamp: bool = True,
         chunk_size: int = 8,
         step_size: int = 4,
+        blending_method: str = "additive"
     ) -> None:
         """
         Initializes the VideoWam model.
@@ -69,6 +70,7 @@ class VideoWam(Wam):
             scaling_i=scaling_i,
             img_size=img_size,
             clamp=clamp,
+            blending_method=blending_method
         )
         # video settings
         self.chunk_size = chunk_size  # encode 8 frames/imgs at a time
@@ -217,14 +219,14 @@ class VideoWam(Wam):
             deltas_in_ck = outputs["preds_w"]  # n 3 h w
             deltas_in_ck = torch.repeat_interleave(
                 deltas_in_ck, step_size, dim=0)  # f 3 h w
-            
+
             # at the end of video there might be more deltas than needed
             deltas_in_ck = deltas_in_ck[:len(all_imgs_in_ck)]
 
             # create watermarked imgs
             all_imgs_in_ck_w = self.blend(all_imgs_in_ck, deltas_in_ck)
             imgs_w[start: end, ...] = all_imgs_in_ck_w  # n 3 h w
-            
+
         outputs = {
             "imgs_w": imgs_w,  # watermarked imgs: f 3 h w
             "msgs": msgs[0:1].repeat(len(imgs), 1),  # original messages: f k

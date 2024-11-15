@@ -7,9 +7,10 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from ..data.transforms import rgb_to_yuv, yuv_to_rgb, RGB2YUV
 from ..augmentation.augmenter import Augmenter
+from ..data.transforms import RGB2YUV, rgb_to_yuv, yuv_to_rgb
 from ..modules.jnd import JND
+from .blender import Blender
 from .embedder import Embedder
 from .extractor import Extractor
 
@@ -21,6 +22,19 @@ class Wam(nn.Module):
         """Return the device of the model."""
         return next(self.parameters()).device
 
+    def freeze_module(self, module_name):
+        """
+        This function allows doing sleep awake style training between embedder and 
+        detector "model.freeze_module('embedder')"
+        """
+        for param in getattr(self, module_name).parameters():
+            param.requires_grad = False
+
+    def unfreeze_module(self, module_name):
+        "model.unfreeze_module('embedder')"
+        for param in getattr(self, module_name).parameters():
+            param.requires_grad = True
+
     def __init__(
         self,
         embedder: Embedder,
@@ -31,6 +45,7 @@ class Wam(nn.Module):
         scaling_i: float = 1.0,
         clamp: bool = True,
         img_size: int = 256,
+        blending_method: str = "additive",
     ) -> None:
         """
         WAM (watermark-anything models) model that combines an embedder, a detector, and an augmenter.
@@ -60,6 +75,10 @@ class Wam(nn.Module):
         self.img_size = img_size
         self.rgb2yuv = RGB2YUV()
 
+        assert blending_method in Blender.AVAILABLE_BLENDING_METHODS
+        self.blender = Blender(self.scaling_i, self.scaling_w,
+                               method=blending_method, attenuation=self.attenuation)
+
     def get_random_msg(self, bsz: int = 1, nb_repetitions=1) -> torch.Tensor:
         return self.embedder.get_random_msg(bsz, nb_repetitions)  # b x k
 
@@ -78,17 +97,13 @@ class Wam(nn.Module):
         """
         if preds_w.shape[1] == 1:
             preds_w = preds_w.repeat(1, 3, 1, 1)
-            imgs_w = self.scaling_i * imgs + self.scaling_w * preds_w
             # # or equivalently
             # imgs_w = rgb_to_yuv(imgs)
             # imgs_w[:, 0:1] = self.scaling_i * imgs_w[:, 0:1] + self.scaling_w * preds_w
             # imgs_w = yuv_to_rgb(imgs_w)
-        else:
-            imgs_w = self.scaling_i * imgs + self.scaling_w * preds_w
-        if self.attenuation is not None:
-            imgs_w = self.attenuation(imgs, imgs_w)
-        if self.clamp:
-            imgs_w = imgs_w.clamp(0, 1)
+
+        imgs_w = self.blender(imgs, preds_w)
+
         return imgs_w
 
     def forward(
@@ -171,7 +186,7 @@ class Wam(nn.Module):
                                     **interpolation)
         preds_w = preds_w.to(imgs.device)
         imgs_w = self.blend(imgs, preds_w)
-        
+
         outputs = {
             "msgs": msgs,  # original messages: b k
             "preds_w": preds_w,  # predicted watermarks: b c h w
@@ -182,6 +197,7 @@ class Wam(nn.Module):
     def detect(
         self,
         imgs: torch.Tensor,
+        interpolation: dict = {"mode": "bilinear", "align_corners": False, "antialias": False},
     ) -> dict:
         """
         Performs the forward pass of the detector only (used at inference).
@@ -197,7 +213,8 @@ class Wam(nn.Module):
         imgs_res = imgs.clone()
         if imgs.shape[-2:] != (self.img_size, self.img_size):
             imgs_res = F.interpolate(imgs, size=(self.img_size, self.img_size),
-                                     mode="bilinear", align_corners=False)
+                                        **interpolation)
+                                        
         imgs_res = imgs_res.to(self.device)
 
         # detect watermark
