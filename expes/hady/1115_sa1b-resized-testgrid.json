@@ -51,7 +51,7 @@
         ],
         "scheduler": "CosineLRScheduler,lr_min=1e-6,t_initial=1000,warmup_lr_init=1e-8,warmup_t=20",
         "seed": [
-            444
+            666
         ],
         "perceptual_loss": [
             "mse"
@@ -72,7 +72,7 @@
             0.0
         ],
         "lambda_dec": [
-            2.0
+            1.0
         ],
         "nbits": [
             64

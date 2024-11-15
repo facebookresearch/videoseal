@@ -53,8 +53,9 @@ class ImageFolder:
 
         # Get MASKS
         # TODO: Dummy mask of 1s
-        # TODO: implement mask transforms
-        mask = torch.ones_like(img[0:1, ...], dtype=torch.bool)
+        # TODO: implement mask transforms 1 x h x w 
+        mask = torch.ones_like(img[0:1, ...])
+
         if self.mask_transform is not None:
             mask = self.mask_transform(mask)
 
