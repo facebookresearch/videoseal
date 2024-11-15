@@ -5,7 +5,10 @@
     "commit": "sa1b",
     "precmd": [],
     "params": {
-        "image_dataset": "sa-1b",
+        "image_dataset": [
+            "sa-1b",
+            "coco-stuff-blurred"
+        ],
         "video_dataset": "sa-v",
         "augmentation_config": [
             "configs/reasonable_augs.yaml"
@@ -21,7 +24,7 @@
         ],
         "img_size": 256,
         "img_size_extractor": 256,
-        "iter_per_epoch": 20,
+        "iter_per_epoch": 50,
         "video_start": [
             500
         ],
@@ -69,8 +72,7 @@
         ],
         "lambda_dec": 1.0,
         "nbits": [
-            64,
-            128
+            64
         ],
         "scaling_i": 1.0,
         "scaling_w": [
@@ -88,7 +90,7 @@
     "machine": {
         "constraint": "volta32gb",
         "gres": "gpu:8",
-        "nodes": "4",
+        "nodes": "8",
         "tasks-per-node": "8",
         "partition": "devlab,learnaccel,nllb,ust",
         "cpus-per-task": "10",
