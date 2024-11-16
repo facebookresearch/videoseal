@@ -64,7 +64,12 @@ class ImageFolder:
             annotation_filename = f"{filename}.json"
             annotation_file_path = os.path.join(self.annotations_folder, annotation_filename)           
             # assuming 'path' is your image file path and 'annotation_path' is the base path for annotation files
-            targets = json.load(open(annotation_file_path))['annotations'] # load json masks
+            try:
+                targets = json.load(open(annotation_file_path))['annotations'] # load json masks
+            except: 
+                mask = torch.ones_like(img[0:1, ...])
+                return img, mask
+
             mask = []
             
             for m in targets:
