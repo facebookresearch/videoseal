@@ -179,6 +179,7 @@ class VideoWam(Wam):
         imgs: torch.Tensor,
         msgs: torch.Tensor = None,
         is_video: bool = True,
+        interpolation: dict = {"mode": "bilinear", "align_corners": False, "antialias": True},
     ) -> dict:
         """ 
         Generates watermarked videos from the input images and messages (used for inference).
@@ -215,7 +216,7 @@ class VideoWam(Wam):
                 msgs = msgs[:nimgs_in_ck]
 
             # get deltas for the chunk, and repeat them for each frame in the chunk
-            outputs = super().embed(imgs_in_ck, msgs)  # n 3 h w
+            outputs = super().embed(imgs_in_ck, msgs, interpolation)  # n 3 h w
             deltas_in_ck = outputs["preds_w"]  # n 3 h w
             deltas_in_ck = torch.repeat_interleave(
                 deltas_in_ck, step_size, dim=0)  # f 3 h w

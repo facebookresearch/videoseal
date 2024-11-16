@@ -10,13 +10,15 @@ class JND(nn.Module):
             preprocess = lambda x: x,
             postprocess = lambda x: x,
             in_channels = 1,
-            out_channels = 3
+            out_channels = 3,
+            blue = False
     ) -> None:
         super(JND, self).__init__()
 
         # setup input and output methods
         self.in_channels = in_channels
         self.out_channels = out_channels
+        self.blue = blue
         groups = self.in_channels
 
         # create kernels
@@ -87,8 +89,12 @@ class JND(nn.Module):
         hmaps = torch.clamp_min(la + cm - clc * torch.minimum(la, cm), 0)   # b 1or3 h w
         if self.out_channels == 3 and self.in_channels == 1:
             # rgbs = (1-rgbs).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
-            # return  hmaps * rgbs.to(hmaps.device)  # b 3 h w
             hmaps = hmaps.repeat(1, 3, 1, 1)  # b 3 h w
+            if self.blue:
+                hmaps[:, 0] = hmaps[:, 0] * 0.5
+                hmaps[:, 1] = hmaps[:, 1] * 0.5
+                hmaps[:, 2] = hmaps[:, 2] * 1.0
+            # return  hmaps * rgbs.to(hmaps.device)  # b 3 h w
         elif self.out_channels == 1 and self.in_channels == 3:
             # rgbs = (1-rgbs).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
             # return torch.sum(

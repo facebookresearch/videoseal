@@ -75,10 +75,6 @@ class Wam(nn.Module):
         self.img_size = img_size
         self.rgb2yuv = RGB2YUV()
 
-        assert blending_method in Blender.AVAILABLE_BLENDING_METHODS
-        self.blender = Blender(self.scaling_i, self.scaling_w,
-                               method=blending_method, attenuation=self.attenuation)
-
     def get_random_msg(self, bsz: int = 1, nb_repetitions=1) -> torch.Tensor:
         return self.embedder.get_random_msg(bsz, nb_repetitions)  # b x k
 
@@ -97,13 +93,17 @@ class Wam(nn.Module):
         """
         if preds_w.shape[1] == 1:
             preds_w = preds_w.repeat(1, 3, 1, 1)
+            imgs_w = self.scaling_i * imgs + self.scaling_w * preds_w
             # # or equivalently
             # imgs_w = rgb_to_yuv(imgs)
             # imgs_w[:, 0:1] = self.scaling_i * imgs_w[:, 0:1] + self.scaling_w * preds_w
             # imgs_w = yuv_to_rgb(imgs_w)
-
-        imgs_w = self.blender(imgs, preds_w)
-
+        else:
+            imgs_w = self.scaling_i * imgs + self.scaling_w * preds_w
+        if self.attenuation is not None:
+            imgs_w = self.attenuation(imgs, imgs_w)
+        if self.clamp:
+            imgs_w = imgs_w.clamp(0, 1)
         return imgs_w
 
     def forward(
@@ -149,7 +149,7 @@ class Wam(nn.Module):
         self,
         imgs: torch.Tensor,
         msgs: torch.Tensor = None,
-        interpolation: dict = {"mode": "bilinear", "align_corners": False, "antialias": False},
+        interpolation: dict = {"mode": "bilinear", "align_corners": False, "antialias": True},
     ) -> dict:
         """
         Generates watermarked images from the input images and messages (used for inference).

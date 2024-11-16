@@ -195,6 +195,64 @@ class BaselineCINExtractor(Extractor):
         return msgs
 
 
+class BaselineWAMEmbedder(Embedder):
+    def __init__(
+        self,
+        encoder_path: str,
+        nbits: int = 32,
+    ) -> None:
+        super(BaselineWAMEmbedder, self).__init__()
+        self.encoder = torch.jit.load(encoder_path).eval()
+        self.nbits = nbits
+        # the network is trained with the following normalization
+        self.preprocess = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        self.postprocess = transforms.Normalize(mean=[0, 0, 0], std=[1 / 0.229, 1 / 0.224, 1 / 0.225])
+
+    def get_random_msg(self, bsz: int = 1, nb_repetitions=1) -> torch.Tensor:
+        return torch.randint(0, 2, (bsz, self.nbits))
+
+    def forward(
+        self,
+        imgs: torch.Tensor,
+        msgs: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        Args:
+            imgs: (torch.Tensor) Batched images with shape BxCxHxW
+            msgs: (torch.Tensor) Batched messages with shape BxL, or empty tensor.
+        Returns:
+            The watermarked images.
+        """
+        imgs = self.preprocess(imgs)
+        imgs_w = self.encoder(imgs, msgs)
+        imgs_w = self.postprocess(imgs_w)
+        return imgs_w
+
+
+class BaselineWAMExtractor(Extractor):
+    def __init__(
+        self,
+        decoder_path: str
+    ) -> None:
+        super(BaselineWAMExtractor, self).__init__()
+        self.decoder = torch.jit.load(decoder_path).eval()
+        # the network is trained with the following normalization
+        self.preprocess = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+
+    def forward(
+        self,
+        imgs: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        Args:
+            imgs: (torch.Tensor) Batched images with shape BxCxHxW
+        Returns:
+            The extracted messages.
+        """
+        imgs = self.preprocess(imgs)
+        msgs = self.decoder(imgs)  # b 1+k
+        return msgs
+
 
 def build_baseline(
         method: str,
@@ -226,6 +284,19 @@ def build_baseline(
         decoder_path = '/checkpoint/pfz/projects/videoseal/baselines/cin_nsm_decoder.pt'
         embedder = BaselineCINEmbedder(encoder_path)
         extractor = BaselineCINExtractor(decoder_path)
+    elif method == 'wam':
+        scaling_w = 3.0
+        attenuation = JND(in_channels=1, out_channels=3, blue=True)
+        encoder_path = '/checkpoint/pfz/projects/videoseal/baselines/wam_encoder.pt'
+        decoder_path = '/checkpoint/pfz/projects/videoseal/baselines/wam_decoder.pt'
+        embedder = BaselineWAMEmbedder(encoder_path)
+        extractor = BaselineWAMExtractor(decoder_path)
+    elif method == 'wam_noattenuation':
+        scaling_w = 0.02
+        encoder_path = '/checkpoint/pfz/projects/videoseal/baselines/wam_encoder.pt'
+        decoder_path = '/checkpoint/pfz/projects/videoseal/baselines/wam_decoder.pt'
+        embedder = BaselineWAMEmbedder(encoder_path)
+        extractor = BaselineWAMExtractor(decoder_path)
     else:
         raise ValueError(f'Unknown method: {method}')
     return VideoWam(
