@@ -50,6 +50,7 @@ class ImageFolder:
         self.mask_transform = mask_transform
         self.annotations_folder = annotations_folder
 
+
     def __getitem__(self, idx: int):
         assert 0 <= idx < len(self)
         path = self.samples[idx]
@@ -72,15 +73,17 @@ class ImageFolder:
 
             mask = []
             
-            for m in targets:
-                # decode masks from COCO RLE format
-                mask.append(mask_utils.decode(m['segmentation'])) 
+            # select first mask because otherwise will be too slow
+            # todo: experiment wit several methods 
+            m = targets[0]
+            # decode masks from COCO RLE format
+            mask.append(mask_utils.decode(m['segmentation'])) 
             mask = np.stack(mask)
 
             mask = torch.Tensor(mask)
-            # Select the largest mask
-            largest_mask_id = np.argmax(mask.sum(axis=(1, 2)), axis=0)
-            mask = mask[largest_mask_id].unsqueeze(0)
+            # # Select the largest mask
+            # largest_mask_id = np.argmax(mask.sum(axis=(1, 2)), axis=0)
+            # mask = mask[largest_mask_id].unsqueeze(0)
 
             # sometimes image is resized but annotations not, resize mask to fit it 
             # mask [batch=1, h, w]  img [c, h, w]            
@@ -97,7 +100,7 @@ class ImageFolder:
         return img, mask
 
     def __len__(self):
-        return len(self.samples)
+        return len(self.samples) 
 
 
 class CocoImageIDWrapper(CocoDetection):
@@ -500,7 +503,7 @@ if __name__ == "__main__":
     import time
 
     dataset = ImageFolder(path="/large_experiments/meres/sa-1b/anonymized_resized/valid/", annotations_folder="/datasets01/segment_anything/annotations/release_040523/")
-    print(dataset[0])
+    print(dataset[0][1])
 
 
     # Specify the path to the folder containing the MP4 files
