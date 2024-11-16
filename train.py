@@ -109,7 +109,7 @@ def get_parser():
 
     group = parser.add_argument_group('Dataset parameters')
     aa("--image_dataset", type=str,
-        choices=["coco", "coco-noann", "coco-stuff-blurred", "sa-1b", "sa-1b-resized"], help="Name of the image dataset.")
+        choices=["coco", "coco-noann", "coco-stuff-blurred", "sa-1b", "sa-1b-resized","sa-1b-resized-noann"], help="Name of the image dataset.")
     aa("--video_dataset", type=str,
         choices=["sa-v"], help="Name of the video dataset.")
     aa("--prop_img_vid", type=float, default=0.5,

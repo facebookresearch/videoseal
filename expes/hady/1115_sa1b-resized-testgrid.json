@@ -7,8 +7,7 @@
     "params": {
         "image_dataset": [
             "sa-1b-resized",
-            "coco-noann",
-            "coco-stuff-blurred"
+            "coco-noann"
         ],
         "video_dataset": "sa-v",
         "augmentation_config": [
@@ -25,12 +24,12 @@
         ],
         "img_size": 256,
         "img_size_extractor": 256,
-        "iter_per_epoch": 50,
+        "iter_per_epoch": 80,
         "video_start": [
-            500
+            1000
         ],
         "finetune_detector_start": [
-            500
+            2000
         ],
         "videowam_step_size": [
             4
@@ -72,14 +71,16 @@
             0.0
         ],
         "lambda_dec": [
-            1.0
+            10.0,
+            5.0
         ],
         "nbits": [
             64
         ],
         "scaling_i": 1.0,
         "scaling_w": [
-            0.5
+            0.5,
+            0.8
         ],
         "attenuation": [
             "None"
@@ -102,7 +103,7 @@
     },
     "meta": {
         "group": "",
-        "name": "1115-sa1b-resized-large_lamda_dec",
+        "name": "1116-sa1b-resized-large-grid",
         "dest-arg": "yes",
         "dest-name": "output_dir"
     }

@@ -1,4 +1,4 @@
 train_dir: /large_experiments/meres/sa-1b/anonymized_resized/train_0.3resized
 val_dir: /large_experiments/meres/sa-1b/anonymized_resized/valid_0.3resized
-train_annotation_file: null
-val_annotation_file: null
+train_annotation_file: /datasets01/segment_anything/annotations/release_040523/
+val_annotation_file: /datasets01/segment_anything/annotations/release_040523/
