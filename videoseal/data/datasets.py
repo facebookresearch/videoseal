@@ -2,6 +2,7 @@
 
 import functools
 import glob
+import json
 import logging
 import os
 import random
@@ -9,10 +10,13 @@ import warnings
 
 import numpy as np
 import torch
+import torchvision
+import torchvision.transforms as transforms
 import tqdm
 from decord import VideoReader, cpu
 from PIL import Image
 from pycocotools import mask as maskUtils
+from pycocotools import mask as mask_utils
 from torch.utils.data import Dataset
 from torchvision.datasets import CocoDetection
 from torchvision.datasets.folder import default_loader, is_image_file
@@ -38,27 +42,53 @@ def get_image_paths(path):
 class ImageFolder:
     """An image folder dataset intended for self-supervised learning."""
 
-    def __init__(self, path, transform=None, mask_transform=None):
+    def __init__(self, path, annotations_folder=None, transform=None, mask_transform=None):
+        # assuming 'path' is a folder of image files path and
+        # 'annotation_path' is the base path for corresponding annotation json files
         self.samples = get_image_paths(path)
         self.transform = transform
         self.mask_transform = mask_transform
+        self.annotations_folder = annotations_folder
 
     def __getitem__(self, idx: int):
         assert 0 <= idx < len(self)
-        img = Image.open(self.samples[idx]).convert("RGB")
+        path = self.samples[idx]
+        img = Image.open(path).convert("RGB")
         img = ToTensor()(img)
 
         if self.transform:
             img = self.transform(img)
 
-        # Get MASKS
-        # TODO: Dummy mask of 1s
-        # TODO: implement mask transforms 1 x h x w 
-        mask = torch.ones_like(img[0:1, ...])
+        if self.annotations_folder is not None:
+            filename = os.path.splitext(os.path.basename(path))[0]
+            annotation_filename = f"{filename}.json"
+            annotation_file_path = os.path.join(self.annotations_folder, annotation_filename)           
+            # assuming 'path' is your image file path and 'annotation_path' is the base path for annotation files
+            targets = json.load(open(annotation_file_path))['annotations'] # load json masks
+            mask = []
+            
+            for m in targets:
+                # decode masks from COCO RLE format
+                mask.append(mask_utils.decode(m['segmentation'])) 
+            mask = np.stack(mask)
+
+            mask = torch.Tensor(mask)
+            # Select the largest mask
+            largest_mask_id = np.argmax(mask.sum(axis=(1, 2)), axis=0)
+            mask = mask[largest_mask_id].unsqueeze(0)
+
+            # sometimes image is resized but annotations not, resize mask to fit it 
+            # mask [batch=1, h, w]  img [c, h, w]            
+            h, w = img.shape[1:]
+            mask = torch.nn.functional.interpolate(mask.unsqueeze(0), size=(h,w), mode='nearest')[0]
+
+        else:
+            # Get MASKS
+            mask = torch.ones_like(img[0:1, ...])
 
         if self.mask_transform is not None:
             mask = self.mask_transform(mask)
-
+        
         return img, mask
 
     def __len__(self):
@@ -463,6 +493,10 @@ class VideoDataset(Dataset):
 
 if __name__ == "__main__":
     import time
+
+    dataset = ImageFolder(path="/large_experiments/meres/sa-1b/anonymized_resized/valid/", annotations_folder="/datasets01/segment_anything/annotations/release_040523/")
+    print(dataset[0])
+
 
     # Specify the path to the folder containing the MP4 files
     video_folder_path = "./assets/videos"
