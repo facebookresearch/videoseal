@@ -42,14 +42,12 @@ def get_image_paths(path):
 class ImageFolder:
     """An image folder dataset intended for self-supervised learning."""
 
-    def __init__(self, path, annotations_folder=None, transform=None, mask_transform=None):
+    def __init__(self, path,  transform=None, mask_transform=None):
         # assuming 'path' is a folder of image files path and
         # 'annotation_path' is the base path for corresponding annotation json files
         self.samples = get_image_paths(path)
         self.transform = transform
         self.mask_transform = mask_transform
-        self.annotations_folder = annotations_folder
-
 
     def __getitem__(self, idx: int):
         assert 0 <= idx < len(self)
@@ -60,39 +58,8 @@ class ImageFolder:
         if self.transform:
             img = self.transform(img)
 
-        if self.annotations_folder is not None:
-            filename = os.path.splitext(os.path.basename(path))[0]
-            annotation_filename = f"{filename}.json"
-            annotation_file_path = os.path.join(self.annotations_folder, annotation_filename)           
-            # assuming 'path' is your image file path and 'annotation_path' is the base path for annotation files
-            try:
-                targets = json.load(open(annotation_file_path))['annotations'] # load json masks
-            except: 
-                mask = torch.ones_like(img[0:1, ...])
-                return img, mask
-
-            mask = []
-            
-            # select first mask because otherwise will be too slow
-            # todo: experiment wit several methods 
-            m = targets[0]
-            # decode masks from COCO RLE format
-            mask.append(mask_utils.decode(m['segmentation'])) 
-            mask = np.stack(mask)
-
-            mask = torch.Tensor(mask)
-            # # Select the largest mask
-            # largest_mask_id = np.argmax(mask.sum(axis=(1, 2)), axis=0)
-            # mask = mask[largest_mask_id].unsqueeze(0)
-
-            # sometimes image is resized but annotations not, resize mask to fit it 
-            # mask [batch=1, h, w]  img [c, h, w]            
-            h, w = img.shape[1:]
-            mask = torch.nn.functional.interpolate(mask.unsqueeze(0), size=(h,w), mode='nearest')[0]
-
-        else:
-            # Get MASKS
-            mask = torch.ones_like(img[0:1, ...])
+        # Get MASKS
+        mask = torch.ones_like(img[0:1, ...])
 
         if self.mask_transform is not None:
             mask = self.mask_transform(mask)
