@@ -113,7 +113,7 @@
     },
     "meta": {
         "group": "",
-        "name": "1118-sa1b-grid",
+        "name": "1118-sa1b-grid-2machines",
         "dest-arg": "yes",
         "dest-name": "output_dir"
     }
