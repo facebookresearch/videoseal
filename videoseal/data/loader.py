@@ -119,12 +119,11 @@ def get_dataloader_segmentation(
 ) -> DataLoader:
     """ Get dataloader for COCO dataset. """
     # Initialize the CocoDetection dataset
-    if ann_file is not None:
+    if "coco" in data_dir:
         dataset = CocoImageIDWrapper(root=data_dir, annFile=ann_file, transform=transform, mask_transform=mask_transform,
                                      random_nb_object=random_nb_object, multi_w=multi_w, max_nb_masks=max_nb_masks)
     else:
-        dataset = ImageFolder(
-            path=data_dir, transform=transform, mask_transform=mask_transform)
+        dataset = ImageFolder(path=data_dir, transform=transform, mask_transform=mask_transform)
 
     if is_dist_avail_and_initialized():
         sampler = DistributedSampler(dataset, shuffle=shuffle)

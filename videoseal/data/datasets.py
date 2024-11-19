@@ -2,6 +2,7 @@
 
 import functools
 import glob
+import json
 import logging
 import os
 import random
@@ -9,10 +10,13 @@ import warnings
 
 import numpy as np
 import torch
+import torchvision
+import torchvision.transforms as transforms
 import tqdm
 from decord import VideoReader, cpu
 from PIL import Image
 from pycocotools import mask as maskUtils
+from pycocotools import mask as mask_utils
 from torch.utils.data import Dataset
 from torchvision.datasets import CocoDetection
 from torchvision.datasets.folder import default_loader, is_image_file
@@ -38,30 +42,32 @@ def get_image_paths(path):
 class ImageFolder:
     """An image folder dataset intended for self-supervised learning."""
 
-    def __init__(self, path, transform=None, mask_transform=None):
+    def __init__(self, path,  transform=None, mask_transform=None):
+        # assuming 'path' is a folder of image files path and
+        # 'annotation_path' is the base path for corresponding annotation json files
         self.samples = get_image_paths(path)
         self.transform = transform
         self.mask_transform = mask_transform
 
     def __getitem__(self, idx: int):
         assert 0 <= idx < len(self)
-        img = Image.open(self.samples[idx]).convert("RGB")
+        path = self.samples[idx]
+        img = Image.open(path).convert("RGB")
         img = ToTensor()(img)
 
         if self.transform:
             img = self.transform(img)
 
         # Get MASKS
-        # TODO: Dummy mask of 1s
-        # TODO: implement mask transforms
-        mask = torch.ones_like(img, dtype=torch.bool)
+        mask = torch.ones_like(img[0:1, ...])
+
         if self.mask_transform is not None:
             mask = self.mask_transform(mask)
-
+        
         return img, mask
 
     def __len__(self):
-        return len(self.samples)
+        return len(self.samples) 
 
 
 class CocoImageIDWrapper(CocoDetection):
@@ -462,6 +468,10 @@ class VideoDataset(Dataset):
 
 if __name__ == "__main__":
     import time
+
+    dataset = ImageFolder(path="/large_experiments/meres/sa-1b/anonymized_resized/valid/", annotations_folder="/datasets01/segment_anything/annotations/release_040523/")
+    print(dataset[0][1])
+
 
     # Specify the path to the folder containing the MP4 files
     video_folder_path = "./assets/videos"
