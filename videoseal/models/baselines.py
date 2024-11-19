@@ -254,6 +254,67 @@ class BaselineWAMExtractor(Extractor):
         return msgs
 
 
+class BaselineTrustmarkEmbedder(Embedder):
+    def __init__(
+        self,
+        encoder_path: str,
+        nbits: int = 100,
+    ) -> None:
+        super(BaselineTrustmarkEmbedder, self).__init__()
+        self.encoder = torch.jit.load(encoder_path).eval()
+        self.nbits = nbits
+        # the network is trained with the following normalization
+        self.preprocess = transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
+        self.postprocess = transforms.Normalize(mean=[-1, -1, -1], std=[2, 2, 2])
+
+    def get_random_msg(self, bsz: int = 1, nb_repetitions=1) -> torch.Tensor:
+        return torch.randint(0, 2, (bsz, self.nbits))
+
+    def forward(
+        self,
+        imgs: torch.Tensor,
+        msgs: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        Args:
+            imgs: (torch.Tensor) Batched images with shape BxCxHxW
+            msgs: (torch.Tensor) Batched messages with shape BxL, or empty tensor.
+        Returns:
+            The watermarked images.
+        """
+        msgs = msgs.float()
+        imgs_w = self.encoder(self.preprocess(imgs), msgs)
+        imgs_w = self.postprocess(imgs_w)
+        return imgs_w - imgs
+
+
+class BaselineTrustmarkExtractor(Extractor):
+    def __init__(
+        self,
+        decoder_path: str
+    ) -> None:
+        super(BaselineTrustmarkExtractor, self).__init__()
+        self.decoder = torch.jit.load(decoder_path).eval()
+        # the network is trained with the following normalization
+        self.preprocess = transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
+
+    def forward(
+        self,
+        imgs: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        Args:
+            imgs: (torch.Tensor) Batched images with shape BxCxHxW
+        Returns:
+            The extracted messages.
+        """
+        imgs = self.preprocess(imgs)
+        msgs = self.decoder(imgs)  # b k
+        # add +1 to the last dimension to make it b k+1 (WAM compatible)
+        msgs = torch.cat([torch.zeros(msgs.size(0), 1).to(msgs.device), msgs], dim=1)
+        return msgs
+
+
 def build_baseline(
         method: str,
         attenuation: JND = None,
@@ -299,6 +360,22 @@ def build_baseline(
         decoder_path = '/checkpoint/pfz/projects/videoseal/baselines/wam_decoder.pt'
         embedder = BaselineWAMEmbedder(encoder_path)
         extractor = BaselineWAMExtractor(decoder_path)
+    elif method == 'trustmark':
+        scaling_w = 0.95
+        # encoder_path = '/checkpoint/pfz/projects/videoseal/baselines/trustmark_encoder.pt'
+        # decoder_path = '/checkpoint/pfz/projects/videoseal/baselines/trustmark_decoder.pt'
+        encoder_path = '/Users/pfz/Code/videoseal/assets/trustmark_encoder_q.pt'
+        decoder_path = '/Users/pfz/Code/videoseal/assets/trustmark_decoder_q.pt'
+        embedder = BaselineTrustmarkEmbedder(encoder_path)
+        extractor = BaselineTrustmarkExtractor(decoder_path)
+    elif method == 'trustmark_scaling0p5':
+        scaling_w = 0.5
+        encoder_path = '/checkpoint/pfz/projects/videoseal/baselines/trustmark_encoder_q.pt'
+        decoder_path = '/checkpoint/pfz/projects/videoseal/baselines/trustmark_decoder_q.pt'
+        # encoder_path = '/Users/pfz/Code/videoseal/assets/trustmark_encoder_q.pt'
+        # decoder_path = '/Users/pfz/Code/videoseal/assets/trustmark_decoder_q.pt'
+        embedder = BaselineTrustmarkEmbedder(encoder_path)
+        extractor = BaselineTrustmarkExtractor(decoder_path)
     else:
         raise ValueError(f'Unknown method: {method}')
     return VideoWam(

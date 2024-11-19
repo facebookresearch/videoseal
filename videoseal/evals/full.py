@@ -130,7 +130,7 @@ def setup_model_from_checkpoint(ckpt_path: str) -> VideoWam:
     # load baselines. Should be in the format of "baseline/{method}"
     if "baseline" in ckpt_path:
         method = ckpt_path.split('/')[-1]
-        build_baseline(method)
+        return build_baseline(method)
     # load videoseal checkpoints
     else:
         config = get_config_from_checkpoint(ckpt_path)
