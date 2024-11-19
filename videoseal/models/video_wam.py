@@ -290,7 +290,7 @@ class VideoWam(Wam):
         Note:
             If aggregation is None, returns the predictions for each frame without aggregation.
         """
-        outputs = self.detect(imgs)
+        outputs = self.detect(imgs, is_video=True)
         preds = outputs["preds"]
         mask_preds = preds[:, 0:1]  # binary detection bit (not used for now)
         bit_preds = preds[:, 1:]  # b k ..
@@ -300,7 +300,7 @@ class VideoWam(Wam):
             decoded_msg = bit_preds.mean(dim=0)
         elif aggregation == "weighted_avg":
             decoded_msg = (bit_preds * bit_preds.abs()).mean(dim=0)  # b k -> k
-        msg = (decoded_msg > 0).squeeze()
+        msg = (decoded_msg > 0).squeeze().unsqueeze(0)  # 1 k
         return msg
 
 
