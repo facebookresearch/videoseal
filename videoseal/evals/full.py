@@ -230,7 +230,8 @@ def evaluate(
             # compute qualitative metrics
             metrics['psnr'] = psnr(
                 imgs_w[:num_frames], 
-                imgs[:num_frames]).mean().item()
+                imgs[:num_frames],
+                is_video).mean().item(),
             metrics['ssim'] = ssim(
                 imgs_w[:num_frames], 
                 imgs[:num_frames]).mean().item()
