@@ -269,6 +269,8 @@ def build_baseline(
         scaling_w = 0.2
         encoder_path = '/checkpoint/pfz/projects/videoseal/baselines/hidden_encoder_48b.pt'
         decoder_path = '/checkpoint/pfz/projects/videoseal/baselines/hidden_decoder_48b.pt'
+        # encoder_path = '/Users/pfz/Code/videoseal/assets/hidden_encoder_48b.pt'
+        # decoder_path = '/Users/pfz/Code/videoseal/assets/hidden_decoder_48b.pt'
         embedder = BaselineHiddenEmbedder(encoder_path)
         extractor = BaselineHiddenExtractor(decoder_path)
     elif method == 'mbrs':

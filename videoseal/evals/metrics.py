@@ -97,7 +97,17 @@ def pvalue(
     pvalues = [stats.binomtest(int(p*nbits), nbits, 0.5, alternative='greater').pvalue for p in bit_accs]
     return torch.tensor(pvalues)  # b
 
-def normalized_bit_accuracy(
+def plogp(p: torch.Tensor) -> torch.Tensor:
+    """
+    Return p log p
+    Args:
+        p (torch.Tensor): Probability tensor with shape BxK
+    """
+    plogp = p * torch.log2(p)
+    plogp[p == 0] = 0
+    return plogp
+
+def capacity(
     preds: torch.Tensor,
     targets: torch.Tensor,
     mask: torch.Tensor = None,
@@ -109,11 +119,10 @@ def normalized_bit_accuracy(
     """
     nbits = targets.shape[-1]
     bit_accs = bit_accuracy(preds, targets, mask, threshold)  # b
-    entropy = -bit_accs * torch.log2(bit_accs) \
-        - (1 - bit_accs) * torch.log2(1 - bit_accs)
+    entropy = - plogp(bit_accs) - plogp(1-bit_accs)
     capacity = 1 - entropy
-    normalized_bit_acc = nbits * capacity
-    return normalized_bit_acc
+    capacity = nbits * capacity
+    return capacity
 
 def bit_accuracy(
     preds: torch.Tensor, 

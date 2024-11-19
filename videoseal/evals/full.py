@@ -30,7 +30,7 @@ import tqdm
 from .metrics import vmaf_on_tensor, bit_accuracy, iou, accuracy
 from ..data.datasets import ImageFolder, VideoDataset, CocoImageIDWrapper
 from ..modules.jnd import JND
-from ..models import VideoWam, build_embedder, build_extractor
+from ..models import VideoWam, build_embedder, build_extractor, build_baseline
 from ..augmentation import get_validation_augs
 from ..augmentation.augmenter import get_dummy_augmenter
 from ..evals.metrics import psnr, ssim, bd_rate
@@ -117,17 +117,24 @@ def setup_model(config: VideoWamConfig, ckpt_path: Path) -> VideoWam:
     
     return wam
 
-def setup_model_from_checkpoint(ckpt_path):
+def setup_model_from_checkpoint(ckpt_path: str) -> VideoWam:
     """
     # Example usage
     ckpt_path = '/checkpoint/pfz/2024_logs/0911_vseal_pw/extractor_model=sam_tiny/checkpoint.pth'
-    exp_dir = '/checkpoint/pfz/2024_logs/0911_vseal_pw'
-    exp_name = '_extractor_model=sam_tiny'
+    wam = setup_model_from_checkpoint(ckpt_path)
 
-    wam = load_model_from_checkpoint(exp_dir, exp_name)
+    or 
+    ckpt_path = 'baseline/wam'
+    wam = setup_model_from_checkpoint(ckpt_path)
     """
-    config = get_config_from_checkpoint(ckpt_path)
-    return setup_model(config, ckpt_path)
+    # load baselines. Should be in the format of "baseline/{method}"
+    if "baseline" in ckpt_path:
+        method = ckpt_path.split('/')[-1]
+        build_baseline(method)
+    # load videoseal checkpoints
+    else:
+        config = get_config_from_checkpoint(ckpt_path)
+        return setup_model(config, ckpt_path)
 
 def setup_dataset(args):
     try:
