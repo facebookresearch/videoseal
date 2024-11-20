@@ -27,7 +27,7 @@ import torchvision.transforms as transforms
 import tqdm
 
 
-from .metrics import vmaf_on_tensor, bit_accuracy, iou, accuracy
+from .metrics import vmaf_on_tensor, bit_accuracy, iou, accuracy, pvalue, capacity
 from ..data.datasets import ImageFolder, VideoDataset, CocoImageIDWrapper
 from ..modules.jnd import JND
 from ..models import VideoWam, build_embedder, build_extractor, build_baseline
@@ -301,7 +301,10 @@ def evaluate(
 
                         # extract watermark
                         timer.start()
-                        outputs = wam.detect(imgs_aug, is_video=is_video)
+                        if is_video:
+                            outputs = wam.detect_and_aggregate(imgs_aug)  # 1 k
+                        else:    
+                            outputs = wam.detect(imgs_aug, is_video=False)  # 1 k
                         timer.step()
                         preds = outputs["preds"]
                         mask_preds = preds[:, 0:1]  # b 1 ...
@@ -309,12 +312,12 @@ def evaluate(
 
                         aug_log_stats = {}
                         if decoding:
-                            bit_accuracy_ = bit_accuracy(
-                                bit_preds,
-                                msgs,
-                                masks_aug
-                            ).nanmean().item()
-                            aug_log_stats[f'bit_acc'] = bit_accuracy_
+                            aug_log_stats[f'bit_acc'] = bit_accuracy(
+                                bit_preds, msgs, masks_aug).nanmean().item()
+                            aug_log_stats[f'pvalue'] = pvalue(
+                                bit_preds, msgs, masks_aug).nanmean().item()
+                            aug_log_stats[f'capacity'] = capacity(
+                                bit_preds, masks_aug).nanmean().item()
 
                         if detection:
                             iou0 = iou(mask_preds, masks, label=0).mean().item()
