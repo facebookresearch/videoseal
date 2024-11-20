@@ -362,10 +362,10 @@ def build_baseline(
         extractor = BaselineWAMExtractor(decoder_path)
     elif method == 'trustmark':
         scaling_w = 0.95
-        # encoder_path = '/checkpoint/pfz/projects/videoseal/baselines/trustmark_encoder.pt'
-        # decoder_path = '/checkpoint/pfz/projects/videoseal/baselines/trustmark_decoder.pt'
-        encoder_path = '/Users/pfz/Code/videoseal/assets/trustmark_encoder_q.pt'
-        decoder_path = '/Users/pfz/Code/videoseal/assets/trustmark_decoder_q.pt'
+        encoder_path = '/checkpoint/pfz/projects/videoseal/baselines/trustmark_encoder_q.pt'
+        decoder_path = '/checkpoint/pfz/projects/videoseal/baselines/trustmark_decoder_q.pt'
+        # encoder_path = '/Users/pfz/Code/videoseal/assets/trustmark_encoder_q.pt'
+        # decoder_path = '/Users/pfz/Code/videoseal/assets/trustmark_decoder_q.pt'
         embedder = BaselineTrustmarkEmbedder(encoder_path)
         extractor = BaselineTrustmarkExtractor(decoder_path)
     elif method == 'trustmark_scaling0p5':
