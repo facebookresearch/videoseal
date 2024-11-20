@@ -26,7 +26,7 @@ class Blender(nn.Module):
         self.attenuation = attenuation
         self.scaling_i = scaling_i
         self.scaling_w = scaling_w
-        self.attentuation = attenuation
+        self.attenuation = attenuation
 
         # Map method names to functions
         self.blend_methods = {
@@ -41,8 +41,10 @@ class Blender(nn.Module):
 
     def forward(self, imgs, preds_w):
         """
-        Applies the specified blending method to the input tensors and attenuates the result if specified.
-
+        Blends the original images with the predicted watermarks and applies attenuation if specified.
+        E.g., if method is additive
+            If scaling_i = 0.0 and scaling_w = 1.0, the watermarked image is predicted directly.
+            If scaling_i = 1.0 and scaling_w = 0.2, the watermark is additive.
         Parameters:
             imgs (torch.Tensor): The original image batch tensor.
             preds_w (torch.Tensor): The watermark batch tensor.
@@ -50,15 +52,19 @@ class Blender(nn.Module):
         Returns:
             torch.Tensor: Blended and attenuated image batch.
         """
+        # In case of Y channel only, repeat it to 3 channels (same as embedding only in Y channel)
+        if preds_w.shape[1] == 1:
+            preds_w = preds_w.repeat(1, 3, 1, 1)
+
         # Perform blending
         blend_function = self.blend_methods[self.method]
         blended_output = blend_function(imgs, preds_w)
 
         # Apply attenuation if specified
-        if self.attentuation is not None:
-            # attentuations is sometimes on cpu or gpu
-            self.attentuation.to(imgs.device)
-            blended_output = self.attentuation(imgs, preds_w)
+        if self.attenuation is not None:
+            # attenuation is sometimes on cpu or gpu
+            self.attenuation.to(imgs.device)
+            blended_output = self.attenuation(imgs, preds_w)
 
         # Clamp output if specified
         if self.clamp:

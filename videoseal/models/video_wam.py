@@ -155,7 +155,7 @@ class VideoWam(Wam):
             preds_w = self.video_embedder(self.rgb2yuv(imgs)[:, 0:1], msgs)
         else:
             preds_w = self.video_embedder(imgs, msgs)
-        imgs_w = self.blend(imgs, preds_w)  # frames c h w
+        imgs_w = self.blender(imgs, preds_w)  # frames c h w
         # augment
         imgs_aug, masks, selected_aug = self.augmenter(
             imgs_w, imgs, masks, is_video=True)
@@ -225,7 +225,7 @@ class VideoWam(Wam):
             deltas_in_ck = deltas_in_ck[:len(all_imgs_in_ck)]
 
             # create watermarked imgs
-            all_imgs_in_ck_w = self.blend(all_imgs_in_ck, deltas_in_ck)
+            all_imgs_in_ck_w = self.blender(all_imgs_in_ck, deltas_in_ck)
             imgs_w[start: end, ...] = all_imgs_in_ck_w  # n 3 h w
 
         outputs = {
@@ -239,6 +239,7 @@ class VideoWam(Wam):
         self,
         imgs: torch.Tensor,
         is_video: bool = True,
+        interpolation: dict = {"mode": "bilinear", "align_corners": False, "antialias": True},
     ) -> dict:
         """
         Performs the forward pass of the detector only.
@@ -260,7 +261,8 @@ class VideoWam(Wam):
         for ii in range(0, len(imgs), self.chunk_size):
             nimgs_in_ck = min(self.chunk_size, len(imgs) - ii)
             outputs = super().detect(
-                imgs[ii:ii+nimgs_in_ck]
+                imgs[ii:ii+nimgs_in_ck], 
+                interpolation
             )
             preds = outputs["preds"]
             all_preds.append(preds)  # n k ..
@@ -274,6 +276,7 @@ class VideoWam(Wam):
         self,
         imgs: torch.Tensor,
         aggregation: str = "avg",
+        interpolation: dict = {"mode": "bilinear", "align_corners": False, "antialias": True},
     ) -> torch.Tensor:
         """
         Detects the message in a video and aggregates the predictions across frames.
@@ -290,7 +293,7 @@ class VideoWam(Wam):
         Note:
             If aggregation is None, returns the predictions for each frame without aggregation.
         """
-        outputs = self.detect(imgs, is_video=True)
+        outputs = self.detect(imgs, is_video=True, interpolation=interpolation)
         preds = outputs["preds"]
         mask_preds = preds[:, 0:1]  # binary detection bit (not used for now)
         bit_preds = preds[:, 1:]  # b k ..

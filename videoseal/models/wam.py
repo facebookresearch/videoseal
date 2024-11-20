@@ -67,44 +67,15 @@ class Wam(nn.Module):
         self.detector = detector
         self.augmenter = augmenter
         self.attenuation = attenuation
-        # scalings
-        self.scaling_w = scaling_w
-        self.scaling_i = scaling_i
-        self.clamp = clamp
         # image format
         self.img_size = img_size
         self.rgb2yuv = RGB2YUV()
+        # blending
+        assert blending_method in Blender.AVAILABLE_BLENDING_METHODS
+        self.blender = Blender(scaling_i, scaling_w, blending_method, clamp, attenuation)
 
     def get_random_msg(self, bsz: int = 1, nb_repetitions=1) -> torch.Tensor:
         return self.embedder.get_random_msg(bsz, nb_repetitions)  # b x k
-
-    def blend(self, imgs, preds_w) -> torch.Tensor:
-        """
-        Blends the original images with the predicted watermarks.
-        E.g.,
-            If scaling_i = 0.0 and scaling_w = 1.0, the watermarked image is predicted directly.
-            If scaling_i = 1.0 and scaling_w = 0.2, the watermark is additive.
-        Args:
-            imgs (torch.Tensor): The original images, with shape BxCxHxW
-            preds_w (torch.Tensor): The predicted watermarks, with shape BxC'xHxW, \
-                if C'=1, the watermark alters Y channel only, if C'=3, the watermark is RGB.
-        Returns:
-            torch.Tensor: The watermarked images, with shape BxCxHxW
-        """
-        if preds_w.shape[1] == 1:
-            preds_w = preds_w.repeat(1, 3, 1, 1)
-            imgs_w = self.scaling_i * imgs + self.scaling_w * preds_w
-            # # or equivalently
-            # imgs_w = rgb_to_yuv(imgs)
-            # imgs_w[:, 0:1] = self.scaling_i * imgs_w[:, 0:1] + self.scaling_w * preds_w
-            # imgs_w = yuv_to_rgb(imgs_w)
-        else:
-            imgs_w = self.scaling_i * imgs + self.scaling_w * preds_w
-        if self.attenuation is not None:
-            imgs_w = self.attenuation(imgs, imgs_w)
-        if self.clamp:
-            imgs_w = imgs_w.clamp(0, 1)
-        return imgs_w
 
     def forward(
         self,
@@ -127,7 +98,7 @@ class Wam(nn.Module):
             preds_w = self.embedder(self.rgb2yuv(imgs)[:, 0:1], msgs)
         else:
             preds_w = self.embedder(imgs, msgs)
-        imgs_w = self.blend(imgs, preds_w)
+        imgs_w = self.blender(imgs, preds_w)
         # augment
         imgs_aug, masks, selected_aug = self.augmenter(
             imgs_w, imgs, masks, is_video=False)
@@ -170,7 +141,7 @@ class Wam(nn.Module):
         # interpolate
         imgs_res = imgs.clone()
         if imgs.shape[-2:] != (self.img_size, self.img_size):
-            imgs_res = F.interpolate(imgs, size=(self.img_size, self.img_size), 
+            imgs_res = F.interpolate(imgs, size=(self.img_size, self.img_size),
                                      **interpolation)
         imgs_res = imgs_res.to(self.device)
 
@@ -182,10 +153,10 @@ class Wam(nn.Module):
 
         # interpolate back
         if imgs.shape[-2:] != (self.img_size, self.img_size):
-            preds_w = F.interpolate(preds_w, size=imgs.shape[-2:], 
+            preds_w = F.interpolate(preds_w, size=imgs.shape[-2:],
                                     **interpolation)
         preds_w = preds_w.to(imgs.device)
-        imgs_w = self.blend(imgs, preds_w)
+        imgs_w = self.blender(imgs, preds_w)
 
         outputs = {
             "msgs": msgs,  # original messages: b k
@@ -197,7 +168,7 @@ class Wam(nn.Module):
     def detect(
         self,
         imgs: torch.Tensor,
-        interpolation: dict = {"mode": "bilinear", "align_corners": False, "antialias": False},
+        interpolation: dict = {"mode": "bilinear", "align_corners": False, "antialias": True},
     ) -> dict:
         """
         Performs the forward pass of the detector only (used at inference).
@@ -214,7 +185,6 @@ class Wam(nn.Module):
         if imgs.shape[-2:] != (self.img_size, self.img_size):
             imgs_res = F.interpolate(imgs, size=(self.img_size, self.img_size),
                                         **interpolation)
-                                        
         imgs_res = imgs_res.to(self.device)
 
         # detect watermark
