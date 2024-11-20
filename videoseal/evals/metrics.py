@@ -20,7 +20,7 @@ def psnr(x, y, is_video=False):
     Args:
         x: Image tensor with normalized values (≈ [0,1])
         y: Image tensor with normalized values (≈ [0,1]), ex: original image
-        is_video: If True, the input tensors are video tensors (BxCxT)
+        is_video: If True, the PSNR is computed over the entire batch, not on each image separately
     """
     delta = 255 * (x - y)
     delta = delta.reshape(-1, x.shape[-3], x.shape[-2], x.shape[-1])  # BxCxHxW
@@ -90,7 +90,6 @@ def pvalue(
         targets (torch.Tensor): Target bits with shape BxK
         mask (torch.Tensor): Mask with shape Bx1xHxW (optional)
             Used to compute bit accuracy only on non masked pixels.
-            Bit accuracy will be NaN if all pixels are masked.
     """
     nbits = targets.shape[-1]
     bit_accs = bit_accuracy(preds, targets, mask, threshold)  # b
