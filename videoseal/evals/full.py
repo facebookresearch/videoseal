@@ -382,7 +382,7 @@ def main():
     model.eval()
     
     # Override model parameters in args
-    model.scaling_w = args.scaling_w or model.scaling_w
+    model.blender.scaling_w = args.scaling_w or model.blender.scaling_w
     model.chunk_size = args.videowam_chunk_size or model.chunk_size
     model.step_size = args.videowam_step_size or model.step_size
 
