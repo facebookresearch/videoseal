@@ -302,7 +302,7 @@ def evaluate(
                         # extract watermark
                         timer.start()
                         if is_video:
-                            outputs = wam.detect_and_aggregate(imgs_aug)  # 1 k
+                            outputs = {"preds": wam.detect_and_aggregate(imgs_aug)}  # 1 k                            
                         else:    
                             outputs = wam.detect(imgs_aug, is_video=False)  # 1 k
                         timer.step()
@@ -349,7 +349,7 @@ def main():
 
     group = parser.add_argument_group('Dataset')
     group.add_argument("--dataset", type=str, 
-                       choices=["coco", "coco-stuff-blurred", "sa-v"], help="Name of the dataset.")
+                       choices=["coco", "coco-stuff-blurred", "sa-v", "sa-1b"], help="Name of the dataset.")
     group.add_argument('--is_video', type=bool_inst, default=False, 
                        help='Whether the data is video')
     group.add_argument('--short_edge_size', type=int, default=-1, 
