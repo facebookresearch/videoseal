@@ -305,6 +305,7 @@ def evaluate(
                             preds = wam.detect_and_aggregate(imgs_aug)  # 1 k     
                             preds = torch.cat([torch.ones(preds.size(0), 1).to(preds.device), preds], dim=1)  # 1 1+k
                             outputs = {"preds": preds}
+                            msgs = msgs[:1]  # 1 k
                         else:    
                             outputs = wam.detect(imgs_aug, is_video=False)  # 1 k
                         timer.step()
