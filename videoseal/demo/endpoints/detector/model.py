@@ -30,8 +30,8 @@ class TritonPythonModel(TritonPythonModelBase):
             args["model_version"],
             "checkpoints",
         )
-        config_path = checkpoints_dir / "unet.yaml"
-        checkpoint_path = checkpoints_dir / "unet.pt"
+        config_path = checkpoints_dir / "model.yaml"
+        checkpoint_path = checkpoints_dir / "model.pt"
 
         self.wam, _ = load_video_wam(config_path, checkpoint_path)
         self.wam.eval()
