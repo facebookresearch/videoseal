@@ -238,7 +238,7 @@ def evaluate(
             metrics['psnr'] = psnr(
                 imgs_w[:num_frames], 
                 imgs[:num_frames],
-                is_video).mean().item(),
+                is_video).mean().item()
             metrics['ssim'] = ssim(
                 imgs_w[:num_frames], 
                 imgs[:num_frames]).mean().item()
@@ -302,7 +302,9 @@ def evaluate(
                         # extract watermark
                         timer.start()
                         if is_video:
-                            outputs = {"preds": wam.detect_and_aggregate(imgs_aug)}  # 1 k                            
+                            preds = wam.detect_and_aggregate(imgs_aug)  # 1 k     
+                            preds = torch.cat([torch.ones(preds.size(0), 1).to(preds.device), preds], dim=1)  # 1 1+k
+                            outputs = {"preds": preds}
                         else:    
                             outputs = wam.detect(imgs_aug, is_video=False)  # 1 k
                         timer.step()
@@ -316,8 +318,10 @@ def evaluate(
                                 bit_preds, msgs, masks_aug).nanmean().item()
                             aug_log_stats[f'pvalue'] = pvalue(
                                 bit_preds, msgs, masks_aug).nanmean().item()
+                            aug_log_stats[f'log_pvalue'] = -np.log10(
+                                aug_log_stats[f'pvalue']) if aug_log_stats[f'pvalue'] > 0 else -100
                             aug_log_stats[f'capacity'] = capacity(
-                                bit_preds, masks_aug).nanmean().item()
+                                bit_preds, msgs, masks_aug).nanmean().item()
 
                         if detection:
                             iou0 = iou(mask_preds, masks, label=0).mean().item()

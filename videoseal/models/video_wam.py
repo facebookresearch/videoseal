@@ -296,13 +296,13 @@ class VideoWam(Wam):
         outputs = self.detect(imgs, is_video=True, interpolation=interpolation)
         preds = outputs["preds"]
         mask_preds = preds[:, 0:1]  # binary detection bit (not used for now)
-        bit_preds = preds[:, 1:]  # b k ..
+        bit_preds = preds[:, 1:]  # f k ..
         if aggregation is None:
             decoded_msg = bit_preds
         elif aggregation == "avg":
             decoded_msg = bit_preds.mean(dim=0)
         elif aggregation == "weighted_avg":
-            decoded_msg = (bit_preds * bit_preds.abs()).mean(dim=0)  # b k -> k
+            decoded_msg = (bit_preds * bit_preds.abs()).mean(dim=0)  # f k -> k
         msg = (decoded_msg > 0).squeeze().unsqueeze(0)  # 1 k
         return msg
 
