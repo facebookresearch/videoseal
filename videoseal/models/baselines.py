@@ -250,7 +250,8 @@ class BaselineWAMExtractor(Extractor):
             The extracted messages.
         """
         imgs = self.preprocess(imgs)
-        msgs = self.decoder(imgs)  # b 1+k
+        msgs = self.decoder(imgs)  # b 1+k h w
+        msgs = msgs.mean(dim=[-2, -1])  # b 1+k
         return msgs
 
 
