@@ -1,0 +1,16 @@
+{
+  "inputs": [
+    {
+      "name": "video",
+      "datatype": "BYTES",
+      "shape": [1],
+      "data": ["audiobox.mp4"]
+    },
+    {
+      "name": "key",
+      "datatype": "BYTES",
+      "shape": [1],
+      "data": ["1011"]
+    }
+  ]
+}

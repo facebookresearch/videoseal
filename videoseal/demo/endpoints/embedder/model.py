@@ -109,7 +109,9 @@ class TritonPythonModel(TritonPythonModelBase):
             ).decode("utf-8")
             xray_video_b64 = base64.b64encode(xray_video_io.getvalue()).decode("utf-8")
 
-        output_key, output_message = decode_message_tensor(message_tensor)
+        output_key, output_message = decode_message_tensor(
+            message_tensor, nkeybits=len(key)
+        )
 
         return pb_utils.InferenceResponse(
             output_tensors=[

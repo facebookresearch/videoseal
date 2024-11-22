@@ -7,7 +7,7 @@ from typing import Any, Dict
 
 import requests
 
-TEST_CASES = ["request.json", "request_with_message.json"]
+TEST_CASES = ["request.json", "request_with_message.json", "request_with_key.json"]
 
 
 def transform_test_data_into_request_data(data: Dict[str, Any]):
