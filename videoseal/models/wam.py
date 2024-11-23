@@ -66,13 +66,14 @@ class Wam(nn.Module):
         self.embedder = embedder
         self.detector = detector
         self.augmenter = augmenter
-        self.attenuation = attenuation
         # image format
         self.img_size = img_size
         self.rgb2yuv = RGB2YUV()
         # blending
         assert blending_method in Blender.AVAILABLE_BLENDING_METHODS
         self.blender = Blender(scaling_i, scaling_w, blending_method, clamp, attenuation)
+        self.attenuation = attenuation
+        self.clamp = clamp
 
     def get_random_msg(self, bsz: int = 1, nb_repetitions=1) -> torch.Tensor:
         return self.embedder.get_random_msg(bsz, nb_repetitions)  # b x k
@@ -99,6 +100,12 @@ class Wam(nn.Module):
         else:
             preds_w = self.embedder(imgs, msgs)
         imgs_w = self.blender(imgs, preds_w)
+        # apply attenuation and clamp
+        if self.attenuation is not None:
+            self.attenuation.to(imgs.device)
+            imgs_w = self.attenuation(imgs, imgs_w)
+        if self.clamp:
+            imgs_w = torch.clamp(imgs_w, 0, 1)
         # augment
         imgs_aug, masks, selected_aug = self.augmenter(
             imgs_w, imgs, masks, is_video=False)
@@ -157,6 +164,13 @@ class Wam(nn.Module):
                                     **interpolation)
         preds_w = preds_w.to(imgs.device)
         imgs_w = self.blender(imgs, preds_w)
+
+        # apply attenuation and clamp
+        if self.attenuation is not None:
+            self.attenuation.to(imgs.device)
+            imgs_w = self.attenuation(imgs, imgs_w)
+        if self.clamp:
+            imgs_w = torch.clamp(imgs_w, 0, 1)
 
         outputs = {
             "msgs": msgs,  # original messages: b k

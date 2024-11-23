@@ -13,7 +13,7 @@ class Identity(nn.Module):
     def __init__(self):
         super(Identity, self).__init__()
 
-    def forward(self, image, mask, *args, **kwargs):
+    def forward(self, image, mask=None, *args, **kwargs):
         return image, mask
     
     def __repr__(self):
@@ -31,10 +31,10 @@ class Rotate(nn.Module):
             raise ValueError("min_angle and max_angle must be provided")
         return torch.randint(self.min_angle, self.max_angle + 1, size=(1,)).item()
 
-    def forward(self, image, mask, angle=None):
+    def forward(self, image, mask=None, angle=None):
         angle = angle or self.get_random_angle()
         image = F.rotate(image, angle)
-        mask = F.rotate(mask, angle)
+        mask = F.rotate(mask, angle) if mask is not None else mask
         return image, mask
     
     def __repr__(self):
@@ -59,14 +59,14 @@ class Resize(nn.Module):
         )
         return output_size
 
-    def forward(self, image, mask, size=None):
+    def forward(self, image, mask=None, size=None):
         h, w = image.shape[-2:]
         if size is None:
             output_size = self.get_random_size(h, w)
         else:
             output_size = (int(size * h), int(size * w))
         image = F.resize(image, output_size, antialias=True)
-        mask = F.resize(mask, output_size, antialias=True)
+        mask = F.resize(mask, output_size, antialias=True) if mask is not None else mask
         return image, mask
     
     def __repr__(self):
@@ -90,7 +90,7 @@ class Crop(nn.Module):
         )
         return output_size
 
-    def forward(self, image, mask, size=None):
+    def forward(self, image, mask=None, size=None):
         h, w = image.shape[-2:]
         if size is None:
             output_size = self.get_random_size(h, w)
@@ -99,7 +99,7 @@ class Crop(nn.Module):
         i, j, h, w = transforms.RandomCrop.get_params(
             image, output_size=output_size)
         image = F.crop(image, i, j, h, w)
-        mask = F.crop(mask, i, j, h, w)
+        mask = F.crop(mask, i, j, h, w) if mask is not None else mask
         return image, mask
 
     def __repr__(self):
@@ -119,13 +119,13 @@ class Perspective(nn.Module):
         return self.min_distortion_scale + torch.rand(1).item() * \
             (self.max_distortion_scale - self.min_distortion_scale)
 
-    def forward(self, image, mask, distortion_scale=None):
+    def forward(self, image, mask=None, distortion_scale=None):
         distortion_scale = distortion_scale or self.get_random_distortion_scale()
         width, height = image.shape[-1], image.shape[-2]
         startpoints, endpoints = self.get_perspective_params(
             width, height, distortion_scale)
         image = F.perspective(image, startpoints, endpoints)
-        mask = F.perspective(mask, startpoints, endpoints)
+        mask = F.perspective(mask, startpoints, endpoints) if mask is not None else mask
         return image, mask
 
     @staticmethod
@@ -169,9 +169,9 @@ class HorizontalFlip(nn.Module):
     def __init__(self):
         super(HorizontalFlip, self).__init__()
 
-    def forward(self, image, mask, *args, **kwargs):
+    def forward(self, image, mask=None, *args, **kwargs):
         image = F.hflip(image)
-        mask = F.hflip(mask)
+        mask = F.hflip(mask) if mask is not None else mask
         return image, mask
 
     def __repr__(self):

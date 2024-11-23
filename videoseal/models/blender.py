@@ -60,16 +60,6 @@ class Blender(nn.Module):
         blend_function = self.blend_methods[self.method]
         blended_output = blend_function(imgs, preds_w)
 
-        # Apply attenuation if specified
-        if self.attenuation is not None:
-            # attenuation is sometimes on cpu or gpu
-            self.attenuation.to(imgs.device)
-            blended_output = self.attenuation(imgs, preds_w)
-
-        # Clamp output if specified
-        if self.clamp:
-            blended_output = torch.clamp(blended_output, 0, 1)
-
         return blended_output
 
     def additive_blend(self, imgs, preds_w):

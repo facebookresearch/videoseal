@@ -111,3 +111,93 @@ class JND(nn.Module):
         hmaps = self.heatmaps(imgs, clc=0.3)
         imgs_w = imgs + alpha * hmaps * (imgs_w - imgs)
         return self.postprocess(imgs_w)
+
+
+
+
+class JNDSimplified(nn.Module):
+    """ https://ieeexplore.ieee.org/document/7885108 """
+    
+    def __init__(self, 
+            preprocess = lambda x: x,
+            postprocess = lambda x: x,
+            in_channels = 1,
+            out_channels = 3,
+            blue = False
+    ) -> None:
+        super(JNDSimplified, self).__init__()
+
+        # setup input and output methods
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.blue = blue
+        groups = self.in_channels
+
+        # create kernels
+        kernel_x = torch.tensor(
+            [[-1., 0., 1.], 
+            [-2., 0., 2.], 
+            [-1., 0., 1.]]
+        ).unsqueeze(0).unsqueeze(0)
+        kernel_y = torch.tensor(
+            [[1., 2., 1.], 
+            [0., 0., 0.], 
+            [-1., -2., -1.]]
+        ).unsqueeze(0).unsqueeze(0)
+
+        # Expand kernels for 3 input channels and 3 output channels, apply the same filter to each channel
+        kernel_x = kernel_x.repeat(groups, 1, 1, 1)
+        kernel_y = kernel_y.repeat(groups, 1, 1, 1)
+
+        self.conv_x = nn.Conv2d(3, 3, kernel_size=(3, 3), padding=1, bias=False, groups=groups)
+        self.conv_y = nn.Conv2d(3, 3, kernel_size=(3, 3), padding=1, bias=False, groups=groups)
+
+        self.conv_x.weight = nn.Parameter(kernel_x, requires_grad=False)
+        self.conv_y.weight = nn.Parameter(kernel_y, requires_grad=False)
+
+        # setup pre and post processing
+        self.preprocess = preprocess
+        self.postprocess = postprocess
+
+    # @torch.no_grad()
+    def heatmaps(
+        self, 
+        imgs: torch.Tensor, 
+        min_hmap_value: float = 0.1,
+        max_hmap_value: float = 1.0,
+        max_squared_gradient_value_for_clipping = 64000,
+    ) -> torch.Tensor:
+        """ imgs must be in [0,1] after preprocess """
+        imgs = 255 * imgs
+        rgbs = torch.tensor([0.299, 0.587, 0.114])
+        if self.in_channels == 1:
+            imgs = rgbs[0] * imgs[...,0:1,:,:] + rgbs[1] * imgs[...,1:2,:,:] + rgbs[2] * imgs[...,2:3,:,:]  # luminance: b 1 h w
+        grad_x = self.conv_x(imgs)
+        grad_y = self.conv_y(imgs)
+        cm = grad_x**2 + grad_y**2
+        cm = torch.clamp(cm, max=max_squared_gradient_value_for_clipping)
+        hmaps = (max_hmap_value - min_hmap_value) * cm / max_squared_gradient_value_for_clipping + min_hmap_value
+        if self.out_channels == 3 and self.in_channels == 1:
+            # rgbs = (1-rgbs).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
+            hmaps = hmaps.repeat(1, 3, 1, 1)  # b 3 h w
+            if self.blue:
+                hmaps[:, 0] = hmaps[:, 0] * 0.5
+                hmaps[:, 1] = hmaps[:, 1] * 0.5
+                hmaps[:, 2] = hmaps[:, 2] * 1.0
+            # return  hmaps * rgbs.to(hmaps.device)  # b 3 h w
+        elif self.out_channels == 1 and self.in_channels == 3:
+            # rgbs = (1-rgbs).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
+            # return torch.sum(
+            #     hmaps * rgbs.to(hmaps.device), 
+            #     dim=1, keepdim=True
+            # )  # b c h w * 1 c -> b 1 h w
+            hmaps = torch.sum(hmaps / 3, dim=1, keepdim=True)  # b 1 h w
+        return hmaps
+
+    def forward(self, imgs: torch.Tensor, imgs_w: torch.Tensor, alpha: float = 1.0) -> torch.Tensor:
+        """ imgs and deltas must be in [0,1] after preprocess """
+        imgs = self.preprocess(imgs)
+        imgs_w = self.preprocess(imgs_w)
+        hmaps = self.heatmaps(imgs)
+        imgs_w = imgs + alpha * hmaps * (imgs_w - imgs)
+        return self.postprocess(imgs_w)

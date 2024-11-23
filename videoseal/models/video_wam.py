@@ -156,6 +156,12 @@ class VideoWam(Wam):
         else:
             preds_w = self.video_embedder(imgs, msgs)
         imgs_w = self.blender(imgs, preds_w)  # frames c h w
+        # apply attenuation and clamp
+        if self.attenuation is not None:
+            self.attenuation.to(imgs.device)
+            imgs_w = self.attenuation(imgs, imgs_w)
+        if self.clamp:
+            imgs_w = torch.clamp(imgs_w, 0, 1)
         # augment
         imgs_aug, masks, selected_aug = self.augmenter(
             imgs_w, imgs, masks, is_video=True)
@@ -224,8 +230,95 @@ class VideoWam(Wam):
             # at the end of video there might be more deltas than needed
             deltas_in_ck = deltas_in_ck[:len(all_imgs_in_ck)]
 
-            # create watermarked imgs
+            # blend, apply attenuation and clamp
             all_imgs_in_ck_w = self.blender(all_imgs_in_ck, deltas_in_ck)
+            if self.attenuation is not None:
+                self.attenuation.to(all_imgs_in_ck.device)  # on cpu because high res
+                all_imgs_in_ck_w = self.attenuation(all_imgs_in_ck, all_imgs_in_ck_w)
+            if self.clamp:
+                all_imgs_in_ck_w = torch.clamp(all_imgs_in_ck_w, 0, 1)
+
+            # create watermarked imgs
+            imgs_w[start: end, ...] = all_imgs_in_ck_w  # n 3 h w
+
+        outputs = {
+            "imgs_w": imgs_w,  # watermarked imgs: f 3 h w
+            "msgs": msgs[0:1].repeat(len(imgs), 1),  # original messages: f k
+        }
+        return outputs
+
+    @torch.no_grad()
+    def embed_lowres_attenuation(
+        self,
+        imgs: torch.Tensor,
+        msgs: torch.Tensor = None,
+        is_video: bool = True,
+        interpolation: dict = {"mode": "bilinear", "align_corners": False, "antialias": True},
+    ) -> dict:
+        """ 
+        Generates watermarked videos from the input images and messages (used for inference).
+        Videos may be arbitrarily sized.
+        """
+        if not is_video:
+            # fallback on parent class for batch of images
+            return super().embed_lowres_attenuation(imgs, msgs)
+        if msgs is None:
+            msgs = self.get_random_msg()  # 1 x k
+        else:
+            assert msgs.shape[0] == 1, "Message should be unique"
+        msgs = msgs.repeat(self.chunk_size, 1)  # 1 k -> n k
+
+        # encode by chunk of cksz imgs, propagate the wm to spsz next imgs
+        chunk_size = self.chunk_size  # n=cksz
+        step_size = self.step_size  # spsz
+
+        # initialize watermarked imgs
+        imgs_w = torch.zeros_like(imgs)  # f 3 h w
+
+        # chunking is necessary to avoid memory issues (when too many frames)
+        for ii in range(0, len(imgs[::step_size]), chunk_size):
+            nimgs_in_ck = min(chunk_size, len(imgs[::step_size]) - ii)
+            start = ii * step_size
+            end = start + nimgs_in_ck * step_size
+            all_imgs_in_ck = imgs[start: end, ...]  # f 3 h w
+
+            # deal with last chunk that may have less than chunk_size imgs
+            if nimgs_in_ck < chunk_size:
+                msgs = msgs[:nimgs_in_ck]
+
+            # interpolate
+            all_imgs_res = all_imgs_in_ck.clone()
+            if all_imgs_res.shape[-2:] != (self.img_size, self.img_size):
+                all_imgs_res = F.interpolate(all_imgs_res, size=(self.img_size, self.img_size),
+                                            **interpolation)
+            all_imgs_res = all_imgs_res.to(self.device)
+
+            # choose one frame every step_size
+            imgs_res = all_imgs_res[::step_size]  # n 3 h w
+
+            # get deltas for the chunk, and repeat them for each frame in the chunk
+            if self.embedder.yuv:  # take y channel only
+                imgs_res = self.rgb2yuv(imgs_res)[:, 0:1]
+            preds_w = self.embedder(imgs_res, msgs.to(self.device))
+            preds_w = torch.repeat_interleave(preds_w, step_size, dim=0)  # f 3 256 256
+            preds_w = preds_w[:len(all_imgs_in_ck)]
+
+            # attenuate 
+            if self.attenuation is not None:
+                self.attenuation.to(all_imgs_res.device)
+                hmaps = self.attenuation.heatmaps(all_imgs_res)
+                preds_w = hmaps * preds_w
+            
+            # interpolate back
+            preds_w = preds_w.to(imgs.device)
+            if all_imgs_in_ck.shape[-2:] != (self.img_size, self.img_size):
+                preds_w = F.interpolate(preds_w, size=all_imgs_in_ck.shape[-2:],
+                                        **interpolation)
+
+            # blend
+            all_imgs_in_ck_w = self.blender(all_imgs_in_ck, preds_w)
+            if self.clamp:
+                all_imgs_in_ck_w = torch.clamp(all_imgs_in_ck_w, 0, 1)
             imgs_w[start: end, ...] = all_imgs_in_ck_w  # n 3 h w
 
         outputs = {
