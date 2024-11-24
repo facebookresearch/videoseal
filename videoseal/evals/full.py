@@ -118,7 +118,7 @@ def setup_model(config: VideoWamConfig, ckpt_path: Path) -> VideoWam:
     
     # compile
     wam.compile()
-    
+
     return wam
 
 def setup_model_from_checkpoint(ckpt_path: str) -> VideoWam:
