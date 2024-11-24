@@ -367,7 +367,7 @@ def main():
     group = parser.add_argument_group('Model parameters to override. If not provided, the checkpoint values are used.')
     group.add_argument("--attenuation_config", type=str, default="configs/attenuation.yaml",
        help="Path to the attenuation config file")
-    group.add_argument("--attenuation", type=str, default="None",
+    group.add_argument("--attenuation", type=str, default=None,
                         help="Attenuation model to use")
     group.add_argument("--scaling_w", type=float, default=None,
                         help="Scaling factor for the watermark in the embedder model")
@@ -400,13 +400,14 @@ def main():
     model.to(device)
 
     # Override attenuation build
-    # should be on CPU to operate on high resolution videos
-    if args.attenuation.lower() != "none":
-        attenuation_cfg = omegaconf.OmegaConf.load(args.attenuation_config)
-        attenuation = JND(**attenuation_cfg[args.attenuation])
-    else:
-        attenuation = None
-    model.attenuation = attenuation
+    if args.attenuation is not None:
+        # should be on CPU to operate on high resolution videos
+        if args.attenuation.lower() != "none":
+            attenuation_cfg = omegaconf.OmegaConf.load(args.attenuation_config)
+            attenuation = JND(**attenuation_cfg[args.attenuation])
+        else:
+            attenuation = None
+        model.attenuation = attenuation
 
     # Setup the dataset    
     dataset = setup_dataset(args)
