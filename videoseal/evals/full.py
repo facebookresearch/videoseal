@@ -5,7 +5,7 @@ python -m videoseal.evals.full \
     --dataset sa-v --is_video true --num_samples 1 \
 
 
-    
+    /private/home/hadyelsahar/work/code/videoseal/2024_logs_large-exp/1109-videoseal0.2-discloss-fix-hing-sleepwake-4nodes/_scaling_w=0.5_lambda_i=0.5_disc_hinge_on_logits_fake=True_sleepwake=False_video_start=500/checkpoint.pth
     /private/home/hadyelsahar/work/code/videoseal/2024_logs/1016-hybrid-vs-ours/_lambda_d=0.5_lambda_i=0.5_optimizer=AdamW,lr=1e-4_videowam_step_size=4_video_start=500_embedder_model=unet_small2/checkpoint.pth
 """
 
@@ -115,6 +115,9 @@ def setup_model(config: VideoWamConfig, ckpt_path: Path) -> VideoWam:
     else:
         msg = f"Checkpoint path does not exist:{ckpt_path}"
         raise FileNotFoundError(msg)
+    
+    # compile
+    wam.compile()
     
     return wam
 
