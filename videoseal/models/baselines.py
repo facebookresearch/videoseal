@@ -349,7 +349,7 @@ def build_baseline(
         embedder = BaselineCINEmbedder(encoder_path)
         extractor = BaselineCINExtractor(decoder_path)
     elif method == 'wam':
-        scaling_w = 0.6
+        scaling_w = 0.1
         attenuation = JND(in_channels=1, out_channels=3, blue=True)
         encoder_path = '/checkpoint/pfz/projects/videoseal/baselines/wam_encoder.pt'
         decoder_path = '/checkpoint/pfz/projects/videoseal/baselines/wam_decoder.pt'
