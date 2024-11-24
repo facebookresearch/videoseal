@@ -247,8 +247,8 @@ def evaluate(
                 imgs_w[:num_frames], 
                 imgs[:num_frames]).mean().item()
             metrics['lpips'] = lpips_loss(
-                imgs_w[:num_frames], 
-                imgs[:num_frames]).mean().item()
+                2*imgs_w[:num_frames]-1, 
+                2*imgs[:num_frames]-1).mean().item()
             if is_video:
                 timer.start()
                 metrics['vmaf'] = vmaf_on_tensor(
