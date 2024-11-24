@@ -19,6 +19,7 @@ import argparse
 import os
 import numpy as np
 import pandas as pd
+from lpips import LPIPS
 
 import torch
 from torch.utils.data import Dataset, Subset
@@ -201,6 +202,9 @@ def evaluate(
     validation_augs = get_validation_augs(is_video)
     timer = Timer()
 
+    # create lpips
+    lpips_loss = LPIPS(net="alex").eval()
+
     # save the metrics as csv
     metrics_path = os.path.join(output_dir, "metrics.csv")
     print(f"Saving metrics to {metrics_path}")
@@ -240,6 +244,9 @@ def evaluate(
                 imgs[:num_frames],
                 is_video).mean().item()
             metrics['ssim'] = ssim(
+                imgs_w[:num_frames], 
+                imgs[:num_frames]).mean().item()
+            metrics['lpips'] = lpips_loss(
                 imgs_w[:num_frames], 
                 imgs[:num_frames]).mean().item()
             if is_video:
