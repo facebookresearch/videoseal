@@ -123,7 +123,7 @@ class BaselineMBRSExtractor(Extractor):
             The extracted messages.
         """
         imgs = self.preprocess(imgs)
-        msgs = self.decoder(imgs)  # b k
+        msgs = 2* self.decoder(imgs) -1  # b k
         # add +1 to the last dimension to make it b k+1 (WAM compatible)
         msgs = torch.cat([torch.zeros(msgs.size(0), 1).to(msgs.device), msgs], dim=1)
         return msgs
