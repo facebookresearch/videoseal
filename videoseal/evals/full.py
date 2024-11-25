@@ -288,11 +288,11 @@ def evaluate(
                     ori_path = ori_path.replace(".png", ".mp4")
                     wm_path = wm_path.replace(".png", ".mp4")
                     diff_path = diff_path.replace(".png", ".mp4")
-                    timer.start()
+                    # timer.start()
                     save_vid(imgs, ori_path, fps)
                     save_vid(imgs_w, wm_path, fps)
                     save_vid(imgs - imgs_w, diff_path, fps)
-                    metrics['save_vid_time'] = timer.end()
+                    # metrics['save_vid_time'] = timer.end()
 
             # extract watermark and evaluate robustness
             if detection or decoding:
