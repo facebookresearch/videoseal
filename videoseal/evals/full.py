@@ -364,7 +364,8 @@ def main():
 
     group = parser.add_argument_group('Dataset')
     group.add_argument("--dataset", type=str, 
-                       choices=["coco", "coco-stuff-blurred", "sa-v", "sa-v-3s", "sa-1b"], help="Name of the dataset.")
+                    #    choices=["coco", "coco-stuff-blurred", "sa-v", "sa-v-3s", "sa-1b"], 
+                       help="Name of the dataset.")
     group.add_argument('--is_video', type=bool_inst, default=False, 
                        help='Whether the data is video')
     group.add_argument('--short_edge_size', type=int, default=-1, 
