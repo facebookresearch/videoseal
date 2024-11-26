@@ -389,13 +389,19 @@ class VideoWam(Wam):
         outputs = self.detect(imgs, is_video=True, interpolation=interpolation)
         preds = outputs["preds"]
         mask_preds = preds[:, 0:1]  # binary detection bit (not used for now)
-        bit_preds = preds[:, 1:]  # f k ..
+        bit_preds = preds[:, 1:]  # f k .., must <0 for bit 0 and >0 for bit 1
         if aggregation is None:
             decoded_msg = bit_preds
         elif aggregation == "avg":
             decoded_msg = bit_preds.mean(dim=0)
-        elif aggregation == "weighted_avg":
+        elif aggregation == "squared_avg":
             decoded_msg = (bit_preds * bit_preds.abs()).mean(dim=0)  # f k -> k
+        elif aggregation == "l1norm_avg":
+            frame_weights = torch.norm(bit_preds, p=1, dim=1).unsqueeze(1)  # f 1
+            decoded_msg = (bit_preds * frame_weights).mean(dim=0)  # f k -> k
+        elif aggregation == "l2norm_avg":
+            frame_weights = torch.norm(bit_preds, p=2, dim=1).unsqueeze(1)  # f 1
+            decoded_msg = (bit_preds * frame_weights).mean(dim=0)
         msg = (decoded_msg > 0).squeeze().unsqueeze(0)  # 1 k
         return msg
 

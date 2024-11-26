@@ -186,6 +186,7 @@ def evaluate(
     output_dir: str,
     save_first: int = -1,
     num_frames: int = 24*3,
+    video_aggregation: str = "avg",
     bdrate: bool = True,
     decoding: bool = True,
     detection: bool = False,
@@ -218,6 +219,8 @@ def evaluate(
             metrics = {}
 
             # some data loaders return batch_data, masks, frames_positions as well
+            if batch_items is None:
+                continue
             imgs, masks = batch_items[0], batch_items[1]
             if not is_video:
                 imgs = imgs.unsqueeze(0)  # c h w -> 1 c h w
@@ -312,7 +315,7 @@ def evaluate(
                         # extract watermark
                         timer.start()
                         if is_video:
-                            preds = wam.detect_and_aggregate(imgs_aug)  # 1 k     
+                            preds = wam.detect_and_aggregate(imgs_aug, video_aggregation)  # 1 k     
                             preds = torch.cat([torch.ones(preds.size(0), 1).to(preds.device), preds], dim=1)  # 1 1+k
                             outputs = {"preds": preds}
                             msgs = msgs[:1]  # 1 k
@@ -374,6 +377,8 @@ def main():
                        help='Number of frames to evaluate for video quality')
     group.add_argument('--num_samples', type=int, default=100, 
                           help='Number of samples to evaluate')
+    group.add_argument('--video_aggregation', type=str, default="avg",
+                            help='Aggregation method for detection of video frames')
     
     group = parser.add_argument_group('Model parameters to override. If not provided, the checkpoint values are used.')
     group.add_argument("--attenuation_config", type=str, default="configs/attenuation.yaml",
@@ -433,6 +438,7 @@ def main():
         output_dir = args.output_dir,
         save_first = args.save_first,
         num_frames = args.num_frames,
+        video_aggregation = args.video_aggregation,
         bdrate = args.bdrate,
         decoding = args.decoding,
         detection = args.detection,
