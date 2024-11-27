@@ -187,6 +187,7 @@ def evaluate(
     save_first: int = -1,
     num_frames: int = 24*3,
     video_aggregation: str = "avg",
+    only_identity: bool = False,
     bdrate: bool = True,
     decoding: bool = True,
     detection: bool = False,
@@ -203,7 +204,7 @@ def evaluate(
         detection (bool): Whether to evaluate detection metrics (default: False)
     """
     all_metrics = []
-    validation_augs = get_validation_augs(is_video)
+    validation_augs = get_validation_augs(is_video, only_identity)
     timer = Timer()
 
     # create lpips
@@ -396,6 +397,7 @@ def main():
     group.add_argument("--output_dir", type=str, default="output/", help="Output directory for logs and images (Default: /output)")
     group.add_argument('--save_first', type=int, default=-1, help='Number of images/videos to save')
     group.add_argument('--bdrate', type=bool_inst, default=True, help='Whether to compute BD-rate')
+    group.add_argument('--only_identity', type=bool_inst, default=False, help='Whether to only evaluate the identity augmentation')
     group.add_argument('--decoding', type=bool_inst, default=True, help='Whether to evaluate decoding metrics')
     group.add_argument('--detection', type=bool_inst, default=False, help='Whether to evaluate detection metrics')
 
@@ -439,6 +441,7 @@ def main():
         save_first = args.save_first,
         num_frames = args.num_frames,
         video_aggregation = args.video_aggregation,
+        only_identity = args.only_identity,
         bdrate = args.bdrate,
         decoding = args.decoding,
         detection = args.detection,
