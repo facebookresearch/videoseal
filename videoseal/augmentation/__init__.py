@@ -33,11 +33,16 @@ def get_validation_augs_subset(
 
 
 def get_validation_augs(
-    is_video: bool = False
+    is_video: bool = False,
+    only_identity: bool = False
 ) -> list:
     """
     Get the validation augmentations.
     """
+    if only_identity:
+        augs = [
+            (Identity(),          [0]),  # No parameters needed for identity
+        ]
     if is_video:
         # less augs for videos because more expensive
         augs = [

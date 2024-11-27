@@ -163,7 +163,7 @@ class JNDSimplified(nn.Module):
     def heatmaps(
         self, 
         imgs: torch.Tensor, 
-        min_hmap_value: float = 0.1,
+        min_hmap_value: float = 0.5,
         max_hmap_value: float = 1.0,
         max_squared_gradient_value_for_clipping = 64000,
     ) -> torch.Tensor:
