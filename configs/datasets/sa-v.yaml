@@ -1,0 +1,4 @@
+train_dir: /path/to/sa-v/sav_train/
+val_dir: /path/to/sa-v/sav_val_videos/
+train_annotation_file: null
+val_annotation_file: null

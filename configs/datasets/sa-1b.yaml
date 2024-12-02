@@ -1,0 +1,4 @@
+train_dir: /path/to/sa-1b/anonymized_resized/train
+val_dir: /path/to/sa-1b/anonymized_resized/valid/
+train_annotation_file: null
+val_annotation_file: null

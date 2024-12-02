@@ -1,0 +1,12 @@
+__pycache__
+output
+outputs
+core
+core*
+*egg-info
+*.pth
+
+fb_*
+*_fb
+# Track videos in test directories
+!**/tests/**/*.mp4
