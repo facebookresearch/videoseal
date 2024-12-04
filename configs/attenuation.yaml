@@ -1,0 +1,15 @@
+jnd_1_1:
+  in_channels: 1
+  out_channels: 1
+
+jnd_3_3:
+  in_channels: 3
+  out_channels: 3
+
+jnd_1_3:
+  in_channels: 1
+  out_channels: 3
+
+jnd_3_1:
+  in_channels: 3
+  out_channels: 1

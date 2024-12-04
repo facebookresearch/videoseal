@@ -1,0 +1,4 @@
+train_dir: /path/to/COCO/060817/train2014/
+train_annotation_file: null
+val_dir: /path/to/COCO/060817/val2014/
+val_annotation_file: null
