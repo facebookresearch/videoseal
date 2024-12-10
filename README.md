@@ -7,7 +7,7 @@ Official implementation of Video Seal: training and inference code for video wat
 
 [[`arXiv`](https://arxiv.org/abs/ARXIV_LINK)]
 [[`Colab`](https://colab.research.google.com/github/facebookresearch/videoseal/blob/main/notebooks/colab.ipynb)]
-
+[[`Demo`](https://aidemos.meta.com/videoseal)]
 
 | Original | Video Seal output | The watermark (normalized for visibility)|
 |---|---|---|
