@@ -3,7 +3,9 @@
 
 Official implementation of Video Seal: training and inference code for video watermarking, and state-of-the-art open-sourced models.
 
-<!-- Our approach leverages temporal watermark propagation, a novel technique that converts any image watermarking model into an efficient video watermarking model, eliminating the need to watermark every frame in a video. We also propose a multistage training regimen that includes image pre-training, hybrid post-training, and extractor fine-tuning, supplemented with a range of differentiable augmentations. This repository includes pre-trained models, training code, inference code, baselines of state-of-the-art image watermarking models adapted for video watermarking (including MBRS, TrustMark, and WAM), and evaluation tools, all released under the MIT license, allowing for free use, modification, and distribution of the code and models. -->
+This repository includes pre-trained models, training code, inference code, and evaluation tools, all released under the MIT license, as well as baselines of state-of-the-art image watermarking models adapted for video watermarking (including MBRS, CIN, TrustMark, and WAM) allowing for free use, modification, and distribution of the code and models. 
+<!-- Our approach leverages temporal watermark propagation, a novel technique that converts any image watermarking model into an efficient video watermarking model, eliminating the need to watermark every frame in a video. We also propose a multistage training regimen that includes image pre-training, hybrid post-training, and extractor fine-tuning, supplemented with a range of differentiable augmentations. 
+-->
 
 [[`arXiv`](https://arxiv.org/abs/ARXIV_LINK)]
 [[`Colab`](https://colab.research.google.com/github/facebookresearch/videoseal/blob/main/notebooks/colab.ipynb)]
