@@ -1,5 +1,9 @@
-# https://github.com/dingkeyan93/DISTS/blob/master/DISTS_pytorch/DISTS_pt.py
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+# This source code is licensed under the license found in the
+# LICENSE file in the sav_dataset directory of this source tree.
 
+# Mostly copy paste from https://github.com/dingkeyan93/DISTS/blob/master/DISTS_pytorch/DISTS_pt.py
 # This is a pytoch implementation of DISTS metric.
 # Requirements: python >= 3.6, pytorch >= 1.0
 
@@ -120,13 +124,14 @@ def prepare_image(image, resize=True):
     image = transforms.ToTensor()(image)
     return image.unsqueeze(0)
 
+
 if __name__ == '__main__':
 
     from PIL import Image
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('--ref', type=str, default='../images/r0.png')
-    parser.add_argument('--dist', type=str, default='../images/r1.png')
+    parser.add_argument('--ref', type=str, default='assets/imgs/1.jpg')
+    parser.add_argument('--dist', type=str, default='assets/imgs/1.jpg')
     args = parser.parse_args()
     
     ref = prepare_image(Image.open(args.ref).convert("RGB"))
@@ -139,4 +144,5 @@ if __name__ == '__main__':
     dist = dist.to(device)
     score = model(ref, dist)
     print(score.item())
+
     # score: 0.3347

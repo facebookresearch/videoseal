@@ -1,16 +1,17 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+# This source code is licensed under the license found in the
+# LICENSE file in the sav_dataset directory of this source tree.
+
 import torch
 import torch.nn as nn
 from lpips import LPIPS
 
-
 from .watson_fft import ColorWrapper, WatsonDistanceFft
 from .watson_vgg import WatsonDistanceVgg
-from .compression import CompressionLoss
 from .dists import DISTS
 from .jndloss import JNDLoss
-from .regularizer import MMDLoss, WassersteinLoss
 from .focal import FocalFrequencyLoss
-from .pattern_complexity import PCLoss
 from .ssim import SSIM, MSSSIM
 from .yuvloss import YUVLoss
 
@@ -24,32 +25,22 @@ class PerceptualLoss(nn.Module):
         percep_loss: str
     ):
         super(PerceptualLoss, self).__init__()
+
         self.losses = {
+            "none": NoneLoss(),
             "lpips": LPIPS(net="vgg").eval(),
             "mse": nn.MSELoss(),
             "yuv": YUVLoss(),
             "jnd2": JNDLoss(loss_type=2),
-            "none": NoneLoss(),
-            "pattern0": PCLoss(loss_type=0),
-            "pattern1": PCLoss(loss_type=1),
             "focal": FocalFrequencyLoss(),
             "ssim": SSIM(),
             "msssim": MSSSIM(),
-            # "jnd0": JNDLoss(loss_type=0),
-            # "jnd1": JNDLoss(loss_type=1),
-            # "jnd3": JNDLoss(loss_type=3),
-            # "jnd4": JNDLoss(loss_type=4),
-            # "jnd5": JNDLoss(loss_type=5),
-            # "compression_3": CompressionLoss("noganms_quality_3"),
-            # "compression_6": CompressionLoss("noganms_quality_6"),
-            # "compression_3": CompressionLoss("msillm_quality_3"),
-            # "compression_6": CompressionLoss("msillm_quality_6"),
-            # "mmd": MMDLoss(),
-            # "ot": WassersteinLoss(),
+            "jnd": JNDLoss(loss_type=0),
             # "dists": DISTS("/checkpoint/pfz/projects/ai_signature/loss_weights/dists_ckpt.pth").eval(),
             # "watson_vgg": self.load_watson_vgg(),
             # "watson_dft": self.load_watson_dft(),
         }
+
         self.percep_loss = percep_loss
         self.perceptual_loss = self.create_perceptual_loss(percep_loss)
 

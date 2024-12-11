@@ -1,6 +1,9 @@
-# https://github.com/VainF/pytorch-msssim/blob/master/pytorch_msssim/ssim.py
-# Copyright 2020 by Gongfan Fang, Zhejiang University.
+# Copyright (c) Meta Platforms, Inc. and affiliates.
 # All rights reserved.
+# This source code is licensed under the license found in the
+# LICENSE file in the sav_dataset directory of this source tree.
+
+# mostly copy paste from https://github.com/VainF/pytorch-msssim/blob/master/pytorch_msssim/ssim.py
 
 import warnings
 from typing import List, Optional, Tuple, Union

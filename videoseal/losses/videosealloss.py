@@ -1,4 +1,9 @@
 
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+# This source code is licensed under the license found in the
+# LICENSE file in the sav_dataset directory of this source tree.
+
 # adapted from https://github.com/CompVis/latent-diffusion/blob/main/ldm/modules/losses/contperceptual.py
 
 import torch
@@ -36,7 +41,7 @@ def weights_init(m):
         nn.init.constant_(m.bias.data, 0)
 
 
-class LPIPSWithDiscriminator(nn.Module):
+class VideosealLoss(nn.Module):
     def __init__(self,
                  balanced=True, total_norm=0.0,
                  disc_weight=1.0, percep_weight=1.0, detect_weight=1.0, decode_weight=0.0,

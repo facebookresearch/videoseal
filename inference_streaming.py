@@ -167,7 +167,7 @@ def main(args):
     print(f"Binary message extracted with {bit_acc:.1f}% bit accuracy")
 
     if args.do_audio:
-
+        pass
 
 
 if __name__ == "__main__":

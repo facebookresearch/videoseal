@@ -1,3 +1,8 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+# This source code is licensed under the license found in the
+# LICENSE file in the sav_dataset directory of this source tree.
+
 """
 from root directory:
     python -m videoseal.evals.speed --device cuda
@@ -5,7 +10,6 @@ from root directory:
 
 import argparse
 import os
-import time
 
 import omegaconf
 import pandas as pd
@@ -17,8 +21,7 @@ from torchvision.datasets import FakeData
 from torchvision.transforms import ToTensor
 
 from ..utils import Timer, bool_inst
-from ..models import (Embedder, Extractor, build_embedder,
-                              build_extractor)
+from ..models import Embedder, Extractor, build_embedder, build_extractor
 
 
 def sync(device):

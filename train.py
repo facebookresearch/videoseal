@@ -32,7 +32,7 @@ from videoseal.data.loader import (get_dataloader_segmentation,
                                    get_video_dataloader)
 from videoseal.data.transforms import get_resize_transform
 from videoseal.evals.metrics import accuracy, bit_accuracy, iou, psnr, ssim
-from videoseal.losses.detperceptual import LPIPSWithDiscriminator
+from videoseal.losses.videosealloss import VideosealLoss
 from videoseal.models import Videoseal, Wam, build_embedder, build_extractor
 from videoseal.modules.jnd import JND
 from videoseal.utils.data import Modalities, parse_dataset_params
@@ -44,7 +44,7 @@ device = torch.device(
     'cuda') if torch.cuda.is_available() else torch.device('cpu')
 
 
-def freeze_embedder(model: Wam, image_detection_loss: LPIPSWithDiscriminator, params):
+def freeze_embedder(model: Wam, image_detection_loss: VideosealLoss, params):
     """
     To be called only once when you need to freeze the embedder
     Freezes the embedder of a model
@@ -298,7 +298,7 @@ def main(params):
     # print(model)
 
     # build losses
-    image_detection_loss = LPIPSWithDiscriminator(
+    image_detection_loss = VideosealLoss(
         balanced=params.balanced, total_norm=params.total_gnorm,
         disc_weight=params.lambda_d, percep_weight=params.lambda_i,
         detect_weight=params.lambda_det, decode_weight=params.lambda_dec,
@@ -567,7 +567,7 @@ def train_one_epoch(
     optimizers: List[torch.optim.Optimizer],
     train_loader: torch.utils.data.DataLoader,
     epoch_modality: str,
-    image_detection_loss: LPIPSWithDiscriminator,
+    image_detection_loss: VideosealLoss,
     epoch: int,
     params: argparse.Namespace,
     tensorboard: CustomTensorboardWriter
@@ -709,7 +709,7 @@ def eval_one_epoch(
     model: Wam,
     val_loader: torch.utils.data.DataLoader,
     epoch_modality: str,
-    image_detection_loss: LPIPSWithDiscriminator,
+    image_detection_loss: VideosealLoss,
     epoch: int,
     validation_augs: List,
     validation_masks: torch.Tensor,
@@ -722,7 +722,7 @@ def eval_one_epoch(
     Args:
         model (Wam): the model
         val_loader (torch.utils.data.DataLoader): the validation loader
-        image_detection_loss (LPIPSWithDiscriminator): the loss function
+        image_detection_loss (VideosealLoss): the loss function
         epoch (int): the current epoch
         validation_augs (List): list of augmentations to apply
         validation_masks (torch.Tensor): the validation masks, full of ones for now
