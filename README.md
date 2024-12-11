@@ -50,8 +50,6 @@ msg_extracted = model.extract_message(imgs_w, aggregation="avg", is_video=False)
 
 ## Installation
 
-### Download the model
-
 ### Requirements
 
 Version of Python is 3.10 (pytorch > 2.3, torchvision 0.16.0, torchaudio 2.1.0, cuda 12.1).
@@ -62,6 +60,20 @@ conda install pytorch==2.4.0 torchvision==0.19.0 torchaudio==2.4.0 pytorch-cuda=
 
 pip install -e . 
 ```
+
+### Download the Video Seal model
+
+The video model is automatically downloaded through Hugging Face by doing `videoseal.load("videoseal")`.
+If you wish to download the model manually, you can do so by running the following command:
+```bash
+wget https://dl.fbaipublicfiles.com/videoseal/checkpoint.pth
+```
+You then have to update the checkpoint path in the [model card](videoseal/cards/videoseal.yaml) file.
+
+### Download the other models used as baselines
+
+We do not own any third-party models, so you have to download them manually.
+We provide a guide on how to download the models at [huggingface.co/pierrefdz/baselines-watermarking/](https://huggingface.co/pierrefdz/baselines-watermarking).
 
 ### VMAF
 

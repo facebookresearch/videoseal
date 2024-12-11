@@ -1,3 +1,10 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+# This source code is licensed under the license found in the
+# LICENSE file in the sav_dataset directory of this source tree.
+
+# We do not own any of these models. 
+# Please refer to 
 
 import torch
 from torchvision import transforms
@@ -327,63 +334,48 @@ def build_baseline(
         chunk_size: int = 1,
         step_size: int = 1,
     ) -> Videoseal:
-    # /checkpoint/pfz/projects/videoseal/baselines/cpu/readme.md
     if method == 'hidden':
         scaling_w = 0.2
-        encoder_path = '/checkpoint/pfz/projects/videoseal/baselines/cpu/hidden_encoder_48b.pt'
-        # encoder_path = '/Users/pfz/Code/baselines-checkpoints-wm/hidden_encoder_48b.pt'
-        decoder_path = '/checkpoint/pfz/projects/videoseal/baselines/cpu/hidden_decoder_48b.pt'
-        # decoder_path = '/Users/pfz/Code/baselines-checkpoints-wm/hidden_decoder_48b.pt'
+        encoder_path = '/Users/pfz/Code/baselines-checkpoints-wm/hidden_encoder_48b.pt'
+        decoder_path = '/Users/pfz/Code/baselines-checkpoints-wm/hidden_decoder_48b.pt'
         embedder = BaselineHiddenEmbedder(encoder_path)
         extractor = BaselineHiddenExtractor(decoder_path)
     elif method == 'mbrs':
         scaling_w = 1.0
-        encoder_path = '/checkpoint/pfz/projects/videoseal/baselines/cpu/mbrs_256_m256_encoder.pt'
-        # encoder_path = '/Users/pfz/Code/baselines-checkpoints-wm/mbrs_256_m256_encoder.pt'
-        decoder_path = '/checkpoint/pfz/projects/videoseal/baselines/cpu/mbrs_256_m256_decoder.pt'
-        # decoder_path = '/Users/pfz/Code/baselines-checkpoints-wm/mbrs_256_m256_decoder.pt'
+        encoder_path = '/Users/pfz/Code/baselines-checkpoints-wm/mbrs_256_m256_encoder.pt'
+        decoder_path = '/Users/pfz/Code/baselines-checkpoints-wm/mbrs_256_m256_decoder.pt'
         embedder = BaselineMBRSEmbedder(encoder_path)
         extractor = BaselineMBRSExtractor(decoder_path)
     elif method == 'cin':
         scaling_w = 1.0
         img_size = 128
-        encoder_path = '/checkpoint/pfz/projects/videoseal/baselines/cpu/cin_nsm_encoder.pt'
-        # encoder_path = '/Users/pfz/Code/baselines-checkpoints-wm/cin_nsm_encoder.pt'
-        decoder_path = '/checkpoint/pfz/projects/videoseal/baselines/cpu/cin_nsm_decoder.pt'
-        # decoder_path = '/Users/pfz/Code/baselines-checkpoints-wm/cin_nsm_decoder.pt'
+        encoder_path = '/Users/pfz/Code/baselines-checkpoints-wm/cin_nsm_encoder.pt'
+        decoder_path = '/Users/pfz/Code/baselines-checkpoints-wm/cin_nsm_decoder.pt'
         embedder = BaselineCINEmbedder(encoder_path)
         extractor = BaselineCINExtractor(decoder_path)
     elif method == 'wam':
         scaling_w = 2.0
         attenuation = JND(in_channels=1, out_channels=3, blue=True)
-        encoder_path = '/checkpoint/pfz/projects/videoseal/baselines/cpu/wam_encoder.pt'
-        # encoder_path = '/Users/pfz/Code/baselines-checkpoints-wm/wam_encoder.pt'
-        decoder_path = '/checkpoint/pfz/projects/videoseal/baselines/cpu/wam_decoder.pt'
-        # decoder_path = '/Users/pfz/Code/baselines-checkpoints-wm/wam_decoder.pt'
+        encoder_path = '/Users/pfz/Code/baselines-checkpoints-wm/wam_encoder.pt'
+        decoder_path = '/Users/pfz/Code/baselines-checkpoints-wm/wam_decoder.pt'
         embedder = BaselineWAMEmbedder(encoder_path)
         extractor = BaselineWAMExtractor(decoder_path)
     elif method == 'wam_noattenuation':
         scaling_w = 0.01
-        encoder_path = '/checkpoint/pfz/projects/videoseal/baselines/cpu/wam_encoder.pt'
-        # encoder_path = '/Users/pfz/Code/baselines-checkpoints-wm/wam_encoder.pt'
-        decoder_path = '/checkpoint/pfz/projects/videoseal/baselines/cpu/wam_decoder.pt'
-        # decoder_path = '/Users/pfz/Code/baselines-checkpoints-wm/wam_decoder.pt'
+        encoder_path = '/Users/pfz/Code/baselines-checkpoints-wm/wam_encoder.pt'
+        decoder_path = '/Users/pfz/Code/baselines-checkpoints-wm/wam_decoder.pt'
         embedder = BaselineWAMEmbedder(encoder_path)
         extractor = BaselineWAMExtractor(decoder_path)
     elif method == 'trustmark':
-        scaling_w = 0.95
-        encoder_path = '/checkpoint/pfz/projects/videoseal/baselines/cpu/trustmark_encoder_q.pt'
-        # encoder_path = '/Users/pfz/Code/baselines-checkpoints-wm/trustmark_encoder_q.pt'
-        decoder_path = '/checkpoint/pfz/projects/videoseal/baselines/cpu/trustmark_decoder_q.pt'
-        # decoder_path = '/Users/pfz/Code/baselines-checkpoints-wm/trustmark_decoder_q.pt'
+        scaling_w = 0.95  # set to 0.95 in the repo of TrustMark's authors
+        encoder_path = '/Users/pfz/Code/baselines-checkpoints-wm/trustmark_encoder_q.pt'
+        decoder_path = '/Users/pfz/Code/baselines-checkpoints-wm/trustmark_decoder_q.pt'
         embedder = BaselineTrustmarkEmbedder(encoder_path)
         extractor = BaselineTrustmarkExtractor(decoder_path)
     elif method == 'trustmark_scaling0p5':
         scaling_w = 0.5
-        encoder_path = '/checkpoint/pfz/projects/videoseal/baselines/cpu/trustmark_encoder_q.pt'
-        # encoder_path = '/Users/pfz/Code/baselines-checkpoints-wm/trustmark_encoder_q.pt'
-        decoder_path = '/checkpoint/pfz/projects/videoseal/baselines/cpu/trustmark_decoder_q.pt'
-        # decoder_path = '/Users/pfz/Code/baselines-checkpoints-wm/trustmark_decoder_q.pt'
+        encoder_path = '/Users/pfz/Code/baselines-checkpoints-wm/trustmark_encoder_q.pt'
+        decoder_path = '/Users/pfz/Code/baselines-checkpoints-wm/trustmark_decoder_q.pt'
         embedder = BaselineTrustmarkEmbedder(encoder_path)
         extractor = BaselineTrustmarkExtractor(decoder_path)
     else:

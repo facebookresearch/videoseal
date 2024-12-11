@@ -3,6 +3,8 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the sav_dataset directory of this source tree.
 
+# adapted from https://github.com/SteffenCzolbe/PerceptualSimilarity
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
