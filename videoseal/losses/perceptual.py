@@ -36,13 +36,16 @@ def build_loss(loss_name):
     elif loss_name == "jnd2":
         return JNDLoss(loss_type=2)
     elif loss_name == "dists":
+        # See https://github.com/dingkeyan93/DISTS/blob/master/DISTS_pytorch for the weights
         return DISTS("/path/to/dists_ckpt.pth").eval()
     elif loss_name == "watson_vgg":
+        # See https://github.com/SteffenCzolbe/PerceptualSimilarity for the weights
         model = WatsonDistanceVgg(reduction="none")
         ckpt_loss = "/path/to/rgb_watson_vgg_trial0.pth"
         model.load_state_dict(torch.load(ckpt_loss))
         return model
     elif loss_name == "watson_dft":
+        # See https://github.com/SteffenCzolbe/PerceptualSimilarity for the weights
         model = ColorWrapper(WatsonDistanceFft, (), {"reduction": "none"})
         ckpt_loss = "/path/to/rgb_watson_fft_trial0.pth"
         model.load_state_dict(torch.load(ckpt_loss))
