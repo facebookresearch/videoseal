@@ -1,11 +1,12 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+
+# This source code is licensed under the license found in the
+# LICENSE file in the root directory of this source tree.
 
 import torch
 import torch.nn as nn
 from torchvision import transforms
-
-default_transform = transforms.Compose([
-    transforms.ToTensor(),
-])
 
 
 class RGB2YUV(nn.Module):
@@ -47,7 +48,6 @@ def rgb_to_yuv(img):
     yuv = yuv.permute(0, 3, 1, 2)
     return yuv
 
-
 def yuv_to_rgb(img):
     M = torch.tensor([[1.0, 0.0, 1.13983],
                       [1.0, -0.39465, -0.58060],
@@ -56,7 +56,6 @@ def yuv_to_rgb(img):
     rgb = torch.matmul(img, M.T)
     rgb = rgb.permute(0, 3, 1, 2)
     return rgb
-
 
 def get_transforms(
     img_size: int,
@@ -80,7 +79,6 @@ def get_transforms(
     ])
     return train_transform, val_transform
 
-
 def get_resize_transform(img_size, resize_only=True):
     if resize_only:  # makes more sense for pre-training
         transform = transforms.Compose([
@@ -92,7 +90,6 @@ def get_resize_transform(img_size, resize_only=True):
             transforms.CenterCrop(img_size),
         ])
     return transform, transform
-
 
 def get_transforms_segmentation(
     img_size: int,

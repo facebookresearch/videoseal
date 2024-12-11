@@ -1,18 +1,14 @@
-# from: https://github.com/facebookresearch/segment-anything-2/blob/main/sav_dataset/utils/sav_utils.py
-
 # Copyright (c) Meta Platforms, Inc. and affiliates.
-
 # All rights reserved.
-
 # This source code is licensed under the license found in the
-
 # LICENSE file in the sav_dataset directory of this source tree.
+
+# from: https://github.com/facebookresearch/segment-anything-2/blob/main/sav_dataset/utils/sav_utils.py
 
 
 import json
 import os
-from typing import Dict, List, Optional, Tuple, Union
-
+from typing import Dict, List, Optional, Tuple
 
 import cv2
 import matplotlib.pyplot as plt
@@ -35,7 +31,6 @@ def decode_video(video_path: str) -> List[np.ndarray]:
         else:
             break
     return video_frames
-
 
 def show_anns(masks, colors: List, borders=True) -> None:
     """

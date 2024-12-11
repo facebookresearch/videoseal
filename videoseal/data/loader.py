@@ -1,3 +1,8 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+
+# This source code is licensed under the license found in the
+# LICENSE file in the root directory of this source tree.
 
 import os
 import warnings
@@ -16,7 +21,6 @@ except ImportError:
 
 from ..utils.dist import is_dist_avail_and_initialized
 from .datasets import CocoImageIDWrapper, ImageFolder, VideoDataset
-from .transforms import default_transform
 
 
 def load_video(fname):
@@ -48,7 +52,7 @@ def load_video(fname):
 
 def get_dataloader(
     data_dir: str,
-    transform: callable = default_transform,
+    transform: callable = torchvision.transforms.ToTensor(),
     batch_size: int = 128,
     shuffle: bool = True,
     num_workers: int = 8

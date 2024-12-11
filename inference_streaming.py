@@ -6,7 +6,7 @@
 
 """
 Test with:
-    python inference_streaming.py --input assets/videos/1.mp4 --output_dir outputs/ --chunk_size 16
+    python inference_streaming.py --input assets/videos/1.mp4 --output_dir outputs/
 """
 
 import os
@@ -18,8 +18,9 @@ import tqdm
 
 import videoseal
 from videoseal.models import Videoseal
+from videoseal.evals.metrics import bit_accuracy
 
-def embed_clip(
+def embed_video_clip(
     model: Videoseal,
     clip: np.ndarray,
     msgs: torch.Tensor
@@ -34,7 +35,8 @@ def embed_video(
     model: Videoseal,
     input_path: str,
     output_path: str,
-    chunk_size: int
+    chunk_size: int,
+    crf: int = 23
 ) -> None:
     # Read video dimensions
     probe = ffmpeg.probe(input_path)
@@ -56,16 +58,20 @@ def embed_video(
     process2 = (
         ffmpeg
         .input('pipe:', format='rawvideo', pix_fmt='rgb24', s='{}x{}'.format(width, height), r=fps)
-        .output(output_path, vcodec='libx264', pix_fmt='yuv420p', r=fps)
+        .output(output_path, vcodec='libx264', pix_fmt='yuv420p', r=fps, crf=crf)
         .overwrite_output()
         .run_async(pipe_stdin=True, pipe_stderr=subprocess.PIPE)
     )
     
+    # Create a random message
+    msgs = model.get_random_msg()
+    with open(output_path.replace(".mp4", ".txt"), "w") as f:
+        f.write("".join([str(msg.item()) for msg in msgs[0]]))
+
     # Process the video
     frame_size = width * height * 3
     chunk = np.zeros((chunk_size, height, width, 3), dtype=np.uint8)
     frame_count = 0
-    msgs = model.get_random_msg()
     pbar = tqdm.tqdm(total=num_frames, desc="Watermark embedding")
     while True:
         in_bytes = process1.stdout.read(frame_size)
@@ -76,7 +82,7 @@ def embed_video(
         frame_count += 1
         pbar.update(1)
         if frame_count % chunk_size == 0:
-            processed_frame = embed_clip(model, chunk, msgs)
+            processed_frame = embed_video_clip(model, chunk, msgs)
             process2.stdin.write(processed_frame.tobytes())
     process1.stdout.close()
     process2.stdin.close()
@@ -85,13 +91,14 @@ def embed_video(
 
     return msgs
 
-def detect_clip(
+def detect_video_clip(
     model: Videoseal,
     clip: np.ndarray
 ) -> torch.Tensor:
     clip_tensor = torch.tensor(clip, dtype=torch.float32).permute(0, 3, 1, 2) / 255.0
     outputs = model.detect(clip_tensor, is_video=True)
-    return outputs["preds"]
+    output_bits = outputs["preds"][:, 1:]  # exclude the first which may be used for detection
+    return output_bits
 
 def detect_video(
     model: Videoseal,
@@ -118,7 +125,7 @@ def detect_video(
     frame_size = width * height * 3
     chunk = np.zeros((chunk_size, height, width, 3), dtype=np.uint8)
     frame_count = 0
-    msgs = []
+    soft_msgs = []
     pbar = tqdm.tqdm(total=num_frames, desc="Watermark extraction")
     while True:
         in_bytes = process1.stdout.read(frame_size)
@@ -129,44 +136,49 @@ def detect_video(
         frame_count += 1
         pbar.update(1)
         if frame_count % chunk_size == 0:
-            msgs.append(detect_clip(model, chunk))
+            soft_msgs.append(detect_video_clip(model, chunk))
     process1.stdout.close()
     process1.wait()
 
-    msgs = torch.cat(msgs, dim=0)
-    msgs = msgs.mean(dim=0)  # Average the predictions across all frames
-    msgs = (msgs > 0)
-    return msgs
+    soft_msgs = torch.cat(soft_msgs, dim=0)
+    soft_msgs = soft_msgs.mean(dim=0)  # Average the predictions across all frames
+    return soft_msgs
 
 
 def main(args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # Load the Video Seal model
     video_model = videoseal.load("videoseal")
     video_model.eval()
     video_model.to(device)
+    video_model.compile()
 
     # Create the output directory and path
     os.makedirs(args.output_dir, exist_ok=True)
     args.output = os.path.join(args.output_dir, os.path.basename(args.input))
 
     # Embed the video
-    msgs_ori = embed_video(video_model, args.input, args.output, args.chunk_size)
-    print("Saved watermarked video to", args.output)
+    msgs_ori = embed_video(video_model, args.input, args.output, 16)
+    print(f"Saved watermarked video to {args.output}")
 
     # Detect the watermark in the video
-    detected_msgs = detect_video(video_model, args.output, args.chunk_size)
-    print("Detected watermark:", detected_msgs)
+    soft_msgs = detect_video(video_model, args.output, 16)
+    bit_acc = bit_accuracy(soft_msgs, msgs_ori).item() * 100
+    print(f"Binary message extracted with {bit_acc:.1f}% bit accuracy")
+
+    if args.do_audio:
+
 
 
 if __name__ == "__main__":
+    
     import argparse
+    import videoseal.utils as utils
 
     parser = argparse.ArgumentParser(description="Process a video with Video Seal")
     parser.add_argument("--input", type=str, help="Input video path")
     parser.add_argument("--output_dir", type=str, help="Output directory")
-    parser.add_argument("--chunk_size", type=int, default=10, help="Number of frames to process at a time")
+    parser.add_argument("--do_audio", type=utils.bool_inst, default=False)
     args = parser.parse_args()
 
     main(args)
