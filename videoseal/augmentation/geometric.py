@@ -1,3 +1,9 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+
+# This source code is licensed under the license found in the
+# LICENSE file in the root directory of this source tree.
+
 """
 Test with:
     python -m videoseal.augmentation.geometric
@@ -13,7 +19,7 @@ class Identity(nn.Module):
     def __init__(self):
         super(Identity, self).__init__()
 
-    def forward(self, image, mask, *args, **kwargs):
+    def forward(self, image, mask=None, *args, **kwargs):
         return image, mask
     
     def __repr__(self):
@@ -31,10 +37,10 @@ class Rotate(nn.Module):
             raise ValueError("min_angle and max_angle must be provided")
         return torch.randint(self.min_angle, self.max_angle + 1, size=(1,)).item()
 
-    def forward(self, image, mask, angle=None):
+    def forward(self, image, mask=None, angle=None):
         angle = angle or self.get_random_angle()
         image = F.rotate(image, angle)
-        mask = F.rotate(mask, angle)
+        mask = F.rotate(mask, angle) if mask is not None else mask
         return image, mask
     
     def __repr__(self):
@@ -59,14 +65,14 @@ class Resize(nn.Module):
         )
         return output_size
 
-    def forward(self, image, mask, size=None):
+    def forward(self, image, mask=None, size=None):
         h, w = image.shape[-2:]
         if size is None:
             output_size = self.get_random_size(h, w)
         else:
             output_size = (int(size * h), int(size * w))
         image = F.resize(image, output_size, antialias=True)
-        mask = F.resize(mask, output_size, antialias=True)
+        mask = F.resize(mask, output_size, antialias=True) if mask is not None else mask
         return image, mask
     
     def __repr__(self):
@@ -90,7 +96,7 @@ class Crop(nn.Module):
         )
         return output_size
 
-    def forward(self, image, mask, size=None):
+    def forward(self, image, mask=None, size=None):
         h, w = image.shape[-2:]
         if size is None:
             output_size = self.get_random_size(h, w)
@@ -99,7 +105,7 @@ class Crop(nn.Module):
         i, j, h, w = transforms.RandomCrop.get_params(
             image, output_size=output_size)
         image = F.crop(image, i, j, h, w)
-        mask = F.crop(mask, i, j, h, w)
+        mask = F.crop(mask, i, j, h, w) if mask is not None else mask
         return image, mask
 
     def __repr__(self):
@@ -119,13 +125,13 @@ class Perspective(nn.Module):
         return self.min_distortion_scale + torch.rand(1).item() * \
             (self.max_distortion_scale - self.min_distortion_scale)
 
-    def forward(self, image, mask, distortion_scale=None):
+    def forward(self, image, mask=None, distortion_scale=None):
         distortion_scale = distortion_scale or self.get_random_distortion_scale()
         width, height = image.shape[-1], image.shape[-2]
         startpoints, endpoints = self.get_perspective_params(
             width, height, distortion_scale)
         image = F.perspective(image, startpoints, endpoints)
-        mask = F.perspective(mask, startpoints, endpoints)
+        mask = F.perspective(mask, startpoints, endpoints) if mask is not None else mask
         return image, mask
 
     @staticmethod
@@ -169,10 +175,76 @@ class HorizontalFlip(nn.Module):
     def __init__(self):
         super(HorizontalFlip, self).__init__()
 
-    def forward(self, image, mask, *args, **kwargs):
+    def forward(self, image, mask=None, *args, **kwargs):
         image = F.hflip(image)
-        mask = F.hflip(mask)
+        mask = F.hflip(mask) if mask is not None else mask
         return image, mask
 
     def __repr__(self):
         return f"HorizontalFlip"
+
+
+if __name__ == "__main__":
+    import os
+
+    import torch
+    from PIL import Image
+    from torchvision.transforms import ToTensor
+    from torchvision.utils import save_image
+
+    # Define the transformations and their parameters
+    transformations = [
+        (Rotate, [10, 30, 45, 90]),  # (min_angle, max_angle)
+        (Resize, [0.5, 0.75, 1.0]),      # size ratio
+        (Crop, [0.5, 0.75, 1.0]),        # size ratio
+        (Perspective, [0.2, 0.5, 0.8]),       # distortion_scale
+        (HorizontalFlip, [])             # No parameters needed for flip
+    ]
+
+    # Create a batch of images
+    img = Image.open(f"assets/imgs/1.jpg").convert("RGB")
+    imgs = transforms.ToTensor()(img).unsqueeze(0)
+    imgs_w = imgs.clone()
+
+    # Create the output directory
+    output_dir = "outputs"
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Sweep over the strengths for each augmentation
+    for transform, strengths in transformations:
+        for strength in strengths:
+            # Create an instance of the transformation
+            transform_instance = transform()
+
+            # Apply the transformation to the images
+            imgs_transformed, _ = transform_instance(imgs, imgs, strength)
+
+            # Save the transformed images
+            filename = f"{transform.__name__}_strength_{strength}.png"
+            save_image(imgs_transformed.clamp(0, 1),
+                       os.path.join(output_dir, filename))
+
+            # Print the path to the saved image
+            print(
+                f"Saved transformed images ({transform.__name__}, strength={strength}) to:", 
+                os.path.join(output_dir, filename)
+            )
+
+        # Handle no strength transformations
+        if not strengths:
+            # Create an instance of the transformation
+            transform_instance = transform()
+
+            # Apply the transformation to the images
+            imgs_transformed, _ = transform_instance(imgs, imgs)
+
+            # Save the transformed images
+            filename = f"{transform.__name__}.png"
+            save_image(imgs_transformed.clamp(0, 1),
+                       os.path.join(output_dir, filename))
+
+            # Print the path to the saved image
+            print(
+                f"Saved transformed images ({transform.__name__}) to:", 
+                os.path.join(output_dir, filename)
+            )

@@ -1,3 +1,9 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+
+# This source code is licensed under the license found in the
+# LICENSE file in the root directory of this source tree.
+
 """
 heavily inspired from https://github.com/advimman/lama/blob/main/saicinpainting/training/data/masks.py
 """
@@ -13,6 +19,21 @@ import os
 from PIL import Image
 
 import torch
+
+
+def get_mask_embedder(kind, **kwargs):
+    if kind is None:
+        kind = "none"
+    if kwargs is None:
+        kwargs = {}
+
+    if kind == "none":
+        cl = NoMaskEmbedder
+    elif kind == "mixed":
+        cl = MixedMaskEmbedder
+    else:
+        raise NotImplementedError(f"No such embedder kind = {kind}")
+    return cl(**kwargs)
 
 
 class LinearRamp:
@@ -417,21 +438,6 @@ class MixedMaskEmbedder:
         masks = [full_mask, rect_mask, inverted_rect_mask, irregular_mask, inverted_irregular_mask]
         return torch.tensor(np.stack(masks))
 
-    
-def get_mask_embedder(kind, **kwargs):
-    if kind is None:
-        kind = "none"
-    if kwargs is None:
-        kwargs = {}
-
-    if kind == "none":
-        cl = NoMaskEmbedder
-    elif kind == "mixed":
-        cl = MixedMaskEmbedder
-    else:
-        raise NotImplementedError(f"No such embedder kind = {kind}")
-    return cl(**kwargs)
-
 
 if __name__ == "__main__":
 
@@ -458,4 +464,3 @@ if __name__ == "__main__":
     union = (union * 255).type(torch.uint8).numpy()
     union = Image.fromarray(union[0])
     union.save(f'output/mask_union.png')
-        

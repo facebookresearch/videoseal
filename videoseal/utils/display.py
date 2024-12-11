@@ -39,7 +39,7 @@ def save_img(img: Tensor, out_path: str) -> None:
     img_pil = torchvision.transforms.ToPILImage()(img)
     img_pil.save(out_path)
 
-def save_vid(vid: Tensor, out_path: str, fps: int) -> None:
+def save_vid(vid: Tensor, out_path: str, fps: int, crf: int=11) -> None:
     """
     Saves a video tensor to a file.
 
@@ -68,7 +68,7 @@ def save_vid(vid: Tensor, out_path: str, fps: int) -> None:
     vid = vid.to(torch.uint8).cpu()
 
     # Write the video file
-    torchvision.io.write_video(out_path, vid, fps=fps, video_codec="h264", options={"crf": "11"})
+    torchvision.io.write_video(out_path, vid, fps=fps, video_codec="h264", options={"crf": f"{crf}"})
 
 def save_video_audio_to_mp4(video_tensor: torch.Tensor, audio_tensor: torch.Tensor, 
                             fps: int, audio_sample_rate: int, output_filename: str) -> None:

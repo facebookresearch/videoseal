@@ -4,24 +4,29 @@ import warnings
 
 import torch
 import torch.nn.functional as F
-from decord import VideoReader, cpu
 from torch.utils.data import DataLoader, DistributedSampler
+import torchvision
+
+try:
+    from decord import VideoReader, cpu
+    decord_available = True
+except ImportError:
+    VideoReader = None
+    decord_available = False
 
 from ..utils.dist import is_dist_avail_and_initialized
 from .datasets import CocoImageIDWrapper, ImageFolder, VideoDataset
 from .transforms import default_transform
 
 
-def load_video(fname, num_workers=8):
+def load_video(fname):
     """
-    Load full video content using Decord.
+    Load full video.
     Args:
         fname (str): The path to the video file.
         num_workers (int): The number of worker threads to use for video loading. Defaults to 8.
     Returns:
-        tuple: A tuple containing the loaded video frames as a PyTorch tensor (Frames, H, W , C) and a mask tensor.
-    Raises:
-        warnings.warn: If the video file is not found or is too short.
+        tuple: A tuple containing the loaded video frames as a PyTorch tensor (Frames, H, W, C) and a mask tensor.
     """
     if not os.path.exists(fname):
         warnings.warn(f'video path not found {fname=}')
@@ -30,14 +35,14 @@ def load_video(fname, num_workers=8):
     if _fsize < 1 * 1024:  # avoid hanging issue
         warnings.warn(f'video too short {fname=}')
         return [], None
-    try:
-        vr = VideoReader(
-            fname, num_threads=num_workers, ctx=cpu(0))
-    except Exception:
-        return [], None
-    vid_np = vr.get_batch(range(len(vr))).asnumpy()
-    vid_np = vid_np.transpose(0, 3, 1, 2) / 255.0  # normalize to 0 - 1
-    vid_pt = torch.from_numpy(vid_np).float()
+    if decord_available:
+        vr = VideoReader(fname, num_threads=8, ctx=cpu(0))
+        vid_np = vr.get_batch(range(len(vr))).asnumpy()
+        vid_np = vid_np.transpose(0, 3, 1, 2) / 255.0  # normalize to 0 - 1
+        vid_pt = torch.from_numpy(vid_np).float()
+    else:
+        vid_pt, _, _ = torchvision.io.read_video(fname, output_format="TCHW")
+        vid_pt = vid_pt.float() / 255.0
     return vid_pt
 
 

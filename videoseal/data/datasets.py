@@ -13,14 +13,22 @@ import torch
 import torchvision
 import torchvision.transforms as transforms
 import tqdm
-from decord import VideoReader, cpu
+
 from PIL import Image
 from pycocotools import mask as maskUtils
 from pycocotools import mask as mask_utils
+
 from torch.utils.data import Dataset
 from torchvision.datasets import CocoDetection
 from torchvision.datasets.folder import default_loader, is_image_file
 from torchvision.transforms import ToTensor
+
+try:
+    from decord import VideoReader, cpu
+    decord_available = True
+except ImportError:
+    VideoReader = None
+    decord_available = False
 
 from ..utils import suppress_output
 from ..utils.data import LRUDict

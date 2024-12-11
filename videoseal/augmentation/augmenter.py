@@ -1,3 +1,9 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+
+# This source code is licensed under the license found in the
+# LICENSE file in the root directory of this source tree.
+
 """
 Test with:
     python -m videoseal.augmentation.augmenter
@@ -6,13 +12,11 @@ Test with:
 import os
 
 import torch
-from PIL import Image
 from torch import nn
-from torchvision.utils import save_image
 
 from .geometric import Crop, HorizontalFlip, Identity, Perspective, Resize, Rotate
 from .valuemetric import JPEG, Brightness, Contrast, GaussianBlur, Hue, MedianFilter, Saturation
-from .video import VideoCompressorAugmenter
+from .video import VideoCompressorAugmenter, H264
 from .masks import get_mask_embedder
 
 name2aug = {
@@ -30,6 +34,7 @@ name2aug = {
     'saturation': Saturation,
     'hue': Hue,
     'video_compression': VideoCompressorAugmenter,
+    'h264': H264,
 }
 
 def get_dummy_augmenter():
@@ -180,7 +185,9 @@ class Augmenter(nn.Module):
 
 if __name__ == "__main__":
 
-    from ..data.transforms import default_transform
+    from PIL import Image
+    from torchvision import transforms
+    from torchvision.utils import save_image
 
     # Define the augmentations and their parameters
     augs = {
@@ -206,11 +213,8 @@ if __name__ == "__main__":
     }
 
     # Create a batch of images
-    imgs = [
-        Image.open(f"assets/imgs/1.png").convert("RGB"),
-        Image.open(f"assets/imgs/1.png").convert("RGB"),
-    ]
-    imgs = torch.stack([default_transform(img) for img in imgs])
+    img = Image.open(f"assets/imgs/1.jpg").convert("RGB")
+    imgs = transforms.ToTensor()(img).unsqueeze(0)
     imgs_w = imgs.clone()
 
     # Create an instance of the Augmenter class
@@ -228,6 +232,4 @@ if __name__ == "__main__":
     os.makedirs(output_dir, exist_ok=True)
     for ii in range(10):
         imgs_aug, mask_targets, selected_aug = augmenter(imgs_w, imgs)
-        save_image(imgs_aug.clamp(0, 1),
-                   os.path.join(output_dir, f"imgs_aug_{ii}.png"), nrow=2)
-        
+        save_image(imgs_aug.clamp(0, 1), os.path.join(output_dir, f"imgs_aug_{ii}_{selected_aug}.png"))

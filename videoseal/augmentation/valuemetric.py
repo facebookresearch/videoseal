@@ -1,15 +1,18 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+
+# This source code is licensed under the license found in the
+# LICENSE file in the root directory of this source tree.
+
 """
 Test with:
     python -m videoseal.augmentation.valuemetric
 """
 
-import io
-
 import torch
 import torch.nn as nn
 import torchvision.transforms as transforms
 import torchvision.transforms.functional as F
-from PIL import Image
 
 from ..utils.image import jpeg_compress, median_filter
 
@@ -169,3 +172,70 @@ class Hue(nn.Module):
     def __repr__(self):
         return f"Hue"
 
+
+if __name__ == "__main__":
+    import os
+
+    import torch
+    from PIL import Image
+    from torchvision.transforms import ToTensor
+    from torchvision.utils import save_image
+
+    # Define the transformations and their parameters
+    transformations = [
+        (Brightness, [0.5, 1.5]),
+        (Contrast, [0.5, 1.5]),
+        (Saturation, [0.5, 1.5]),
+        (Hue, [0.1, 0.2, 0.3]),
+        (JPEG, [40, 80]),
+        (GaussianBlur, [9, 17]),
+        (MedianFilter, [9, 17]),
+    ]
+
+    # Create a batch of images
+    img = Image.open(f"assets/imgs/1.jpg").convert("RGB")
+    imgs = transforms.ToTensor()(img).unsqueeze(0)
+    imgs_w = imgs.clone()
+
+    # Create the output directory
+    output_dir = "outputs"
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Sweep over the strengths for each augmentation
+    for transform, strengths in transformations:
+        for strength in strengths:
+            # Create an instance of the transformation
+            transform_instance = transform()
+
+            # Apply the transformation to the images
+            imgs_transformed, _ = transform_instance(imgs, imgs, strength)
+
+            # Save the transformed images
+            filename = f"{transform.__name__}_strength_{strength}.png"
+            save_image(imgs_transformed.clamp(0, 1),
+                       os.path.join(output_dir, filename))
+
+            # Print the path to the saved image
+            print(
+                f"Saved transformed images ({transform.__name__}, strength={strength}) to:", 
+                os.path.join(output_dir, filename)
+            )
+
+        # Handle no strength transformations
+        if not strengths:
+            # Create an instance of the transformation
+            transform_instance = transform()
+
+            # Apply the transformation to the images
+            imgs_transformed, _ = transform_instance(imgs, imgs)
+
+            # Save the transformed images
+            filename = f"{transform.__name__}.png"
+            save_image(imgs_transformed.clamp(0, 1),
+                       os.path.join(output_dir, filename))
+
+            # Print the path to the saved image
+            print(
+                f"Saved transformed images ({transform.__name__}) to:", 
+                os.path.join(output_dir, filename)
+            )

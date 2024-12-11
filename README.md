@@ -13,11 +13,7 @@ This repository includes pre-trained models, training code, inference code, and 
 
 | Original | Video Seal output | The watermark (normalized for visibility)|
 |---|---|---|
-| <img src="./.github/_README_/1.gif" alt="example GIF" style="max-width: 100%; height: auto;"> | <img src="./.github/_README_/1_diff.gif" alt="example GIF" style="max-width: 100%; height: auto;"> | <img src="./.github/_README_/1_wm.gif" alt="example GIF" style="max-width: 100%; height: auto;"> |
-| <img src="./.github/_README_/2.gif" alt="example GIF" style="max-width: 100%; height: auto;"> | <img src="./.github/_README_/2_diff.gif" alt="example GIF" style="max-width: 100%; height: auto;"> | <img src="./.github/_README_/2_wm.gif" alt="example GIF" style="max-width: 100%; height: auto;"> |
-| <img src="./.github/_README_/3.gif" alt="example GIF" style="max-width: 100%; height: auto;"> | <img src="./.github/_README_/3_diff.gif" alt="example GIF" style="max-width: 100%; height: auto;"> | <img src="./.github/_README_/2_wm.gif" alt="example GIF" style="max-width: 100%; height: auto;"> |
-<!-- | <img src="./.github/_README_/4.gif" alt="example GIF" style="max-width: 100%; height: auto;"> | <img src="./.github/_README_/4_diff.gif" alt="example GIF" style="max-width: 100%; height: auto;"> | <img src="./.github/_README_/4_wm.gif" alt="example GIF" style="max-width: 100%; height: auto;"> | -->
-<!-- | <img src="./.github/_README_/5.gif" alt="example GIF" style="max-width: 100%; height: auto;"> | <img src="./.github/_README_/5_diff.gif" alt="example GIF" style="max-width: 100%; height: auto;"> | <img src="./.github/_README_/5_wm.gif" alt="example GIF" style="max-width: 100%; height: auto;"> | -->
+| <img src="./.github/_README_/1.gif" alt="example GIF" style="max-width: 100%; height: auto;"> | <img src="./.github/_README_/1_wm.gif" alt="example GIF" style="max-width: 100%; height: auto;"> | <img src="./.github/_README_/1_diff.gif" alt="example GIF" style="max-width: 100%; height: auto;"> |
 
 
 ## Video watermarking using Video Seal  
@@ -29,7 +25,7 @@ from videoseal.evals.metrics import bit_accuracy
 
 # Load video and normalize to [0, 1]
 video_path = "assets/videos/1.mp4"
-video, _ = torchvision.io.read_video(video_path, output_format="TCHW")
+video = torchvision.io.read_video(video_path, output_format="TCHW")
 video = video.float() / 255.0
 
 # Load the model
