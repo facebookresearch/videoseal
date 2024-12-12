@@ -33,6 +33,12 @@ dependencies = [
     "calflops",
     "transformers",
     "safetensors",
+    "pycocotools",
+    "opencv-python",
+    "tqdm",
+    "timm",
+    "scipy",
+    "ffmpeg"
 ]
 
 [project.optional-dependencies]
