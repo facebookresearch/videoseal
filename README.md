@@ -52,7 +52,7 @@ msg_extracted = model.extract_message(imgs_w, aggregation="avg", is_video=False)
 
 ### Requirements
 
-Version of Python is 3.10 (pytorch > 2.3, torchvision 0.16.0, torchaudio 2.1.0, cuda 12.1).
+Version of Python is 3.10 (pytorch 2.5.1, torchvision 0.20.1, torchaudio 2.5.1, cuda 12.1).
 Install pytorch:
 
 ```
