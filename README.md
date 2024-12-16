@@ -20,7 +20,7 @@ This repository includes pre-trained models, training code, inference code, and 
 ## Quick start
 
 ```python
-import torchvision.io
+import torchvision
 import videoseal
 from videoseal.evals.metrics import bit_accuracy
 
