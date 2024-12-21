@@ -38,7 +38,7 @@ video_w = outputs["imgs_w"] # the watermarked video
 msgs = outputs["msgs"] # the embedded message
 
 # Extract the watermark message
-msg_extracted = model.extract_message(imgs_w, aggregation="avg", is_video=True)
+msg_extracted = model.extract_message(video_w, aggregation="avg", is_video=True)
 
 # VideoSeal can do Image Watermarking
 img = video[0:1] # 1 x C x H x W
