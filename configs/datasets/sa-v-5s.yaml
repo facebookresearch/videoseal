@@ -1,0 +1,4 @@
+train_dir: /large_experiments/meres/sa-v/sav_train/
+val_dir: /checkpoint/pfz/projects/videoseal/data/sa-v-valid-5s/
+train_annotation_file: null
+val_annotation_file: null
