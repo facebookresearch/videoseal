@@ -8,23 +8,25 @@ import math
 import subprocess
 import tempfile
 import re
-import scipy
 import numpy as np
+from scipy import stats, interpolate
 
 import torch
 from pytorch_msssim import ssim as pytorch_ssim
 
-def psnr(x, y):
+def psnr(x, y, is_video=False):
     """ 
     Return PSNR 
     Args:
         x: Image tensor with normalized values (≈ [0,1])
         y: Image tensor with normalized values (≈ [0,1]), ex: original image
+        is_video: If True, the PSNR is computed over the entire batch, not on each image separately
     """
     delta = 255 * (x - y)
     delta = delta.reshape(-1, x.shape[-3], x.shape[-2], x.shape[-1])  # BxCxHxW
     peak = 20 * math.log10(255.0)
-    noise = torch.mean(delta**2, dim=(1,2,3))  # B
+    avg_on_dims = (0,1,2,3) if is_video else (1,2,3)
+    noise = torch.mean(delta**2, dim=avg_on_dims)
     psnr = peak - 10*torch.log10(noise)
     return psnr
 
@@ -36,7 +38,6 @@ def ssim(x, y, data_range=1.0):
         y: Image tensor with normalized values (≈ [0,1]), ex: original image
     """
     return pytorch_ssim(x, y, data_range=data_range, size_average=False)
-
 
 def iou(preds, targets, threshold=0.0, label=1):
     """
@@ -76,11 +77,57 @@ def accuracy(
     accuracy = torch.mean(correct, dim=(1,2,3))  # b
     return accuracy
 
+def pvalue(
+    preds: torch.Tensor, 
+    targets: torch.Tensor, 
+    mask: torch.Tensor = None,
+    threshold: float = 0.0,
+) -> torch.Tensor:
+    """
+    Return p values
+    Args:
+        preds (torch.Tensor): Predicted bits with shape BxKxHxW
+        targets (torch.Tensor): Target bits with shape BxK
+        mask (torch.Tensor): Mask with shape Bx1xHxW (optional)
+            Used to compute bit accuracy only on non masked pixels.
+    """
+    nbits = targets.shape[-1]
+    bit_accs = bit_accuracy(preds, targets, mask, threshold)  # b
+    pvalues = [stats.binomtest(int(p*nbits), nbits, 0.5, alternative='greater').pvalue for p in bit_accs]
+    return torch.tensor(pvalues)  # b
+
+def plogp(p: torch.Tensor) -> torch.Tensor:
+    """
+    Return p log p
+    Args:
+        p (torch.Tensor): Probability tensor with shape BxK
+    """
+    plogp = p * torch.log2(p)
+    plogp[p == 0] = 0
+    return plogp
+
+def capacity(
+    preds: torch.Tensor,
+    targets: torch.Tensor,
+    mask: torch.Tensor = None,
+    threshold: float = 0.0,
+) -> torch.Tensor:
+    """
+    Return normalized bit accuracy, defined as the capacity of the nbits channels,
+    in the case of a binary symmetric channel of error probability being the bit. acc.
+    """
+    nbits = targets.shape[-1]
+    bit_accs = bit_accuracy(preds, targets, mask, threshold)  # b
+    entropy = - plogp(bit_accs) - plogp(1-bit_accs)
+    capacity = 1 - entropy
+    capacity = nbits * capacity
+    return capacity
+
 def bit_accuracy(
     preds: torch.Tensor, 
     targets: torch.Tensor, 
     mask: torch.Tensor = None,
-    threshold: float = 0.0
+    threshold: float = 0.0,
 ) -> torch.Tensor:
     """
     Return bit accuracy
@@ -357,8 +404,8 @@ def bd_rate(R1, PSNR1, R2, PSNR2, piecewise=0):
         lin = np.linspace(min_int, max_int, num=100, retstep=True)
         interval = lin[1]
         samples = lin[0]
-        v1 = scipy.interpolate.pchip_interpolate(np.sort(PSNR1), lR1[np.argsort(PSNR1)], samples)
-        v2 = scipy.interpolate.pchip_interpolate(np.sort(PSNR2), lR2[np.argsort(PSNR2)], samples)
+        v1 = interpolate.pchip_interpolate(np.sort(PSNR1), lR1[np.argsort(PSNR1)], samples)
+        v2 = interpolate.pchip_interpolate(np.sort(PSNR2), lR2[np.argsort(PSNR2)], samples)
         # Calculate the integral using the trapezoid method on the samples.
         int1 = np.trapezoid(v1, dx=interval)
         int2 = np.trapezoid(v2, dx=interval)

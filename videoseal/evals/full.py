@@ -5,7 +5,7 @@ python -m videoseal.evals.full \
     --dataset sa-v --is_video true --num_samples 1 \
 
 
-    
+    /private/home/hadyelsahar/work/code/videoseal/2024_logs_large-exp/1109-videoseal0.2-discloss-fix-hing-sleepwake-4nodes/_scaling_w=0.5_lambda_i=0.5_disc_hinge_on_logits_fake=True_sleepwake=False_video_start=500/checkpoint.pth
     /private/home/hadyelsahar/work/code/videoseal/2024_logs/1016-hybrid-vs-ours/_lambda_d=0.5_lambda_i=0.5_optimizer=AdamW,lr=1e-4_videowam_step_size=4_video_start=500_embedder_model=unet_small2/checkpoint.pth
 """
 
@@ -19,6 +19,7 @@ import argparse
 import os
 import numpy as np
 import pandas as pd
+from lpips import LPIPS
 
 import torch
 from torch.utils.data import Dataset, Subset
@@ -27,10 +28,10 @@ import torchvision.transforms as transforms
 import tqdm
 
 
-from .metrics import vmaf_on_tensor, bit_accuracy, iou, accuracy
+from .metrics import vmaf_on_tensor, bit_accuracy, iou, accuracy, pvalue, capacity
 from ..data.datasets import ImageFolder, VideoDataset, CocoImageIDWrapper
 from ..modules.jnd import JND
-from ..models import VideoWam, build_embedder, build_extractor
+from ..models import VideoWam, build_embedder, build_extractor, build_baseline
 from ..augmentation import get_validation_augs
 from ..augmentation.augmenter import get_dummy_augmenter
 from ..evals.metrics import psnr, ssim, bd_rate
@@ -115,19 +116,29 @@ def setup_model(config: VideoWamConfig, ckpt_path: Path) -> VideoWam:
         msg = f"Checkpoint path does not exist:{ckpt_path}"
         raise FileNotFoundError(msg)
     
+    # compile
+    wam.compile()
+
     return wam
 
-def setup_model_from_checkpoint(ckpt_path):
+def setup_model_from_checkpoint(ckpt_path: str) -> VideoWam:
     """
     # Example usage
     ckpt_path = '/checkpoint/pfz/2024_logs/0911_vseal_pw/extractor_model=sam_tiny/checkpoint.pth'
-    exp_dir = '/checkpoint/pfz/2024_logs/0911_vseal_pw'
-    exp_name = '_extractor_model=sam_tiny'
+    wam = setup_model_from_checkpoint(ckpt_path)
 
-    wam = load_model_from_checkpoint(exp_dir, exp_name)
+    or 
+    ckpt_path = 'baseline/wam'
+    wam = setup_model_from_checkpoint(ckpt_path)
     """
-    config = get_config_from_checkpoint(ckpt_path)
-    return setup_model(config, ckpt_path)
+    # load baselines. Should be in the format of "baseline/{method}"
+    if "baseline" in ckpt_path:
+        method = ckpt_path.split('/')[-1]
+        return build_baseline(method)
+    # load videoseal checkpoints
+    else:
+        config = get_config_from_checkpoint(ckpt_path)
+        return setup_model(config, ckpt_path)
 
 def setup_dataset(args):
     try:
@@ -175,6 +186,8 @@ def evaluate(
     output_dir: str,
     save_first: int = -1,
     num_frames: int = 24*3,
+    video_aggregation: str = "avg",
+    only_identity: bool = False,
     bdrate: bool = True,
     decoding: bool = True,
     detection: bool = False,
@@ -191,8 +204,11 @@ def evaluate(
         detection (bool): Whether to evaluate detection metrics (default: False)
     """
     all_metrics = []
-    validation_augs = get_validation_augs(is_video)
+    validation_augs = get_validation_augs(is_video, only_identity)
     timer = Timer()
+
+    # create lpips
+    lpips_loss = LPIPS(net="alex").eval()
 
     # save the metrics as csv
     metrics_path = os.path.join(output_dir, "metrics.csv")
@@ -204,6 +220,8 @@ def evaluate(
             metrics = {}
 
             # some data loaders return batch_data, masks, frames_positions as well
+            if batch_items is None:
+                continue
             imgs, masks = batch_items[0], batch_items[1]
             if not is_video:
                 imgs = imgs.unsqueeze(0)  # c h w -> 1 c h w
@@ -230,10 +248,14 @@ def evaluate(
             # compute qualitative metrics
             metrics['psnr'] = psnr(
                 imgs_w[:num_frames], 
-                imgs[:num_frames]).mean().item()
+                imgs[:num_frames],
+                is_video).mean().item()
             metrics['ssim'] = ssim(
                 imgs_w[:num_frames], 
                 imgs[:num_frames]).mean().item()
+            metrics['lpips'] = lpips_loss(
+                2*imgs_w[:num_frames]-1, 
+                2*imgs[:num_frames]-1).mean().item()
             if is_video:
                 timer.start()
                 metrics['vmaf'] = vmaf_on_tensor(
@@ -270,11 +292,11 @@ def evaluate(
                     ori_path = ori_path.replace(".png", ".mp4")
                     wm_path = wm_path.replace(".png", ".mp4")
                     diff_path = diff_path.replace(".png", ".mp4")
-                    timer.start()
+                    # timer.start()
                     save_vid(imgs, ori_path, fps)
                     save_vid(imgs_w, wm_path, fps)
                     save_vid(imgs - imgs_w, diff_path, fps)
-                    metrics['save_vid_time'] = timer.end()
+                    # metrics['save_vid_time'] = timer.end()
 
             # extract watermark and evaluate robustness
             if detection or decoding:
@@ -293,7 +315,13 @@ def evaluate(
 
                         # extract watermark
                         timer.start()
-                        outputs = wam.detect(imgs_aug, is_video=is_video)
+                        if is_video:
+                            preds = wam.detect_and_aggregate(imgs_aug, video_aggregation)  # 1 k     
+                            preds = torch.cat([torch.ones(preds.size(0), 1).to(preds.device), preds], dim=1)  # 1 1+k
+                            outputs = {"preds": preds}
+                            msgs = msgs[:1]  # 1 k
+                        else:    
+                            outputs = wam.detect(imgs_aug, is_video=False)  # 1 k
                         timer.step()
                         preds = outputs["preds"]
                         mask_preds = preds[:, 0:1]  # b 1 ...
@@ -301,12 +329,14 @@ def evaluate(
 
                         aug_log_stats = {}
                         if decoding:
-                            bit_accuracy_ = bit_accuracy(
-                                bit_preds,
-                                msgs,
-                                masks_aug
-                            ).nanmean().item()
-                            aug_log_stats[f'bit_acc'] = bit_accuracy_
+                            aug_log_stats[f'bit_acc'] = bit_accuracy(
+                                bit_preds, msgs, masks_aug).nanmean().item()
+                            aug_log_stats[f'pvalue'] = pvalue(
+                                bit_preds, msgs, masks_aug).nanmean().item()
+                            aug_log_stats[f'log_pvalue'] = -np.log10(
+                                aug_log_stats[f'pvalue']) if aug_log_stats[f'pvalue'] > 0 else -100
+                            aug_log_stats[f'capacity'] = capacity(
+                                bit_preds, msgs, masks_aug).nanmean().item()
 
                         if detection:
                             iou0 = iou(mask_preds, masks, label=0).mean().item()
@@ -338,7 +368,8 @@ def main():
 
     group = parser.add_argument_group('Dataset')
     group.add_argument("--dataset", type=str, 
-                       choices=["coco", "coco-stuff-blurred", "sa-v"], help="Name of the dataset.")
+                    #    choices=["coco", "coco-stuff-blurred", "sa-v", "sa-v-3s", "sa-1b"], 
+                       help="Name of the dataset.")
     group.add_argument('--is_video', type=bool_inst, default=False, 
                        help='Whether the data is video')
     group.add_argument('--short_edge_size', type=int, default=-1, 
@@ -347,11 +378,13 @@ def main():
                        help='Number of frames to evaluate for video quality')
     group.add_argument('--num_samples', type=int, default=100, 
                           help='Number of samples to evaluate')
+    group.add_argument('--video_aggregation', type=str, default="avg",
+                            help='Aggregation method for detection of video frames')
     
     group = parser.add_argument_group('Model parameters to override. If not provided, the checkpoint values are used.')
     group.add_argument("--attenuation_config", type=str, default="configs/attenuation.yaml",
        help="Path to the attenuation config file")
-    group.add_argument("--attenuation", type=str, default="None",
+    group.add_argument("--attenuation", type=str, default=None,
                         help="Attenuation model to use")
     group.add_argument("--scaling_w", type=float, default=None,
                         help="Scaling factor for the watermark in the embedder model")
@@ -364,6 +397,7 @@ def main():
     group.add_argument("--output_dir", type=str, default="output/", help="Output directory for logs and images (Default: /output)")
     group.add_argument('--save_first', type=int, default=-1, help='Number of images/videos to save')
     group.add_argument('--bdrate', type=bool_inst, default=True, help='Whether to compute BD-rate')
+    group.add_argument('--only_identity', type=bool_inst, default=False, help='Whether to only evaluate the identity augmentation')
     group.add_argument('--decoding', type=bool_inst, default=True, help='Whether to evaluate decoding metrics')
     group.add_argument('--detection', type=bool_inst, default=False, help='Whether to evaluate detection metrics')
 
@@ -374,7 +408,7 @@ def main():
     model.eval()
     
     # Override model parameters in args
-    model.scaling_w = args.scaling_w or model.scaling_w
+    model.blender.scaling_w = args.scaling_w or model.blender.scaling_w
     model.chunk_size = args.videowam_chunk_size or model.chunk_size
     model.step_size = args.videowam_step_size or model.step_size
 
@@ -384,13 +418,14 @@ def main():
     model.to(device)
 
     # Override attenuation build
-    # should be on CPU to operate on high resolution videos
-    if args.attenuation.lower() != "none":
-        attenuation_cfg = omegaconf.OmegaConf.load(args.attenuation_config)
-        attenuation = JND(**attenuation_cfg[args.attenuation])
-    else:
-        attenuation = None
-    model.attenuation = attenuation
+    if args.attenuation is not None:
+        # should be on CPU to operate on high resolution videos
+        if args.attenuation.lower() != "none":
+            attenuation_cfg = omegaconf.OmegaConf.load(args.attenuation_config)
+            attenuation = JND(**attenuation_cfg[args.attenuation])
+        else:
+            attenuation = None
+        model.attenuation = attenuation
 
     # Setup the dataset    
     dataset = setup_dataset(args)
@@ -405,6 +440,8 @@ def main():
         output_dir = args.output_dir,
         save_first = args.save_first,
         num_frames = args.num_frames,
+        video_aggregation = args.video_aggregation,
+        only_identity = args.only_identity,
         bdrate = args.bdrate,
         decoding = args.decoding,
         detection = args.detection,

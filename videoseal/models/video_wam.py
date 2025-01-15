@@ -155,7 +155,13 @@ class VideoWam(Wam):
             preds_w = self.video_embedder(self.rgb2yuv(imgs)[:, 0:1], msgs)
         else:
             preds_w = self.video_embedder(imgs, msgs)
-        imgs_w = self.blend(imgs, preds_w)  # frames c h w
+        imgs_w = self.blender(imgs, preds_w)  # frames c h w
+        # apply attenuation and clamp
+        if self.attenuation is not None:
+            self.attenuation.to(imgs.device)
+            imgs_w = self.attenuation(imgs, imgs_w)
+        if self.clamp:
+            imgs_w = torch.clamp(imgs_w, 0, 1)
         # augment
         imgs_aug, masks, selected_aug = self.augmenter(
             imgs_w, imgs, masks, is_video=True)
@@ -179,6 +185,7 @@ class VideoWam(Wam):
         imgs: torch.Tensor,
         msgs: torch.Tensor = None,
         is_video: bool = True,
+        interpolation: dict = {"mode": "bilinear", "align_corners": False, "antialias": True},
     ) -> dict:
         """ 
         Generates watermarked videos from the input images and messages (used for inference).
@@ -215,7 +222,7 @@ class VideoWam(Wam):
                 msgs = msgs[:nimgs_in_ck]
 
             # get deltas for the chunk, and repeat them for each frame in the chunk
-            outputs = super().embed(imgs_in_ck, msgs)  # n 3 h w
+            outputs = super().embed(imgs_in_ck, msgs, interpolation)  # n 3 h w
             deltas_in_ck = outputs["preds_w"]  # n 3 h w
             deltas_in_ck = torch.repeat_interleave(
                 deltas_in_ck, step_size, dim=0)  # f 3 h w
@@ -223,8 +230,95 @@ class VideoWam(Wam):
             # at the end of video there might be more deltas than needed
             deltas_in_ck = deltas_in_ck[:len(all_imgs_in_ck)]
 
+            # blend, apply attenuation and clamp
+            all_imgs_in_ck_w = self.blender(all_imgs_in_ck, deltas_in_ck)
+            if self.attenuation is not None:
+                self.attenuation.to(all_imgs_in_ck.device)  # on cpu because high res
+                all_imgs_in_ck_w = self.attenuation(all_imgs_in_ck, all_imgs_in_ck_w)
+            if self.clamp:
+                all_imgs_in_ck_w = torch.clamp(all_imgs_in_ck_w, 0, 1)
+
             # create watermarked imgs
-            all_imgs_in_ck_w = self.blend(all_imgs_in_ck, deltas_in_ck)
+            imgs_w[start: end, ...] = all_imgs_in_ck_w  # n 3 h w
+
+        outputs = {
+            "imgs_w": imgs_w,  # watermarked imgs: f 3 h w
+            "msgs": msgs[0:1].repeat(len(imgs), 1),  # original messages: f k
+        }
+        return outputs
+
+    @torch.no_grad()
+    def embed_lowres_attenuation(
+        self,
+        imgs: torch.Tensor,
+        msgs: torch.Tensor = None,
+        is_video: bool = True,
+        interpolation: dict = {"mode": "bilinear", "align_corners": False, "antialias": True},
+    ) -> dict:
+        """ 
+        Generates watermarked videos from the input images and messages (used for inference).
+        Videos may be arbitrarily sized.
+        """
+        if not is_video:
+            # fallback on parent class for batch of images
+            return super().embed_lowres_attenuation(imgs, msgs)
+        if msgs is None:
+            msgs = self.get_random_msg()  # 1 x k
+        else:
+            assert msgs.shape[0] == 1, "Message should be unique"
+        msgs = msgs.repeat(self.chunk_size, 1)  # 1 k -> n k
+
+        # encode by chunk of cksz imgs, propagate the wm to spsz next imgs
+        chunk_size = self.chunk_size  # n=cksz
+        step_size = self.step_size  # spsz
+
+        # initialize watermarked imgs
+        imgs_w = torch.zeros_like(imgs)  # f 3 h w
+
+        # chunking is necessary to avoid memory issues (when too many frames)
+        for ii in range(0, len(imgs[::step_size]), chunk_size):
+            nimgs_in_ck = min(chunk_size, len(imgs[::step_size]) - ii)
+            start = ii * step_size
+            end = start + nimgs_in_ck * step_size
+            all_imgs_in_ck = imgs[start: end, ...]  # f 3 h w
+
+            # deal with last chunk that may have less than chunk_size imgs
+            if nimgs_in_ck < chunk_size:
+                msgs = msgs[:nimgs_in_ck]
+
+            # interpolate
+            all_imgs_res = all_imgs_in_ck.clone()
+            if all_imgs_res.shape[-2:] != (self.img_size, self.img_size):
+                all_imgs_res = F.interpolate(all_imgs_res, size=(self.img_size, self.img_size),
+                                            **interpolation)
+            all_imgs_res = all_imgs_res.to(self.device)
+
+            # choose one frame every step_size
+            imgs_res = all_imgs_res[::step_size]  # n 3 h w
+
+            # get deltas for the chunk, and repeat them for each frame in the chunk
+            if self.embedder.yuv:  # take y channel only
+                imgs_res = self.rgb2yuv(imgs_res)[:, 0:1]
+            preds_w = self.embedder(imgs_res, msgs.to(self.device))
+            preds_w = torch.repeat_interleave(preds_w, step_size, dim=0)  # f 3 256 256
+            preds_w = preds_w[:len(all_imgs_in_ck)]
+
+            # attenuate 
+            if self.attenuation is not None:
+                self.attenuation.to(all_imgs_res.device)
+                hmaps = self.attenuation.heatmaps(all_imgs_res)
+                preds_w = hmaps * preds_w
+            
+            # interpolate back
+            preds_w = preds_w.to(imgs.device)
+            if all_imgs_in_ck.shape[-2:] != (self.img_size, self.img_size):
+                preds_w = F.interpolate(preds_w, size=all_imgs_in_ck.shape[-2:],
+                                        **interpolation)
+
+            # blend
+            all_imgs_in_ck_w = self.blender(all_imgs_in_ck, preds_w)
+            if self.clamp:
+                all_imgs_in_ck_w = torch.clamp(all_imgs_in_ck_w, 0, 1)
             imgs_w[start: end, ...] = all_imgs_in_ck_w  # n 3 h w
 
         outputs = {
@@ -238,6 +332,7 @@ class VideoWam(Wam):
         self,
         imgs: torch.Tensor,
         is_video: bool = True,
+        interpolation: dict = {"mode": "bilinear", "align_corners": False, "antialias": True},
     ) -> dict:
         """
         Performs the forward pass of the detector only.
@@ -259,7 +354,8 @@ class VideoWam(Wam):
         for ii in range(0, len(imgs), self.chunk_size):
             nimgs_in_ck = min(self.chunk_size, len(imgs) - ii)
             outputs = super().detect(
-                imgs[ii:ii+nimgs_in_ck]
+                imgs[ii:ii+nimgs_in_ck], 
+                interpolation
             )
             preds = outputs["preds"]
             all_preds.append(preds)  # n k ..
@@ -273,6 +369,7 @@ class VideoWam(Wam):
         self,
         imgs: torch.Tensor,
         aggregation: str = "avg",
+        interpolation: dict = {"mode": "bilinear", "align_corners": False, "antialias": True},
     ) -> torch.Tensor:
         """
         Detects the message in a video and aggregates the predictions across frames.
@@ -289,17 +386,23 @@ class VideoWam(Wam):
         Note:
             If aggregation is None, returns the predictions for each frame without aggregation.
         """
-        outputs = self.detect(imgs)
+        outputs = self.detect(imgs, is_video=True, interpolation=interpolation)
         preds = outputs["preds"]
         mask_preds = preds[:, 0:1]  # binary detection bit (not used for now)
-        bit_preds = preds[:, 1:]  # b k ..
+        bit_preds = preds[:, 1:]  # f k .., must <0 for bit 0 and >0 for bit 1
         if aggregation is None:
             decoded_msg = bit_preds
         elif aggregation == "avg":
             decoded_msg = bit_preds.mean(dim=0)
-        elif aggregation == "weighted_avg":
-            decoded_msg = (bit_preds * bit_preds.abs()).mean(dim=0)  # b k -> k
-        msg = (decoded_msg > 0).squeeze()
+        elif aggregation == "squared_avg":
+            decoded_msg = (bit_preds * bit_preds.abs()).mean(dim=0)  # f k -> k
+        elif aggregation == "l1norm_avg":
+            frame_weights = torch.norm(bit_preds, p=1, dim=1).unsqueeze(1)  # f 1
+            decoded_msg = (bit_preds * frame_weights).mean(dim=0)  # f k -> k
+        elif aggregation == "l2norm_avg":
+            frame_weights = torch.norm(bit_preds, p=2, dim=1).unsqueeze(1)  # f 1
+            decoded_msg = (bit_preds * frame_weights).mean(dim=0)
+        msg = (decoded_msg > 0).squeeze().unsqueeze(0)  # 1 k
         return msg
 
 
