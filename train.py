@@ -24,6 +24,7 @@ Args inventory:
     --video_dataset sa-v
     --image_dataset coco
 """
+
 import argparse
 import datetime
 import json
@@ -33,12 +34,10 @@ from typing import List
 
 import numpy as np
 import omegaconf
-import psutil
 import torch
 import torch.distributed
 import torch.distributed as dist
 import torch.nn as nn
-import torch.nn.functional as F
 from torchvision.utils import save_image
 
 import videoseal.utils as utils
@@ -48,27 +47,19 @@ import videoseal.utils.optim as uoptim
 from videoseal.augmentation import (get_validation_augs,
                                     get_validation_augs_subset)
 from videoseal.augmentation.augmenter import Augmenter
-from videoseal.augmentation.geometric import (Crop, HorizontalFlip, Identity,
-                                              Perspective, Resize, Rotate)
-from videoseal.augmentation.valuemetric import (JPEG, Brightness, Contrast,
-                                                GaussianBlur, Hue,
-                                                MedianFilter, Saturation)
-from videoseal.augmentation.video import H264, VideoCompressorAugmenter
 from videoseal.data.loader import (get_dataloader_segmentation,
                                    get_video_dataloader)
-from videoseal.data.transforms import (get_resize_transform, get_transforms,
-                                       get_transforms_segmentation)
+from videoseal.data.transforms import get_resize_transform
 from videoseal.evals.metrics import accuracy, bit_accuracy, iou, psnr, ssim
 from videoseal.losses.detperceptual import VideosealLoss
 from videoseal.models import VideoWam, Wam, build_embedder, build_extractor
 from videoseal.modules.jnd import JND
 from videoseal.utils.data import Modalities, parse_dataset_params
-from videoseal.utils.display import get_fps, save_vid
+from videoseal.utils.display import save_vid
 from videoseal.utils.image import create_diff_img
 from videoseal.utils.tensorboard import CustomTensorboardWriter
 
-device = torch.device(
-    'cuda') if torch.cuda.is_available() else torch.device('cpu')
+device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
 
 def freeze_embedder(wam: Wam, image_detection_loss: VideosealLoss, params):
@@ -477,7 +468,6 @@ def main(params):
         dummy_img)  # n 1 h w, full of ones or random masks depending on config
 
     # evaluation only
-    # TODO: test me
     if params.only_eval and udist.is_main_process():
         # get data loaders
         val_loaders = ((Modalities.IMAGE, image_val_loader),
@@ -547,18 +537,18 @@ def main(params):
         if epoch % params.eval_freq == 0:
             val_loaders = ((Modalities.IMAGE, image_val_loader),
                            (Modalities.VIDEO, video_val_loader))
-            for epoch_modality, epoch_val_loader in val_loaders:
+            for val_modality, epoch_val_loader in val_loaders:
                 if epoch_val_loader is not None:
                     if (epoch % params.full_eval_freq == 0 and epoch > 0) or (epoch == params.epochs-1):
                         augs = get_validation_augs(
-                            epoch_modality == Modalities.VIDEO)
+                            val_modality == Modalities.VIDEO)
                     else:
                         augs = get_validation_augs_subset(
-                            epoch_modality == Modalities.VIDEO)
-                    val_stats = eval_one_epoch(wam, epoch_val_loader, epoch_modality, image_detection_loss,
+                            val_modality == Modalities.VIDEO)
+                    val_stats = eval_one_epoch(wam, epoch_val_loader, val_modality, image_detection_loss,
                                                epoch, augs, validation_masks, params, tensorboard=tensorboard)
                     log_stats = {
-                        **log_stats, **{f'val_{epoch_modality}_{k}': v for k, v in val_stats.items()}}
+                        **log_stats, **{f'val_{val_modality}_{k}': v for k, v in val_stats.items()}}
 
                     if epoch == params.epochs-1:  # log params in tensorboard @last epoch
                         tensorboard.add_hparams(

@@ -3,12 +3,8 @@ Test with:
     python -m videoseal.models.video_wam
 """
 
-import random
-
 import torch
-from torch import nn
 from torch.nn import functional as F
-from torchvision import transforms
 
 from ..augmentation.augmenter import Augmenter
 from ..models.embedder import Embedder

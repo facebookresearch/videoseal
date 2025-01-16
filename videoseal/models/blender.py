@@ -9,24 +9,19 @@ class Blender(nn.Module):
         "additive", "multiplicative", "spatial_smoothed", "variance_based"
     ]
 
-    def __init__(self,  scaling_i, scaling_w, method="additive", clamp=True, attenuation="none"):
+    def __init__(self,  scaling_i, scaling_w, method="additive"):
         """
         Initializes the Blender class with a specific blending method and optional post-processing.
 
         Parameters:
             method (str): The blending method to use. 
-            clamp (bool): If True, clamps the output values to the range [0, 1].
-            attenuation (str): Post-blending attenuation method. Options include:
-                - "none": No attenuation
-                - "mean": Attenuate based on the mean of the blended image and watermark
+            scaling_i (float): Scaling factor for the original image.
+            scaling_w (float): Scaling factor for the watermark.
         """
         super(Blender, self).__init__()
         self.method = method
-        self.clamp = clamp
-        self.attenuation = attenuation
         self.scaling_i = scaling_i
         self.scaling_w = scaling_w
-        self.attenuation = attenuation
 
         # Map method names to functions
         self.blend_methods = {
@@ -41,7 +36,7 @@ class Blender(nn.Module):
 
     def forward(self, imgs, preds_w):
         """
-        Blends the original images with the predicted watermarks and applies attenuation if specified.
+        Blends the original images with the predicted watermarks.
         E.g., if method is additive
             If scaling_i = 0.0 and scaling_w = 1.0, the watermarked image is predicted directly.
             If scaling_i = 1.0 and scaling_w = 0.2, the watermark is additive.

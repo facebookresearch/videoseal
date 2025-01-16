@@ -8,7 +8,7 @@ from torch import nn
 from torch.nn import functional as F
 
 from ..augmentation.augmenter import Augmenter
-from ..data.transforms import RGB2YUV, rgb_to_yuv, yuv_to_rgb
+from ..data.transforms import RGB2YUV
 from ..modules.jnd import JND
 from .blender import Blender
 from .embedder import Embedder
@@ -71,7 +71,7 @@ class Wam(nn.Module):
         self.rgb2yuv = RGB2YUV()
         # blending
         assert blending_method in Blender.AVAILABLE_BLENDING_METHODS
-        self.blender = Blender(scaling_i, scaling_w, blending_method, clamp, attenuation)
+        self.blender = Blender(scaling_i, scaling_w, blending_method)
         self.attenuation = attenuation
         self.clamp = clamp
 
