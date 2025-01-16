@@ -14,9 +14,54 @@ from .pattern_complexity import PCLoss
 from .ssim import SSIM, MSSSIM
 from .yuvloss import YUVLoss
 
+loss_weights_paths = {
+    "dists": "/checkpoint/pfz/projects/videoseal/weights/loss_weights/dists_ckpt.pth",
+    "watson_vgg": "/checkpoint/pfz/projects/videoseal/weights/loss_weights/rgb_watson_vgg_trial0.pth",
+    "watson_dft": "/checkpoint/pfz/projects/videoseal/weights/loss_weights/rgb_watson_fft_trial0.pth",
+}
+
+def build_loss(loss_name):
+    if loss_name == "none":
+        return NoneLoss()
+    elif loss_name == "lpips":
+        return LPIPS(net="vgg").eval()
+    elif loss_name == "mse":
+        return nn.MSELoss()
+    elif loss_name == "yuv":
+        return YUVLoss()
+    elif loss_name == "focal":
+        return FocalFrequencyLoss()
+    elif loss_name == "ssim":
+        return SSIM()
+    elif loss_name == "msssim":
+        return MSSSIM()
+    elif loss_name == "jnd":
+        return JNDLoss(loss_type=0)
+    elif loss_name == "jnd2":
+        return JNDLoss(loss_type=2)
+    elif loss_name == "dists":
+        # See https://github.com/dingkeyan93/DISTS/blob/master/DISTS_pytorch for the weights
+        return DISTS(loss_weights_paths["dists"]).eval()
+    elif loss_name == "watson_vgg":
+        # See https://github.com/SteffenCzolbe/PerceptualSimilarity for the weights
+        model = WatsonDistanceVgg(reduction="none")
+        ckpt_loss = loss_weights_paths["watson_vgg"]
+        model.load_state_dict(torch.load(ckpt_loss))
+        return model.eval()
+    elif loss_name == "watson_dft":
+        # See https://github.com/SteffenCzolbe/PerceptualSimilarity for the weights
+        model = ColorWrapper(WatsonDistanceFft, (), {"reduction": "none"})
+        ckpt_loss = loss_weights_paths["watson_dft"]
+        model.load_state_dict(torch.load(ckpt_loss))
+        return model.eval()
+    else:
+        raise ValueError(f"Loss type {loss_name} not supported.")
+    
+
 class NoneLoss(nn.Module):
     def forward(self, x, y):
         return torch.zeros(1, requires_grad=True)
+
 
 class PerceptualLoss(nn.Module):
     def __init__(
@@ -24,46 +69,9 @@ class PerceptualLoss(nn.Module):
         percep_loss: str
     ):
         super(PerceptualLoss, self).__init__()
-        self.losses = {
-            "lpips": LPIPS(net="vgg").eval(),
-            "mse": nn.MSELoss(),
-            "yuv": YUVLoss(),
-            "jnd2": JNDLoss(loss_type=2),
-            "none": NoneLoss(),
-            "pattern0": PCLoss(loss_type=0),
-            "pattern1": PCLoss(loss_type=1),
-            "focal": FocalFrequencyLoss(),
-            "ssim": SSIM(),
-            "msssim": MSSSIM(),
-            # "jnd0": JNDLoss(loss_type=0),
-            # "jnd1": JNDLoss(loss_type=1),
-            # "jnd3": JNDLoss(loss_type=3),
-            # "jnd4": JNDLoss(loss_type=4),
-            # "jnd5": JNDLoss(loss_type=5),
-            # "compression_3": CompressionLoss("noganms_quality_3"),
-            # "compression_6": CompressionLoss("noganms_quality_6"),
-            # "compression_3": CompressionLoss("msillm_quality_3"),
-            # "compression_6": CompressionLoss("msillm_quality_6"),
-            # "mmd": MMDLoss(),
-            # "ot": WassersteinLoss(),
-            # "dists": DISTS("/checkpoint/pfz/projects/ai_signature/loss_weights/dists_ckpt.pth").eval(),
-            # "watson_vgg": self.load_watson_vgg(),
-            # "watson_dft": self.load_watson_dft(),
-        }
+
         self.percep_loss = percep_loss
         self.perceptual_loss = self.create_perceptual_loss(percep_loss)
-
-    def load_watson_vgg(self):
-        model = WatsonDistanceVgg(reduction="none")
-        ckpt_loss = "/checkpoint/pfz/projects/ai_signature/loss_weights/rgb_watson_vgg_trial0.pth"
-        model.load_state_dict(torch.load(ckpt_loss))
-        return model
-
-    def load_watson_dft(self):
-        model = ColorWrapper(WatsonDistanceFft, (), {"reduction": "none"})
-        ckpt_loss = "/checkpoint/pfz/projects/ai_signature/loss_weights/rgb_watson_fft_trial0.pth"
-        model.load_state_dict(torch.load(ckpt_loss))
-        return model
 
     def create_perceptual_loss(
         self, 
@@ -75,10 +83,24 @@ class PerceptualLoss(nn.Module):
             percep_loss: (str) The perceptual loss string.
                 Example: "lpips", "lpips+mse", "lpips+0.1_mse", ...
         """
+        # split the string into the different losses
         parts = percep_loss.split('+')
-        if len(parts) == 1 and parts[0] in self.losses:
-            return self.losses[parts[0]]
+
+        # only one loss
+        if len(parts) == 1:
+            loss = parts[0]
+            return build_loss(loss)
         
+        # several losses
+        self.losses = {}
+        for part in parts:
+            if '_' in part:  # Check if the format is 'weight_loss'
+                weight, loss_key = part.split('_')
+            else:
+                weight, loss_key = 1, part
+            self.losses[loss_key] = build_loss(loss_key)
+        
+        # create the combined loss function
         def combined_loss(x, y):
             total_loss = 0
             for part in parts:
@@ -87,10 +109,7 @@ class PerceptualLoss(nn.Module):
                 else:
                     weight, loss_key = 1, part
                 weight = float(weight)
-                if loss_key in self.losses:
-                    total_loss += weight * self.losses[loss_key](x, y).mean()
-                else:
-                    raise ValueError(f"Loss type {loss_key} not supported.")
+                total_loss += weight * self.losses[loss_key](x, y).mean()
             return total_loss
         
         return combined_loss
