@@ -111,8 +111,8 @@ def setup_model(config: VideoWamConfig, ckpt_path: Path) -> VideoWam:
         scaling_w=args.scaling_w,
         scaling_i=args.scaling_i,
         img_size=args.img_size,
-        chunk_size=args.videoseal_chunk_size,
-        step_size=args.videoseal_step_size
+        chunk_size=args.videowam_chunk_size,
+        step_size=args.videowam_step_size
     )
 
     # Load the model weights

@@ -35,6 +35,8 @@ def evaluate(
     output_dir: str,
     save_first: int = -1,
     num_frames: int = 24*3,
+    video_aggregation: str = "avg",
+    only_identity: bool = False,
     bdrate: bool = True,
     decoding: bool = True,
     detection: bool = False,
@@ -47,11 +49,13 @@ def evaluate(
         is_video (bool): Whether the data is video
         output_dir (str): Directory to save the output images
         num_frames (int): Number of frames to evaluate for video quality and extraction (default: 24*3 i.e. 3seconds)
+        video_aggregation (str): Aggregation method for watermark extraction of video frames (default: "avg")
+        only_identity (bool): Whether to only evaluate the identity augmentation (default: False)
         decoding (bool): Whether to evaluate decoding metrics (default: True)
         detection (bool): Whether to evaluate detection metrics (default: False)
     """
     all_metrics = []
-    validation_augs = get_validation_augs(is_video)
+    validation_augs = get_validation_augs(is_video, only_identity)
     timer = Timer()
 
     # save the metrics as csv
@@ -153,7 +157,13 @@ def evaluate(
 
                         # extract watermark
                         timer.start()
-                        outputs = model.detect(imgs_aug, is_video=is_video)
+                        if is_video:
+                            preds = model.detect_and_aggregate(imgs_aug, video_aggregation)  # 1 k     
+                            preds = torch.cat([torch.ones(preds.size(0), 1).to(preds.device), preds], dim=1)  # 1 1+k
+                            outputs = {"preds": preds}
+                            msgs = msgs[:1]  # 1 k
+                        else:    
+                            outputs = model.detect(imgs_aug, is_video=False)  # 1 k
                         timer.step()
                         preds = outputs["preds"]
                         mask_preds = preds[:, 0:1]  # b 1 ...
@@ -207,6 +217,8 @@ def main():
                        help='Number of frames to evaluate for video quality')
     group.add_argument('--num_samples', type=int, default=100, 
                           help='Number of samples to evaluate')
+    group.add_argument('--video_aggregation', type=str, default="avg",
+                            help='Aggregation method for detection of video frames')
     
     group = parser.add_argument_group('Model parameters to override. If not provided, the checkpoint values are used.')
     group.add_argument("--attenuation_config", type=str, default="configs/attenuation.yaml",
@@ -215,14 +227,15 @@ def main():
                         help="Attenuation model to use")
     group.add_argument("--scaling_w", type=float, default=None,
                         help="Scaling factor for the watermark in the embedder model")
-    group.add_argument('--videoseal_chunk_size', type=int, default=None, 
+    group.add_argument('--videowam_chunk_size', type=int, default=32, 
                         help='Number of frames to chunk during forward pass')
-    group.add_argument('--videoseal_step_size', type=int, default=None,
+    group.add_argument('--videowam_step_size', type=int, default=4,
                         help='The number of frames to propagate the watermark to')
 
     group = parser.add_argument_group('Experiment')
     group.add_argument("--output_dir", type=str, default="output/", help="Output directory for logs and images (Default: /output)")
     group.add_argument('--save_first', type=int, default=-1, help='Number of images/videos to save')
+    group.add_argument('--only_identity', type=bool_inst, default=False, help='Whether to only evaluate the identity augmentation')
     group.add_argument('--bdrate', type=bool_inst, default=True, help='Whether to compute BD-rate')
     group.add_argument('--decoding', type=bool_inst, default=True, help='Whether to evaluate decoding metrics')
     group.add_argument('--detection', type=bool_inst, default=False, help='Whether to evaluate detection metrics')
@@ -235,8 +248,8 @@ def main():
     
     # Override model parameters in args
     model.blender.scaling_w = args.scaling_w or model.blender.scaling_w
-    model.chunk_size = args.videoseal_chunk_size or model.chunk_size
-    model.step_size = args.videoseal_step_size or model.step_size
+    model.chunk_size = args.videowam_chunk_size or model.chunk_size
+    model.step_size = args.videowam_step_size or model.step_size
 
     # Setup the device
     avail_device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -266,6 +279,8 @@ def main():
         output_dir = args.output_dir,
         save_first = args.save_first,
         num_frames = args.num_frames,
+        video_aggregation = args.video_aggregation,
+        only_identity = args.only_identity,
         bdrate = args.bdrate,
         decoding = args.decoding,
         detection = args.detection,
