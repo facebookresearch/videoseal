@@ -89,7 +89,8 @@ class PerceptualLoss(nn.Module):
         # only one loss
         if len(parts) == 1:
             loss = parts[0]
-            return build_loss(loss)
+            self.losses = {loss: build_loss(loss)}
+            return self.losses[loss]
         
         # several losses
         self.losses = {}

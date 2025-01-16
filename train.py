@@ -3,11 +3,11 @@ Example usage (cluster 2 gpus):
     torchrun --nproc_per_node=2 train.py --local_rank 0
 Example usage (cluster 1 gpu):
     torchrun train.py --debug_slurm
-    For eval ful only:
+    For eval full only:
         torchrun train.py --debug_slurm --only_eval True --output_dir output/
 
 Example:  decoding only, hidden like
-    torchrun --nproc_per_node=2 train.py --local_rank 0 --nbits 32 --saveimg_freq 1 --lambda_i 0 --lambda_det 0 --lambda_dec 1 --lambda_d 0  --img_size 128 --img_size_extractor 128 --embedder_model hidden --extractor_model hidden
+    torchrun --nproc_per_node=2 train.py --local_rank 0 --embedder_model hidden --extractor_model hidden
 
 With video compression aug:
     torchrun --nproc_per_node=2 train.py --local_rank 0  --image_dataset coco --video_dataset sa-v --augmentation_config configs/video_compression.yaml --extractor_model sam_tiny --embedder_model vae_small_bw --img_size 256 --img_size_extractor 256 --batch_size 16 --batch_size_eval 32 --epochs 100 --optimizer AdamW,lr=1e-4 --scheduler CosineLRScheduler,lr_min=1e-6,t_initial=100,warmup_lr_init=1e-6,warmup_t=5 --seed 0 --perceptual_loss mse --lambda_i 0.0 --lambda_d 0.0 --lambda_det 0.0 --lambda_dec 1.0 --nbits 32 --scaling_i 1.0 --scaling_w 0.2 --balanced  false --iter_per_epoch 5
@@ -109,14 +109,18 @@ def get_parser():
 
     group = parser.add_argument_group('Dataset parameters')
     aa("--image_dataset", type=str,
-        choices=["coco", "coco-stuff-blurred", "sa-1b", "sa-1b-resized"], help="Name of the image dataset.")
+        choices=["coco", "coco-stuff-blurred", "sa-1b", "sa-1b-resized"], help="Name of the image dataset.",
+        default="sa-1b"
+        )
     aa("--video_dataset", type=str,
-        choices=["sa-v"], help="Name of the video dataset.")
+        choices=["sa-v"], help="Name of the video dataset.",
+        default="sa-v"
+        )
     aa("--prop_img_vid", type=float, default=0.5,
         help="Percentage of images in the hybrid dataset 0.5 means for each 5 epochs of images 5 video epoch is made. Only applicable if both --image_dataset and --video_dataset are provided.")
-    aa("--video_start", type=int, default=50,
+    aa("--video_start", type=int, default=500,
         help="Number of epochs before starting video training")
-    aa("--finetune_detector_start", type=int, default=1000,
+    aa("--finetune_detector_start", type=int, default=600,
        help="Number of epochs afterwhich the generator is frozen and detector is finetuned")
 
     group = parser.add_argument_group('Experiments parameters')
@@ -130,9 +134,9 @@ def get_parser():
        help="Path to the extractor config file")
     aa("--attenuation_config", type=str, default="configs/attenuation.yaml",
        help="Path to the attenuation config file")
-    aa("--embedder_model", type=str, default=None,
+    aa("--embedder_model", type=str, default="unet_small2",
        help="Name of the extractor model")
-    aa("--extractor_model", type=str, default=None,
+    aa("--extractor_model", type=str, default="sam_tiny",
        help="Name of the extractor model")
 
     group = parser.add_argument_group('Augmentation parameters')
@@ -146,8 +150,8 @@ def get_parser():
        help="Number of bits used to generate the message. If 0, no message is used.")
     aa("--img_size", type=int, default=256,
        help="Size of the input images for data preprocessing, at inference time the images are resized to this size")
-    aa("--img_size_extractor", type=int,
-       default=256, help="Images are resized to this size before being fed to the extractor")
+    aa("--img_size_extractor", type=int, default=256, 
+       help="Images are resized to this size before being fed to the extractor")
     aa("--img_size_val", type=int, default=256,
        help="Size of the input images for data preprocessing, at inference time the images are resized to this size")
     aa("--attenuation", type=str, default="None", help="Attenuation model to use")
@@ -172,7 +176,7 @@ def get_parser():
        help="Discriminator optimizer. If None uses the same params (default: None)")
     aa("--scheduler", type=str, default="None",
        help="Scheduler (default: None)")
-    aa('--epochs', default=100, type=int,
+    aa('--epochs', default=600, type=int,
        help='Number of total epochs to run')
     aa('--iter_per_epoch', default=10000, type=int,
        help='Number of iterations per epoch, made for very large datasets')
@@ -188,16 +192,16 @@ def get_parser():
        help='Temperature for the mask loss')
     aa('--lambda_det', default=0.0, type=float,
        help='Weight for the watermark detection loss')
-    aa('--lambda_dec', default=4.0, type=float,
+    aa('--lambda_dec', default=1.0, type=float,
        help='Weight for the watermark decoding loss')
-    aa('--lambda_i', default=1.0, type=float, help='Weight for the image loss')
-    aa('--lambda_d', default=0.5, type=float,
+    aa('--lambda_i', default=0.0, type=float, help='Weight for the image loss')
+    aa('--lambda_d', default=0.1, type=float,
        help='Weight for the discriminator loss')
     aa('--balanced', type=utils.bool_inst, default=True,
        help='If True, the weights of the losses are balanced')
     aa('--total_gnorm', default=0.0, type=float,
        help='Total norm for the adaptive weights. If 0, uses the norm of the biggest weight.')
-    aa('--perceptual_loss', default='lpips', type=str,
+    aa('--perceptual_loss', default='mse', type=str,
        help='Perceptual loss to use. "lpips", "watson_vgg" or "watson_fft"')
     aa('--disc_start', default=0, type=float,
        help='Weight for the discriminator loss')
@@ -205,18 +209,19 @@ def get_parser():
        help='Number of layers for the discriminator')
     aa('--disc_hinge_on_logits_fake', type=utils.bool_inst, default=False,
        help='If True then loss_disc (to embedder) will have a hinge loss otherwise just pure -logits_fake.mean() (experimental)')
+    
     group = parser.add_argument_group('Loading parameters')
     aa('--batch_size', default=32, type=int, help='Batch size')
     aa('--batch_size_eval', default=32, type=int, help='Batch size for evaluation')
-    aa('--batch_size_video', default=4, type=int, help='Batch size')
-    aa('--batch_size_video_eval', default=4,
+    aa('--batch_size_video', default=1, type=int, help='Batch size')
+    aa('--batch_size_video_eval', default=1,
        type=int, help='Batch size for evaluation')
-    aa('--workers', default=8, type=int, help='Number of data loading workers')
+    aa('--workers', default=0, type=int, help='Number of data loading workers')
     aa('--frames_per_clip', default=32, type=int,
        help='Number of frames per clip for video datasets')
     aa('--frame_step', default=1, type=int,
        help='Step between frames for video datasets')
-    aa('--num_clips', default=2, type=int,
+    aa('--num_clips', default=1, type=int,
        help='Number of clips per video for video datasets')
 
     group = parser.add_argument_group('Misc.')
