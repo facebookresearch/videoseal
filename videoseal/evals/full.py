@@ -20,7 +20,7 @@ from torchvision.utils import save_image
 from ..evals.metrics import bd_rate, psnr, ssim
 from ..augmentation import get_validation_augs
 from ..models import VideoWam
-from ..modules.jnd import JND
+from ..modules.jnd import JND, VarianceBasedJND
 from ..utils import Timer, bool_inst
 from ..utils.display import save_vid
 from ..utils.image import create_diff_img
@@ -236,7 +236,7 @@ def main():
     group.add_argument("--output_dir", type=str, default="output/", help="Output directory for logs and images (Default: /output)")
     group.add_argument('--save_first', type=int, default=-1, help='Number of images/videos to save')
     group.add_argument('--only_identity', type=bool_inst, default=False, help='Whether to only evaluate the identity augmentation')
-    group.add_argument('--bdrate', type=bool_inst, default=True, help='Whether to compute BD-rate')
+    group.add_argument('--bdrate', type=bool_inst, default=False, help='Whether to compute BD-rate')
     group.add_argument('--decoding', type=bool_inst, default=True, help='Whether to evaluate decoding metrics')
     group.add_argument('--detection', type=bool_inst, default=False, help='Whether to evaluate detection metrics')
 
@@ -259,9 +259,12 @@ def main():
     # Override attenuation build
     if args.attenuation is not None:
         # should be on CPU to operate on high resolution videos
-        if args.attenuation.lower() != "none":
+        if args.attenuation.lower().startswith("jnd"):
             attenuation_cfg = omegaconf.OmegaConf.load(args.attenuation_config)
             attenuation = JND(**attenuation_cfg[args.attenuation])
+        elif args.attenuation.lower().startswith("simplified"):
+            attenuation_cfg = omegaconf.OmegaConf.load(args.attenuation_config)
+            attenuation = VarianceBasedJND(**attenuation_cfg[args.attenuation])
         else:
             attenuation = None
         model.attenuation = attenuation

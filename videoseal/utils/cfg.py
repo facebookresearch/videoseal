@@ -139,6 +139,9 @@ def setup_model_from_checkpoint(ckpt_path: str) -> VideoWam:
     if "baseline" in ckpt_path:
         method = ckpt_path.split('/')[-1]
         return build_baseline(method)
+    # load videoseal model card
+    elif ckpt_path.startswith('videoseal'):
+        return setup_model_from_model_card(ckpt_path)
     # load videoseal checkpoints
     else:
         config = get_config_from_checkpoint(ckpt_path)
