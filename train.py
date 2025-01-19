@@ -307,13 +307,12 @@ def main(params):
         attenuation_cfg = omegaconf.OmegaConf.load(params.attenuation_config)
         if params.attenuation.lower().startswith("jnd"):
             attenuation_cfg = omegaconf.OmegaConf.load(params.attenuation_config)
-            attenuation = JND(**attenuation_cfg[params.attenuation])
+            attenuation = JND(**attenuation_cfg[params.attenuation]).to(device)
         elif params.attenuation.lower().startswith("simplified"):
             attenuation_cfg = omegaconf.OmegaConf.load(params.attenuation_config)
-            attenuation = VarianceBasedJND(**attenuation_cfg[params.attenuation])
+            attenuation = VarianceBasedJND(**attenuation_cfg[params.attenuation]).to(device)
         else:
             attenuation = None
-        attenuation = JND(**attenuation_cfg[params.attenuation]).to(device)
     else:
         attenuation = None
     print(f'attenuation: {attenuation}')
