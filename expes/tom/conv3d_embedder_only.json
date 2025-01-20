@@ -5,6 +5,7 @@
     "commit": "soucek/conv3d",
     "precmd": [],
     "params": {
+        "resume_from": "/private/home/soucek/videoseal/1122_vseal_04_rgb_96bits_total_gnorm=1.0_sleepwake=False_scheduler=1_optimizer=AdamW,lr=1e-5_extractor_model=sam_small.epoch700.conv3d_converted.pth",
         "video_dataset": "sa-v",
         "augmentation_config": [
             "configs/all_augs.yaml"
@@ -19,10 +20,10 @@
         "img_size_extractor": 256,
         "iter_per_epoch": 1500,
         "prop_img_vid": [
-            0.5
+            0.0
         ],
         "video_start": [
-            800
+            0
         ],
         "videowam_step_size": [
             1
@@ -32,8 +33,8 @@
         "batch_size_eval": 32,
         "batch_size_video": 1,
         "batch_size_video_eval": 1,
-        "full_eval_freq": 5,
-        "eval_freq": 5,
+        "full_eval_freq": 1,
+        "eval_freq": 1,
         "epochs": 300,
         "optimizer": {
             "AdamW,lr=5e-6":{
