@@ -202,3 +202,23 @@ def get_activation(activation: str):
     else:
         raise NotImplementedError
     return act_layer
+
+class Conv3dWrapper(nn.Module):
+    def __init__(self, *args, **kwargs):
+        super().__init__()
+        self.conv = nn.Conv3d(*args, **kwargs)
+
+    def forward(self, x):
+        assert len(x.shape) == 4
+        x = x.unsqueeze(0).permute(0, 2, 1, 3, 4) # change [B, C, H, W] to [1, C, T, H, W]
+        x = self.conv(x)
+        x = x.permute(0, 2, 1, 3, 4).squeeze(0)
+        return x
+
+def get_conv_layer(name: str):
+    if name == "conv2d":
+        return nn.Conv2d
+    if name == "conv3d":
+        return Conv3dWrapper
+    else:
+        raise NotImplementedError
