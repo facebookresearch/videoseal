@@ -62,36 +62,6 @@ from videoseal.utils.tensorboard import CustomTensorboardWriter
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
 
-def freeze_embedder(wam: Wam, image_detection_loss: VideosealLoss, params):
-    """
-    To be called only once when you need to freeze the embedder
-    Freezes the embedder of a model
-    Turnoff losses associated to the embedder
-    Reinitializes the Distributed Data Parallel (DDP) .
-
-    """
-
-    # Remove the current DDP wrapper, if it exists
-    if isinstance(wam, nn.parallel.DistributedDataParallel):
-        wam = wam.module  # unwrap the model from DDP
-
-    if isinstance(image_detection_loss, nn.parallel.DistributedDataParallel):
-        image_detection_loss = image_detection_loss.module  # unwrap the model from DDP
-
-    wam.freeze_module("embedder")
-    image_detection_loss.freeze_embedder = True
-
-    if params.distributed:
-
-        wam = nn.parallel.DistributedDataParallel(
-            wam, device_ids=[params.local_rank])
-        image_detection_loss.discriminator = nn.parallel.DistributedDataParallel(
-            image_detection_loss.discriminator, device_ids=[
-                params.local_rank])
-
-    return wam, image_detection_loss
-
-
 def get_parser():
     parser = argparse.ArgumentParser()
 
@@ -505,15 +475,6 @@ def main(params):
     start_time = time.time()
     for epoch in range(start_epoch, params.epochs):
 
-        # freeze embdder, turn off embddder loss and refresh DDP
-        if epoch == params.finetune_detector_start:
-            wam_ddp, image_detection_loss = freeze_embedder(
-                wam_ddp, image_detection_loss, params)
-            if params.distributed:
-                wam = wam_ddp.module
-            else:
-                wam = wam_ddp
-
         epoch_modality = modalities[epoch]
         assert epoch_modality in [Modalities.IMAGE, Modalities.VIDEO]
         log_stats = {'epoch': epoch, 'modality': epoch_modality}
@@ -630,7 +591,7 @@ def train_one_epoch(
         for acc_it in range(accumulation_steps):
 
             imgs, masks = batch_imgs[acc_it], batch_masks[acc_it]
-            imgs = imgs.to(device)
+            imgs = imgs.to(device, non_blocking=True)
 
             # forward
             outputs = wam(imgs, masks, is_video=is_video)

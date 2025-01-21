@@ -50,8 +50,6 @@ class VideosealLoss(nn.Module):
         self.detect_weight = detect_weight
         self.disc_weight = disc_weight
         self.decode_weight = decode_weight
-        self.freeze_embedder = False
-        self.freeze_detector = False
         self.disc_hinge_on_logits_fake = disc_hinge_on_logits_fake
 
         # self.perceptual_loss = PerceptualLoss(percep_loss=percep_loss).to(torch.device("cuda"))
@@ -115,7 +113,7 @@ class VideosealLoss(nn.Module):
             losses = {}
 
             # perceptual loss
-            if self.percep_weight > 0 and not self.freeze_embedder:
+            if self.percep_weight > 0:
                 losses["percep"] = self.perceptual_loss(
                     imgs=inputs.contiguous(),
                     imgs_w=reconstructions.contiguous(),
@@ -123,7 +121,7 @@ class VideosealLoss(nn.Module):
                 weights["percep"] = self.percep_weight
 
             # discriminator loss
-            if self.disc_weight > 0 and not self.freeze_embedder:
+            if self.disc_weight > 0:
 
                 # training only embedder in this case the
                 # gan like discriminator(disc) should be frozen
@@ -152,7 +150,7 @@ class VideosealLoss(nn.Module):
 
                 weights["disc"] = disc_factor * self.disc_weight
             # detection loss
-            if self.detect_weight > 0 and not self.freeze_detector:
+            if self.detect_weight > 0:
                 detection_loss = self.detection_loss(
                     preds[:, 0:1].contiguous(),
                     masks.contiguous(),
@@ -160,7 +158,7 @@ class VideosealLoss(nn.Module):
                 losses["detect"] = detection_loss
                 weights["detect"] = self.detect_weight
             # decoding loss
-            if self.decode_weight > 0 and not self.freeze_detector:
+            if self.decode_weight > 0:
                 msg_preds = preds[:, 1:]  # b nbits ...
                 if msg_preds.dim() == 2:  # extract predicts msg
                     decoding_loss = self.decoding_loss(
@@ -185,7 +183,7 @@ class VideosealLoss(nn.Module):
                 weights["decode"] = self.decode_weight
             # calculate adaptive weights
             # turn off adaptive weights if any of the detector or embedder losses are turned off
-            if last_layer is not None and self.balanced and not self.freeze_embedder and not self.freeze_detector:
+            if last_layer is not None and self.balanced:
                 scales = self.calculate_adaptive_weights(
                     losses=losses.values(),
                     weights=weights.values(),

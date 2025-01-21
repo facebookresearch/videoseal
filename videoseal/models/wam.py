@@ -22,19 +22,6 @@ class Wam(nn.Module):
         """Return the device of the model."""
         return next(self.parameters()).device
 
-    def freeze_module(self, module_name):
-        """
-        This function allows doing sleep awake style training between embedder and 
-        detector "model.freeze_module('embedder')"
-        """
-        for param in getattr(self, module_name).parameters():
-            param.requires_grad = False
-
-    def unfreeze_module(self, module_name):
-        "model.unfreeze_module('embedder')"
-        for param in getattr(self, module_name).parameters():
-            param.requires_grad = True
-
     def __init__(
         self,
         embedder: Embedder,
