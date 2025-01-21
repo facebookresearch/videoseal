@@ -67,10 +67,8 @@ def freeze_embedder(wam: Wam, image_detection_loss: VideosealLoss, params):
     To be called only once when you need to freeze the embedder
     Freezes the embedder of a model
     Turnoff losses associated to the embedder
-    Reinitializes the Distributed Data Parallel (DDP) .
-
+    Reinitializes the Distributed Data Parallel (DDP).
     """
-
     # Remove the current DDP wrapper, if it exists
     if isinstance(wam, nn.parallel.DistributedDataParallel):
         wam = wam.module  # unwrap the model from DDP

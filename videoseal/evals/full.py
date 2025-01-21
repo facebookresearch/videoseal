@@ -10,14 +10,17 @@ python -m videoseal.evals.full \
 import argparse
 import os
 
+import numpy as np
 import omegaconf
 import pandas as pd
-import torch
 import tqdm
+from lpips import LPIPS
+
+import torch
 from torch.utils.data import Dataset, Subset
 from torchvision.utils import save_image
 
-from ..evals.metrics import bd_rate, psnr, ssim
+from .metrics import vmaf_on_tensor, bit_accuracy, iou, accuracy, pvalue, capacity, psnr, ssim, bd_rate
 from ..augmentation import get_validation_augs
 from ..models import VideoWam
 from ..modules.jnd import JND, VarianceBasedJND
@@ -49,14 +52,15 @@ def evaluate(
         is_video (bool): Whether the data is video
         output_dir (str): Directory to save the output images
         num_frames (int): Number of frames to evaluate for video quality and extraction (default: 24*3 i.e. 3seconds)
-        video_aggregation (str): Aggregation method for watermark extraction of video frames (default: "avg")
-        only_identity (bool): Whether to only evaluate the identity augmentation (default: False)
         decoding (bool): Whether to evaluate decoding metrics (default: True)
         detection (bool): Whether to evaluate detection metrics (default: False)
     """
     all_metrics = []
     validation_augs = get_validation_augs(is_video, only_identity)
     timer = Timer()
+
+    # create lpips
+    lpips_loss = LPIPS(net="alex").eval()
 
     # save the metrics as csv
     metrics_path = os.path.join(output_dir, "metrics.csv")
@@ -68,6 +72,8 @@ def evaluate(
             metrics = {}
 
             # some data loaders return batch_data, masks, frames_positions as well
+            if batch_items is None:
+                continue
             imgs, masks = batch_items[0], batch_items[1]
             if not is_video:
                 imgs = imgs.unsqueeze(0)  # c h w -> 1 c h w
@@ -94,10 +100,14 @@ def evaluate(
             # compute qualitative metrics
             metrics['psnr'] = psnr(
                 imgs_w[:num_frames], 
-                imgs[:num_frames]).mean().item()
+                imgs[:num_frames],
+                is_video).mean().item()
             metrics['ssim'] = ssim(
                 imgs_w[:num_frames], 
                 imgs[:num_frames]).mean().item()
+            metrics['lpips'] = lpips_loss(
+                2*imgs_w[:num_frames]-1, 
+                2*imgs[:num_frames]-1).mean().item()
             if is_video:
                 timer.start()
                 metrics['vmaf'] = vmaf_on_tensor(
@@ -134,11 +144,11 @@ def evaluate(
                     ori_path = ori_path.replace(".png", ".mp4")
                     wm_path = wm_path.replace(".png", ".mp4")
                     diff_path = diff_path.replace(".png", ".mp4")
-                    timer.start()
+                    # timer.start()
                     save_vid(imgs, ori_path, fps)
                     save_vid(imgs_w, wm_path, fps)
                     save_vid(imgs - imgs_w, diff_path, fps)
-                    metrics['save_vid_time'] = timer.end()
+                    # metrics['save_vid_time'] = timer.end()
 
             # extract watermark and evaluate robustness
             if detection or decoding:
@@ -171,12 +181,14 @@ def evaluate(
 
                         aug_log_stats = {}
                         if decoding:
-                            bit_accuracy_ = bit_accuracy(
-                                bit_preds,
-                                msgs,
-                                masks_aug
-                            ).nanmean().item()
-                            aug_log_stats[f'bit_acc'] = bit_accuracy_
+                            aug_log_stats[f'bit_acc'] = bit_accuracy(
+                                bit_preds, msgs, masks_aug).nanmean().item()
+                            aug_log_stats[f'pvalue'] = pvalue(
+                                bit_preds, msgs, masks_aug).nanmean().item()
+                            aug_log_stats[f'log_pvalue'] = -np.log10(
+                                aug_log_stats[f'pvalue']) if aug_log_stats[f'pvalue'] > 0 else -100
+                            aug_log_stats[f'capacity'] = capacity(
+                                bit_preds, msgs, masks_aug).nanmean().item()
 
                         if detection:
                             iou0 = iou(mask_preds, masks, label=0).mean().item()
