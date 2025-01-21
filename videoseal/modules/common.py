@@ -214,11 +214,31 @@ class Conv3dWrapper(nn.Module):
         x = self.conv(x)
         x = x.permute(0, 2, 1, 3, 4).squeeze(0)
         return x
+    
+class Conv2p1dWrapper(nn.Module):
+    def __init__(self, *args, **kwargs):
+        super().__init__()
+        self.conv = nn.Conv2d(*args, **kwargs)
+        self.temp_conv = None
+        if kwargs["kernel_size"] != 1:
+            assert isinstance(kwargs["kernel_size"], int)
+            self.temp_conv = nn.Conv3d(args[1], args[1], kernel_size=(kwargs["kernel_size"], 1, 1), padding=(kwargs["kernel_size"] // 2, 0, 0), bias=False)
+
+    def forward(self, x):
+        assert len(x.shape) == 4
+        x = self.conv(x)
+        if self.temp_conv is not None:
+            x = x.unsqueeze(0).permute(0, 2, 1, 3, 4) # change [B, C, H, W] to [1, C, T, H, W]
+            x = self.temp_conv(x)
+            x = x.permute(0, 2, 1, 3, 4).squeeze(0)
+        return x
 
 def get_conv_layer(name: str):
     if name == "conv2d":
         return nn.Conv2d
     if name == "conv3d":
         return Conv3dWrapper
+    if name == "conv2p1d":
+        return Conv2p1dWrapper
     else:
         raise NotImplementedError
