@@ -249,3 +249,6 @@ convnext_tiny:
     embed_dim: 768  # = encoder.out_chans
     nbits: 16
     sigmoid_output: False
+
+dvmark:
+  params: []

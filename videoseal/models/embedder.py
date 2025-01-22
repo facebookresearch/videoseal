@@ -7,6 +7,7 @@ from ..modules.msg_processor import MsgProcessor
 from ..modules.unet import UNetMsg
 from ..modules.vae import VAEDecoder, VAEEncoder
 from ..modules.patchmixer import PatchmixerMsg
+from ..modules.dvmark import DVMarkEncoder
 
 
 class Embedder(nn.Module):
@@ -199,6 +200,43 @@ class HiddenEmbedder(Embedder):
         return imgs_w
 
 
+class DVMarkEmbedder(Embedder):
+    """
+    Inserts a watermark into an image.
+    """
+
+    def __init__(
+        self,
+        unet: nn.Module,
+    ) -> None:
+        super(DVMarkEmbedder, self).__init__()
+        self.unet = unet
+
+    def get_random_msg(self, bsz: int = 1, nb_repetitions=1) -> torch.Tensor:
+        nbits = self.unet.num_bits
+        return torch.randint(0, 2, (bsz, nbits))
+
+    def get_last_layer(self) -> torch.Tensor:
+        last_layer = self.unet.emb_layer3[-1].weight
+        return last_layer
+
+    def forward(
+        self,
+        imgs: torch.Tensor,
+        msgs: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        Args:
+            imgs: (torch.Tensor) Batched images with shape BxCxHxW
+            msgs: (torch.Tensor) Batched messages with shape BxL, or empty tensor.
+        Returns:
+            The watermarked images.
+        """
+        imgs = self.preprocess(imgs)  # put in [-1, 1]
+        imgs_w = self.unet(imgs, msgs)
+        return imgs_w
+
+
 def build_embedder(name, cfg, nbits):
     if name.startswith('vae'):
         # updates some cfg
@@ -232,6 +270,8 @@ def build_embedder(name, cfg, nbits):
         msg_processor = MsgProcessor(**cfg.msg_processor)
         patchmixer = PatchmixerMsg(msg_processor=msg_processor, **cfg.patchmixer)
         embedder = PatchmixerEmbedder(patchmixer, msg_processor)
+    elif name.startswith('dvmark'):
+        embedder = DVMarkEmbedder(DVMarkEncoder(nbits))
     else:
         raise NotImplementedError(f"Model {name} not implemented")
     embedder.yuv = True if 'yuv' in name else False
