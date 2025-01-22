@@ -73,7 +73,7 @@
             "None"
         ],
         "balanced": [
-            false
+            true
         ],
         "workers": 0,
         "master_port": "__SAMPLE__(10000, 20000)"
@@ -90,7 +90,7 @@
     },
     "meta": {
         "group": "",
-        "name": "conv2p1d_embedder_only_nobalancing",
+        "name": "conv2p1d_embedder_only",
         "dest-arg": "yes",
         "dest-name": "output_dir"
     }
