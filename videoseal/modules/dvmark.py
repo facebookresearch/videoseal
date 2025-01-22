@@ -57,14 +57,14 @@ class DVMarkEncoder(nn.Module):
         self.tanh = nn.Tanh()
 
     def forward(self, imgs, msgs):
-        print("DVMarkEncoder input:", imgs.shape, msgs.shape, flush=True)
         imgs = imgs.unsqueeze(0).permute(0, 2, 1, 3, 4)
 
         # imgs.shape == [B, C, T, H, W]
         # msgs.shape == [B, num_bits]
         B, C, T, H, W = imgs.shape
-        msgs_fullsize = msgs.view(B, self.num_bits, 1, 1, 1).expand(-1, -1, T, H, W)
-        msgs_halfsize = msgs.view(B, self.num_bits, 1, 1, 1).expand(-1, -1, T, H//2, W//2)
+        msgs = msgs.permute(1, 0)
+        msgs_fullsize = msgs.view(1, self.num_bits, T, 1, 1).expand(-1, -1, -1, H, W)
+        msgs_halfsize = msgs.view(1, self.num_bits, T, 1, 1).expand(-1, -1, -1, H//2, W//2)
 
         x = self.transform_layer(imgs)
         x = torch.cat([x, msgs_fullsize], 1)
@@ -100,7 +100,6 @@ class DVMarkDecoder(nn.Module):
         self.relu = nn.ReLU()
 
     def forward(self, x):
-        print("DVMarkDecoder input:", x.shape, flush=True)
         x = x.unsqueeze(0).permute(0, 2, 1, 3, 4)
         x = self.layers["layer1"](x)
         x = self.relu(x)
