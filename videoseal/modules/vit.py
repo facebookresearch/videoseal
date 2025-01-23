@@ -59,11 +59,16 @@ class ImageEncoderViT(nn.Module):
         )
 
         self.pos_embed: nn.Parameter = None
+        self.pos_embed_temporal: nn.Parameter = None
         if use_abs_pos:
             # Initialize absolute positional embedding with pretrain image size.
             self.pos_embed = nn.Parameter(
                 torch.zeros(1, img_size // patch_size, img_size // patch_size, embed_dim)
             )
+            if additional_temporal_attention:
+                self.pos_embed_temporal = nn.Parameter(
+                    torch.zeros(max_temporal_length, 1, 1, embed_dim)
+                )
 
         self.blocks = nn.ModuleList()
         for i in range(depth):
@@ -119,10 +124,13 @@ class ImageEncoderViT(nn.Module):
         x = self.patch_embed(x)
         if self.pos_embed is not None:
             x = x + self.pos_embed
+        if self.pos_embed_temporal is not None:
+            x = x + self.pos_embed_temporal[:len(x)]
 
         if self.temp_att:
             for blk, tblk in zip(self.blocks, self.temp_blocks):
-                x = blk(x) + tblk(x)
+                x = blk(x)
+                x = x + tblk(x)
         else:
             for blk in self.blocks:
                 x = blk(x)  # -> b h/16 h/16 d
