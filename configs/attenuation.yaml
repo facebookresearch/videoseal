@@ -13,3 +13,9 @@ jnd_1_3:
 jnd_3_1:
   in_channels: 3
   out_channels: 1
+
+simplified_jnd_variance:
+  mode: "variance"
+  max_variance_value_for_clipping: 300
+  min_heatmap_value: 0.1
+  avg_pool_kernel_size: 3
