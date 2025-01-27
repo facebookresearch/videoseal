@@ -53,7 +53,7 @@ from videoseal.data.transforms import get_resize_transform
 from videoseal.evals.metrics import accuracy, bit_accuracy, iou, psnr, ssim
 from videoseal.losses.detperceptual import VideosealLoss
 from videoseal.models import VideoWam, Wam, build_embedder, build_extractor
-from videoseal.modules.jnd import JND
+from videoseal.modules.jnd import JND, VarianceBasedJND
 from videoseal.utils.data import Modalities, parse_dataset_params
 from videoseal.utils.display import save_vid
 from videoseal.utils.image import create_diff_img
@@ -67,10 +67,8 @@ def freeze_embedder(wam: Wam, image_detection_loss: VideosealLoss, params):
     To be called only once when you need to freeze the embedder
     Freezes the embedder of a model
     Turnoff losses associated to the embedder
-    Reinitializes the Distributed Data Parallel (DDP) .
-
+    Reinitializes the Distributed Data Parallel (DDP).
     """
-
     # Remove the current DDP wrapper, if it exists
     if isinstance(wam, nn.parallel.DistributedDataParallel):
         wam = wam.module  # unwrap the model from DDP
@@ -305,7 +303,14 @@ def main(params):
     # build attenuation
     if params.attenuation.lower() != "none":
         attenuation_cfg = omegaconf.OmegaConf.load(params.attenuation_config)
-        attenuation = JND(**attenuation_cfg[params.attenuation]).to(device)
+        if params.attenuation.lower().startswith("jnd"):
+            attenuation_cfg = omegaconf.OmegaConf.load(params.attenuation_config)
+            attenuation = JND(**attenuation_cfg[params.attenuation]).to(device)
+        elif params.attenuation.lower().startswith("simplified"):
+            attenuation_cfg = omegaconf.OmegaConf.load(params.attenuation_config)
+            attenuation = VarianceBasedJND(**attenuation_cfg[params.attenuation]).to(device)
+        else:
+            attenuation = None
     else:
         attenuation = None
     print(f'attenuation: {attenuation}')

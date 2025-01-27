@@ -13,7 +13,7 @@ from omegaconf import DictConfig, OmegaConf
 from videoseal.augmentation.augmenter import get_dummy_augmenter
 from videoseal.data.datasets import CocoImageIDWrapper, ImageFolder, VideoDataset
 from videoseal.models import VideoWam, build_embedder, build_extractor, build_baseline
-from videoseal.modules.jnd import JND
+from videoseal.modules.jnd import JND, VarianceBasedJND
 
 # in the yaml, allows for
 # vae:
@@ -97,10 +97,14 @@ def setup_model(config: VideoWamConfig, ckpt_path: Path) -> VideoWam:
     augmenter = get_dummy_augmenter()  # does nothing
 
     # Build attenuation
-    attenuation = None
-    if args.attenuation.lower() != "none":
-        attenuation_cfg = OmegaConf.load(args.attenuation_config)
+    if args.attenuation.lower().startswith("jnd"):
+        attenuation_cfg = omegaconf.OmegaConf.load(args.attenuation_config)
         attenuation = JND(**attenuation_cfg[args.attenuation])
+    elif args.attenuation.lower().startswith("simplified"):
+        attenuation_cfg = omegaconf.OmegaConf.load(args.attenuation_config)
+        attenuation = VarianceBasedJND(**attenuation_cfg[args.attenuation])
+    else:
+        attenuation = None
 
     # Build the complete model
     wam = VideoWam(
@@ -139,6 +143,9 @@ def setup_model_from_checkpoint(ckpt_path: str) -> VideoWam:
     if "baseline" in ckpt_path:
         method = ckpt_path.split('/')[-1]
         return build_baseline(method)
+    # load videoseal model card
+    elif ckpt_path.startswith('videoseal'):
+        return setup_model_from_model_card(ckpt_path)
     # load videoseal checkpoints
     else:
         config = get_config_from_checkpoint(ckpt_path)
