@@ -11,7 +11,7 @@ import torchvision.transforms as transforms
 from omegaconf import DictConfig, OmegaConf
 
 from videoseal.augmentation.augmenter import get_dummy_augmenter
-from videoseal.data.datasets import CocoImageIDWrapper, ImageFolder, VideoDataset
+from videoseal.data.datasets import CocoImageIDWrapper, ImageFolder, VideoDataset, SimpleVideoDataset
 from videoseal.models import VideoWam, build_embedder, build_extractor, build_baseline
 from videoseal.modules.jnd import JND, VarianceBasedJND
 
@@ -230,13 +230,19 @@ def setup_dataset(args):
         raise FileNotFoundError(f"Dataset configuration not found: {args.dataset}")
     if args.is_video:
         # Video dataset, with optional masks
-        dataset = VideoDataset(
-            folder_paths = [dataset_config.val_dir],
-            transform = None,
-            output_resolution = args.short_edge_size,
-            num_workers = 0,
-            subsample_frames = False,
-        )
+        if hasattr(args, "simple_video_dataset") and args.simple_video_dataset:
+            dataset = SimpleVideoDataset(
+                dataset_config.val_dir,
+                args.short_edge_size
+            )
+        else:
+            dataset = VideoDataset(
+                folder_paths = [dataset_config.val_dir],
+                transform = None,
+                output_resolution = args.short_edge_size,
+                num_workers = 0,
+                subsample_frames = False,
+            )
         print(f"Video dataset loaded from {dataset_config.val_dir}")
     else:
         # Image dataset
