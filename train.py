@@ -34,6 +34,7 @@ from typing import List
 
 import numpy as np
 import omegaconf
+
 import torch
 import torch.distributed
 import torch.distributed as dist
@@ -168,8 +169,6 @@ def get_parser():
        help='Weight for the discriminator loss')
     aa('--disc_num_layers', default=2, type=int,
        help='Number of layers for the discriminator')
-    aa('--disc_hinge_on_logits_fake', type=utils.bool_inst, default=False,
-       help='If True then loss_disc (to embedder) will have a hinge loss otherwise just pure -logits_fake.mean() (experimental)')
     
     group = parser.add_argument_group('Loading parameters')
     aa('--batch_size', default=32, type=int, help='Batch size')
@@ -296,12 +295,12 @@ def main(params):
         disc_weight=params.lambda_d, percep_weight=params.lambda_i,
         detect_weight=params.lambda_det, decode_weight=params.lambda_dec,
         disc_start=params.disc_start, disc_num_layers=params.disc_num_layers,
-        percep_loss=params.perceptual_loss, disc_hinge_on_logits_fake=params.disc_hinge_on_logits_fake
+        percep_loss=params.perceptual_loss,
     ).to(device)
     print(image_detection_loss)
     # print(f"discriminator: {sum(p.numel() for p in image_detection_loss.discriminator.parameters() if p.requires_grad) / 1e3:.1f}K parameters")
 
-    # Build the scaling schedule
+    # Build the scaling schedule. Default is none
     if params.scaling_w_schedule is not None:
         scaling_w_schedule = uoptim.parse_params(params.scaling_w_schedule)
         scaling_scheduler = uoptim.ScalingScheduler(
@@ -312,15 +311,11 @@ def main(params):
         scaling_scheduler = None
 
     # Build optimizer and scheduler
+    model_params = list(embedder.parameters()) + list(extractor.parameters())
     optim_params = uoptim.parse_params(params.optimizer)
-    optimizer = uoptim.build_optimizer(
-        model_params=list(embedder.parameters()) +
-        list(extractor.parameters()),
-        **optim_params
-    )
+    optimizer = uoptim.build_optimizer(model_params, **optim_params)
     scheduler_params = uoptim.parse_params(params.scheduler)
-    scheduler = uoptim.build_lr_scheduler(
-        optimizer=optimizer, **scheduler_params)
+    scheduler = uoptim.build_lr_scheduler(optimizer, **scheduler_params)
     print('optimizer: %s' % optimizer)
     print('scheduler: %s' % scheduler)
 
@@ -427,8 +422,7 @@ def main(params):
         wam_ddp = nn.parallel.DistributedDataParallel(
             wam, device_ids=[params.local_rank])
         image_detection_loss.discriminator = nn.parallel.DistributedDataParallel(
-            image_detection_loss.discriminator, device_ids=[
-                params.local_rank])
+            image_detection_loss.discriminator, device_ids=[params.local_rank])
         wam = wam_ddp.module
     else:
         wam_ddp = wam
@@ -475,12 +469,12 @@ def main(params):
     start_time = time.time()
     for epoch in range(start_epoch, params.epochs):
 
+        # prepare modality and select loader
         epoch_modality = modalities[epoch]
         assert epoch_modality in [Modalities.IMAGE, Modalities.VIDEO]
-        log_stats = {'epoch': epoch, 'modality': epoch_modality}
-
         epoch_train_loader = video_train_loader if epoch_modality == Modalities.VIDEO else image_train_loader
 
+        # scheduler
         if scheduler is not None:
             scheduler.step(epoch)
             scheduler_d.step(epoch)
@@ -490,24 +484,35 @@ def main(params):
         if params.distributed:
             epoch_train_loader.sampler.set_epoch(epoch)
 
+        # prepare if freezing the generator and finetuning the detector
+        if epoch >= params.finetune_detector_start:
+            # remove the embedder from the optimizer
+            wam.embedder.requires_grad_(False)
+            wam.embedder.eval()
+            
+            # set to 0 the weights of the perceptual losses
+            image_detection_loss.percep_weight = 0.0
+            image_detection_loss.disc_weight = 0.0
+
+        # train and log
         train_stats = train_one_epoch(
             wam_ddp, optimizers, epoch_train_loader, epoch_modality, image_detection_loss, epoch, params, tensorboard=tensorboard)
-        log_stats = {**log_stats, **
-                     {f'train_{k}': v for k, v in train_stats.items()}}
+        log_stats = {
+            'epoch': epoch, 'modality': epoch_modality, 
+            **{f'train_{k}': v for k, v in train_stats.items()}
+        }
 
         if epoch % params.eval_freq == 0:
             val_loaders = ((Modalities.IMAGE, image_val_loader),
-                           (Modalities.VIDEO, video_val_loader))
+                        (Modalities.VIDEO, video_val_loader))
             for val_modality, epoch_val_loader in val_loaders:
                 if epoch_val_loader is not None:
                     if (epoch % params.full_eval_freq == 0 and epoch > 0) or (epoch == params.epochs-1):
-                        augs = get_validation_augs(
-                            val_modality == Modalities.VIDEO)
+                        augs = get_validation_augs(val_modality == Modalities.VIDEO)
                     else:
-                        augs = get_validation_augs_subset(
-                            val_modality == Modalities.VIDEO)
+                        augs = get_validation_augs_subset(val_modality == Modalities.VIDEO)
                     val_stats = eval_one_epoch(wam, epoch_val_loader, val_modality, image_detection_loss,
-                                               epoch, augs, validation_masks, params, tensorboard=tensorboard)
+                                            epoch, augs, validation_masks, params, tensorboard=tensorboard)
                     log_stats = {
                         **log_stats, **{f'val_{val_modality}_{k}': v for k, v in val_stats.items()}}
 
@@ -598,8 +603,7 @@ def train_one_epoch(
             outputs["preds"] /= params.temperature
 
             # last layer is used for gradient scaling
-            last_layer = wam.embedder.get_last_layer(
-            ) if not params.distributed else wam.module.embedder.get_last_layer()
+            last_layer = wam.embedder.get_last_layer() if not params.distributed else wam.module.embedder.get_last_layer()
 
             # index 1 for discriminator, 0 for embedder/extractor
             for optimizer_idx in optimizer_ids_for_epoch:
