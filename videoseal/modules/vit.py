@@ -27,7 +27,7 @@ class ImageEncoderViT(nn.Module):
         rel_pos_zero_init: bool = True,
         window_size: int = 0,
         global_attn_indexes: tuple[int, ...] = (),
-        additional_temporal_attention: bool = False,
+        temporal_attention: bool = False,
         max_temporal_length: int = 32,
     ) -> None:
         """
@@ -65,7 +65,7 @@ class ImageEncoderViT(nn.Module):
             self.pos_embed = nn.Parameter(
                 torch.zeros(1, img_size // patch_size, img_size // patch_size, embed_dim)
             )
-            if additional_temporal_attention:
+            if temporal_attention:
                 self.pos_embed_temporal = nn.Parameter(
                     torch.zeros(max_temporal_length, 1, 1, embed_dim)
                 )
@@ -86,7 +86,7 @@ class ImageEncoderViT(nn.Module):
             )
             self.blocks.append(block)
 
-        self.temp_att = additional_temporal_attention
+        self.temp_att = temporal_attention
         if self.temp_att:
             self.temp_blocks = nn.ModuleList()
             for i in range(depth):
@@ -130,7 +130,7 @@ class ImageEncoderViT(nn.Module):
         if self.temp_att:
             for blk, tblk in zip(self.blocks, self.temp_blocks):
                 x = blk(x)
-                x = x + tblk(x)
+                x = tblk(x)
         else:
             for blk in self.blocks:
                 x = blk(x)  # -> b h/16 h/16 d
@@ -233,10 +233,11 @@ class TemporalBlock(nn.Module):
         self.mlp = MLPBlock(embedding_dim=dim, mlp_dim=int(dim * mlp_ratio), act=act_layer)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        shortcut = x
         x = self.norm1(x)
         x = self.attn(x)
         x = self.mlp(self.norm2(x))
-        return x
+        return shortcut + x
 
 
 class TemporalAttention(nn.Module):
@@ -483,7 +484,6 @@ def add_decomposed_rel_pos_temporal(
 ) -> torch.Tensor:
     R = get_rel_pos(q_size, k_size, rel_pos)
     rel = torch.einsum("bhc,hkc->bhk", q, R)
-
     attn = attn + rel
     return attn
 

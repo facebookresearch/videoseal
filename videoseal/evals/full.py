@@ -230,8 +230,6 @@ def main():
                           help='Number of samples to evaluate')
     group.add_argument('--video_aggregation', type=str, default="avg",
                             help='Aggregation method for detection of video frames')
-    group.add_argument('--simple_video_dataset', type=bool_inst, default=False,
-                       help='Load videos using simple ffmpeg wrapper that can do propper resizing and is fast.')
 
     group = parser.add_argument_group('Model parameters to override. If not provided, the checkpoint values are used.')
     group.add_argument("--attenuation_config", type=str, default="configs/attenuation.yaml",
@@ -282,7 +280,8 @@ def main():
             attenuation = None
         model.attenuation = attenuation
 
-    # Setup the dataset    
+    # Setup the dataset
+    args.simple_video_dataset = True  # use simple video dataset for evaluation to speed up
     dataset = setup_dataset(args)
     dataset = Subset(dataset, range(args.num_samples))
 

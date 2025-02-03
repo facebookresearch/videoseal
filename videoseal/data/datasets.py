@@ -167,7 +167,10 @@ class CocoImageIDWrapper(CocoDetection):
 
 
 class VideoDataset(Dataset):
-    """Video classification dataset that loads video files directly from specified folders."""
+    """
+    Video dataset that loads video files directly from specified folders.
+    Intended for training.
+    """
 
     def __init__(
         self,
@@ -473,6 +476,10 @@ class VideoDataset(Dataset):
 
 
 class SimpleVideoDataset(Dataset):
+    """
+    Simple video dataset that loads video files directly from specified folders.
+    Intended for inference.
+    """
     def __init__(self, paths, output_resolution=None):
         self.output_resolution = output_resolution if output_resolution != -1 else None
         self.video_files = sorted(glob.glob(os.path.join(paths, '*.mp4')))

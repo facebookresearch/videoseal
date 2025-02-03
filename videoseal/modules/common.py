@@ -203,8 +203,15 @@ def get_activation(activation: str):
         raise NotImplementedError
     return act_layer
 
+
 class Conv3dWrapper(nn.Module):
     def __init__(self, *args, **kwargs):
+        """
+        Wrapper for 3D convolution to handle 4D input tensors.
+        Args:
+            *args: Arguments for nn.Conv3d.
+            **kwargs: Keyword arguments for nn.Conv3d.
+        """
         super().__init__()
         self.conv = nn.Conv3d(*args, **kwargs)
 
@@ -214,15 +221,28 @@ class Conv3dWrapper(nn.Module):
         x = self.conv(x)
         x = x.permute(0, 2, 1, 3, 4).squeeze(0)
         return x
-    
+
+
 class Conv2p1dWrapper(nn.Module):
     def __init__(self, *args, **kwargs):
+        """
+        Wrapper for 2D convolution then optional temporal convolution to handle 4D input tensors.
+        Allows to keep 2D convolution unchanged, then add a temporal convolution.
+        Args:
+            *args: Arguments for nn.Conv2d.
+            **kwargs: Keyword arguments for nn.Conv2d.
+        """
         super().__init__()
         self.conv = nn.Conv2d(*args, **kwargs)
         self.temp_conv = None
         if kwargs["kernel_size"] != 1:
             assert isinstance(kwargs["kernel_size"], int)
-            self.temp_conv = nn.Conv3d(args[1], args[1], kernel_size=(kwargs["kernel_size"], 1, 1), padding=(kwargs["kernel_size"] // 2, 0, 0), bias=False)
+            self.temp_conv = nn.Conv3d(
+                args[1], args[1], # in_channels, out_channels
+                kernel_size=(kwargs["kernel_size"], 1, 1), 
+                padding=(kwargs["kernel_size"] // 2, 0, 0), 
+                bias=False
+            )
 
     def forward(self, x):
         assert len(x.shape) == 4

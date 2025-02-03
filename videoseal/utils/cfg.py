@@ -155,14 +155,10 @@ def setup_model_from_checkpoint(ckpt_path: str) -> VideoWam:
 def setup_model_from_model_card(model_card: Path | str) -> VideoWam:
     """
     Set up a Video Seal model from a model card YAML file.
-
-
     Args:
-    model_card (Path | str): Path to the model card YAML file or name of the model card.
-
-
+        model_card (Path | str): Path to the model card YAML file or name of the model card.
     Returns:
-    VideoWam: Loaded model.
+        VideoWam: Loaded model.
     """
 
     # Get the path of the videoseal package
@@ -229,12 +225,13 @@ def setup_dataset(args):
     except FileNotFoundError:
         raise FileNotFoundError(f"Dataset configuration not found: {args.dataset}")
     if args.is_video:
-        # Video dataset, with optional masks
+        # Simple video dataset, intended for inference only
         if hasattr(args, "simple_video_dataset") and args.simple_video_dataset:
             dataset = SimpleVideoDataset(
                 dataset_config.val_dir,
                 args.short_edge_size
             )
+        # Video dataset, with optional masks, intended for training
         else:
             dataset = VideoDataset(
                 folder_paths = [dataset_config.val_dir],
