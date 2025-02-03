@@ -1,4 +1,5 @@
 
+from pathlib import Path
 import threading
 from collections import OrderedDict
 
@@ -44,6 +45,15 @@ class LRUDict(OrderedDict):
             self.popitem(last=False)  # Remove from the start (LRU)
 
 
+def available_datasets() -> list:
+    """
+    Get the list of available datasets.
+
+    Returns:
+    list: List of available datasets.
+    """
+    return [path.stem for path in Path("configs/datasets").glob("*.yaml")]
+
 def parse_dataset_params(params):
     """
     Parses the dataset parameters. Populates image_dataset_config, video_dataset_config and modality fields.
@@ -70,7 +80,8 @@ def parse_dataset_params(params):
 
     # Check if at least one dataset is provided
     if image_dataset_cfg is None and video_dataset_cfg is None:
-        raise ValueError("Provide at least one dataset name")
+        raise ValueError("Provide at least one dataset name from the available datasets: "
+                         f"{', '.join(available_datasets())}")
 
     # Set modality
     if image_dataset_cfg is not None and video_dataset_cfg is not None:

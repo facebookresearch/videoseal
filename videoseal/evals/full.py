@@ -6,7 +6,7 @@ python -m videoseal.evals.full \
     --dataset coco --is_video false \
     --dataset sa-v --is_video true --num_samples 1 \
 """
-
+    
 import argparse
 import os
 
@@ -219,8 +219,7 @@ def main():
     parser.add_argument('--device', type=str, default='cuda', help='Device to use for evaluation')
 
     group = parser.add_argument_group('Dataset')
-    group.add_argument("--dataset", type=str, 
-                       choices=["coco", "coco-stuff-blurred", "sa-v", "sa-v-3s", "sa-1b"], help="Name of the dataset.")
+    group.add_argument("--dataset", type=str, help="Name of the dataset.")
     group.add_argument('--is_video', type=bool_inst, default=False, 
                        help='Whether the data is video')
     group.add_argument('--short_edge_size', type=int, default=-1, 
