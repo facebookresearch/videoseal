@@ -71,6 +71,13 @@ def parse_dataset_params(params):
     image_dataset_cfg = None
     video_dataset_cfg = None
 
+    # handle the case when the dataset is set to "none"
+    if params.image_dataset.lower() == "none":
+        params.image_dataset = None
+    if params.video_dataset.lower() == "none":
+        params.video_dataset = None
+
+    # Load the dataset configurations
     if params.image_dataset is not None:
         image_dataset_cfg = omegaconf.OmegaConf.load(
             f"configs/datasets/{params.image_dataset}.yaml")
