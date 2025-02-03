@@ -1,0 +1,4 @@
+train_dir: /large_experiments/omniseal/sa-1b/train/
+val_dir: /large_experiments/omniseal/sa-1b/val/
+train_annotation_file: null
+val_annotation_file: null

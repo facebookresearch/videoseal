@@ -27,6 +27,8 @@ class ImageEncoderViT(nn.Module):
         rel_pos_zero_init: bool = True,
         window_size: int = 0,
         global_attn_indexes: tuple[int, ...] = (),
+        temporal_attention: bool = False,
+        max_temporal_length: int = 32,
     ) -> None:
         """
         Args:
@@ -57,11 +59,16 @@ class ImageEncoderViT(nn.Module):
         )
 
         self.pos_embed: nn.Parameter = None
+        self.pos_embed_temporal: nn.Parameter = None
         if use_abs_pos:
             # Initialize absolute positional embedding with pretrain image size.
             self.pos_embed = nn.Parameter(
                 torch.zeros(1, img_size // patch_size, img_size // patch_size, embed_dim)
             )
+            if temporal_attention:
+                self.pos_embed_temporal = nn.Parameter(
+                    torch.zeros(max_temporal_length, 1, 1, embed_dim)
+                )
 
         self.blocks = nn.ModuleList()
         for i in range(depth):
@@ -78,6 +85,22 @@ class ImageEncoderViT(nn.Module):
                 input_size=(img_size // patch_size, img_size // patch_size),
             )
             self.blocks.append(block)
+
+        self.temp_att = temporal_attention
+        if self.temp_att:
+            self.temp_blocks = nn.ModuleList()
+            for i in range(depth):
+                block = TemporalBlock(
+                    dim=embed_dim,
+                    num_heads=num_heads,
+                    mlp_ratio=mlp_ratio,
+                    qkv_bias=qkv_bias,
+                    norm_layer=norm_layer,
+                    act_layer=act_layer,
+                    use_rel_pos=use_rel_pos,
+                    video_len=max_temporal_length,
+                )
+                self.temp_blocks.append(block)
 
         self.neck = nn.Sequential(
             nn.Conv2d(
@@ -101,9 +124,16 @@ class ImageEncoderViT(nn.Module):
         x = self.patch_embed(x)
         if self.pos_embed is not None:
             x = x + self.pos_embed
+        if self.pos_embed_temporal is not None:
+            x = x + self.pos_embed_temporal[:len(x)]
 
-        for blk in self.blocks:
-            x = blk(x)  # -> b h/16 h/16 d
+        if self.temp_att:
+            for blk, tblk in zip(self.blocks, self.temp_blocks):
+                x = blk(x)
+                x = tblk(x)
+        else:
+            for blk in self.blocks:
+                x = blk(x)  # -> b h/16 h/16 d
 
         x = self.neck(x.permute(0, 3, 1, 2).contiguous())  # b h/16 w/16 d -> b out_chans h/16 w/16
 
@@ -172,6 +202,96 @@ class Block(nn.Module):
 
         x = shortcut + x
         x = x + self.mlp(self.norm2(x))
+
+        return x
+
+
+class TemporalBlock(nn.Module):
+
+    def __init__(
+        self,
+        dim: int,
+        num_heads: int,
+        mlp_ratio: float = 4.0,
+        qkv_bias: bool = True,
+        norm_layer: nn.Module = nn.LayerNorm,
+        act_layer: nn.Module = nn.GELU,
+        use_rel_pos: bool = False,
+        video_len: int = None,
+    ) -> None:
+        super().__init__()
+        self.norm1 = norm_layer(dim)
+        self.attn = TemporalAttention(
+            dim,
+            num_heads=num_heads,
+            qkv_bias=qkv_bias,
+            use_rel_pos=use_rel_pos,
+            video_len=video_len,
+        )
+
+        self.norm2 = norm_layer(dim)
+        self.mlp = MLPBlock(embedding_dim=dim, mlp_dim=int(dim * mlp_ratio), act=act_layer)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        shortcut = x
+        x = self.norm1(x)
+        x = self.attn(x)
+        x = self.mlp(self.norm2(x))
+        return shortcut + x
+
+
+class TemporalAttention(nn.Module):
+
+    def __init__(
+        self,
+        dim: int,
+        num_heads: int = 8,
+        qkv_bias: bool = True,
+        use_rel_pos: bool = False,
+        video_len: int = None,
+    ) -> None:
+        """
+        Args:
+            dim (int): Number of input channels.
+            num_heads (int): Number of attention heads.
+            qkv_bias (bool):  If True, add a learnable bias to query, key, value.
+            rel_pos (bool): If True, add relative positional embeddings to the attention map.
+            rel_pos_zero_init (bool): If True, zero initialize relative positional parameters.
+            input_size (tuple(int, int) or None): Input resolution for calculating the relative
+                positional parameter size.
+        """
+        super().__init__()
+        self.num_heads = num_heads
+        head_dim = dim // num_heads
+        self.scale = head_dim**-0.5
+
+        self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
+        self.proj = nn.Linear(dim, dim)
+
+        self.use_rel_pos = use_rel_pos
+        if self.use_rel_pos:
+            assert (
+                video_len is not None
+            ), "Video length must be provided if using relative positional encoding."
+            # initialize relative positional embeddings
+            self.rel_pos = nn.Parameter(torch.zeros(2 * video_len - 1, head_dim))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        B, H, W, _ = x.shape
+        # qkv with shape (3, H * W, nHead, B, C)
+        qkv = self.qkv(x).reshape(B, H * W, 3, self.num_heads, -1).permute(2, 1, 3, 0, 4)
+        # q, k, v with shape (H * W * nHead, B, C)
+        q, k, v = qkv.reshape(3, H * W * self.num_heads, B, -1).unbind(0)
+
+        # (H * W * nHead, B, B)
+        attn = (q * self.scale) @ k.transpose(-2, -1)
+
+        if self.use_rel_pos:
+            attn = add_decomposed_rel_pos_temporal(attn, q, self.rel_pos, B, B)
+
+        attn = attn.softmax(dim=-1)
+        x = (attn @ v).view(H, W, self.num_heads, B, -1).permute(3, 0, 1, 2, 4).reshape(B, H, W, -1)
+        x = self.proj(x)
 
         return x
 
@@ -352,6 +472,19 @@ def add_decomposed_rel_pos(
         attn.view(B, q_h, q_w, k_h, k_w) + rel_h[:, :, :, :, None] + rel_w[:, :, :, None, :]
     ).view(B, q_h * q_w, k_h * k_w)
 
+    return attn
+
+
+def add_decomposed_rel_pos_temporal(
+    attn: torch.Tensor,
+    q: torch.Tensor,
+    rel_pos: torch.Tensor,
+    q_size: int,
+    k_size: int,
+) -> torch.Tensor:
+    R = get_rel_pos(q_size, k_size, rel_pos)
+    rel = torch.einsum("bhc,hkc->bhk", q, R)
+    attn = attn + rel
     return attn
 
 

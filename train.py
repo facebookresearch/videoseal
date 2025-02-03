@@ -7,11 +7,12 @@ Example usage (cluster 1 gpu):
         torchrun train.py --debug_slurm --only_eval True --output_dir output/
 
 Example:  decoding only, hidden like
-    torchrun --nproc_per_node=2 train.py --local_rank 0 --embedder_model hidden --extractor_model hidden
+    OMP_NUM_THREADS=40 torchrun --nproc_per_node=2 train.py --local_rank 0 --embedder_model hidden --extractor_model hidden
 
 With video compression aug:
     torchrun --nproc_per_node=2 train.py --local_rank 0  --image_dataset coco --video_dataset sa-v --augmentation_config configs/video_compression.yaml --extractor_model sam_tiny --embedder_model vae_small_bw --img_size 256 --img_size_extractor 256 --batch_size 16 --batch_size_eval 32 --epochs 100 --optimizer AdamW,lr=1e-4 --scheduler CosineLRScheduler,lr_min=1e-6,t_initial=100,warmup_lr_init=1e-6,warmup_t=5 --seed 0 --perceptual_loss mse --lambda_i 0.0 --lambda_d 0.0 --lambda_det 0.0 --lambda_dec 1.0 --nbits 32 --scaling_i 1.0 --scaling_w 0.2 --balanced  false --iter_per_epoch 5
 
+    
 Args inventory:
     --scheduler CosineLRScheduler,lr_min=1e-6,t_initial=100,warmup_lr_init=1e-6,warmup_t=5
     --optimizer Lamb,lr=1e-3
@@ -23,6 +24,8 @@ Args inventory:
     --local_rank 0  --only_eval True --scaling_w 2.0 --scaling_i 1.0 --nbits 16 --lambda_dec 6.0 --lambda_det 1.0 --lambda_d 0.0 --lambda_i 0.0 --perceptual_loss none --seed 0 --scheduler none --optimizer AdamW,lr=1e-5 --epochs 50 --batch_size_eval 32 --batch_size 16 --img_size 256 --attenuation jnd_1_3 --resume_from /checkpoint/pfz/2024_logs/0708_segmark_bigger_vae/_scaling_w=0.4_embedder_model=vae_small_extractor_model=sam_small/checkpoint.pth --embedder_model vae_small --extractor_model sam_small --augmentation_config configs/all_augs.yaml
     --video_dataset sa-v
     --image_dataset coco
+
+Put OMP_NUM_THREADS such that OMP_NUM_THREADS=(number of CPU threads)/(nproc per node)
 """
 
 import argparse
@@ -54,7 +57,7 @@ from videoseal.data.transforms import get_resize_transform
 from videoseal.evals.metrics import accuracy, bit_accuracy, iou, psnr, ssim
 from videoseal.losses.detperceptual import VideosealLoss
 from videoseal.models import VideoWam, Wam, build_embedder, build_extractor
-from videoseal.modules.jnd import JND
+from videoseal.modules.jnd import JND, VarianceBasedJND
 from videoseal.utils.data import Modalities, parse_dataset_params
 from videoseal.utils.display import save_vid
 from videoseal.utils.image import create_diff_img
@@ -70,14 +73,10 @@ def get_parser():
         group.add_argument(*args, **kwargs)
 
     group = parser.add_argument_group('Dataset parameters')
-    aa("--image_dataset", type=str,
-        choices=["coco", "coco-stuff-blurred", "sa-1b", "sa-1b-resized"], help="Name of the image dataset.",
-        default="sa-1b"
-        )
+    aa("--image_dataset", type=str, 
+        help="Name of the image dataset.", default="sa-1b")
     aa("--video_dataset", type=str,
-        choices=["sa-v"], help="Name of the video dataset.",
-        default="sa-v"
-        )
+        help="Name of the video dataset.", default="sa-v")
     aa("--prop_img_vid", type=float, default=0.5,
         help="Percentage of images in the hybrid dataset 0.5 means for each 5 epochs of images 5 video epoch is made. Only applicable if both --image_dataset and --video_dataset are provided.")
     aa("--video_start", type=int, default=500,
@@ -266,7 +265,14 @@ def main(params):
     # build attenuation
     if params.attenuation.lower() != "none":
         attenuation_cfg = omegaconf.OmegaConf.load(params.attenuation_config)
-        attenuation = JND(**attenuation_cfg[params.attenuation]).to(device)
+        if params.attenuation.lower().startswith("jnd"):
+            attenuation_cfg = omegaconf.OmegaConf.load(params.attenuation_config)
+            attenuation = JND(**attenuation_cfg[params.attenuation]).to(device)
+        elif params.attenuation.lower().startswith("simplified"):
+            attenuation_cfg = omegaconf.OmegaConf.load(params.attenuation_config)
+            attenuation = VarianceBasedJND(**attenuation_cfg[params.attenuation]).to(device)
+        else:
+            attenuation = None
     else:
         attenuation = None
     print(f'attenuation: {attenuation}')

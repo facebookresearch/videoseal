@@ -8,3 +8,5 @@ core*
 
 # Track videos in test directories
 !**/tests/**/*.mp4
+results*
+slurm*
