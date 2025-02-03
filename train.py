@@ -236,23 +236,17 @@ def main(params):
     # Copy the config files to the output dir
     if udist.is_main_process():
         os.makedirs(os.path.join(params.output_dir, 'configs'), exist_ok=True)
-        os.system(
-            f'cp {params.embedder_config} {params.output_dir}/configs/embedder.yaml')
-        os.system(
-            f'cp {params.augmentation_config} {params.output_dir}/configs/augs.yaml')
-        os.system(
-            f'cp {params.extractor_config} {params.output_dir}/configs/extractor.yaml')
+        os.system(f'cp {params.embedder_config} {params.output_dir}/configs/embedder.yaml')
+        os.system(f'cp {params.augmentation_config} {params.output_dir}/configs/augs.yaml')
+        os.system(f'cp {params.extractor_config} {params.output_dir}/configs/extractor.yaml')
 
     # Build the embedder model
     embedder_cfg = omegaconf.OmegaConf.load(params.embedder_config)
     params.embedder_model = params.embedder_model or embedder_cfg.model
     embedder_params = embedder_cfg[params.embedder_model]
-    embedder = build_embedder(params.embedder_model,
-                              embedder_params, params.nbits
-                              )
+    embedder = build_embedder(params.embedder_model, embedder_params, params.nbits)
     print(embedder)
-    print(
-        f'embedder: {sum(p.numel() for p in embedder.parameters() if p.requires_grad) / 1e6:.1f}M parameters')
+    print(f'embedder: {sum(p.numel() for p in embedder.parameters() if p.requires_grad) / 1e6:.1f}M parameters')
 
     # build the augmenter
     augmenter_cfg = omegaconf.OmegaConf.load(params.augmentation_config)
@@ -266,10 +260,8 @@ def main(params):
     extractor_cfg = omegaconf.OmegaConf.load(params.extractor_config)
     params.extractor_model = params.extractor_model or extractor_cfg.model
     extractor_params = extractor_cfg[params.extractor_model]
-    extractor = build_extractor(
-        params.extractor_model, extractor_params, params.img_size_extractor, params.nbits)
-    print(
-        f'extractor: {sum(p.numel() for p in extractor.parameters() if p.requires_grad) / 1e6:.1f}M parameters')
+    extractor = build_extractor(params.extractor_model, extractor_params, params.img_size_extractor, params.nbits)
+    print(f'extractor: {sum(p.numel() for p in extractor.parameters() if p.requires_grad) / 1e6:.1f}M parameters')
 
     # build attenuation
     if params.attenuation.lower() != "none":
@@ -320,23 +312,21 @@ def main(params):
     print('scheduler: %s' % scheduler)
 
     # discriminator optimizer
-    optim_params_d = uoptim.parse_params(
-        params.optimizer) if params.optimizer_d is None else uoptim.parse_params(params.optimizer_d)
+    if params.optimizer_d is None:
+        optim_params_d = uoptim.parse_params(params.optimizer) 
+    else:
+        optim_params_d = uoptim.parse_params(params.optimizer_d)
     optimizer_d = uoptim.build_optimizer(
         model_params=[*image_detection_loss.discriminator.parameters()],
         **optim_params_d
     )
-    scheduler_d = uoptim.build_lr_scheduler(
-        optimizer=optimizer_d, **scheduler_params)
+    scheduler_d = uoptim.build_lr_scheduler(optimizer=optimizer_d, **scheduler_params)
     print('optimizer_d: %s' % optimizer_d)
     print('scheduler_d: %s' % scheduler_d)
 
     # Data loaders
-    train_transform, train_mask_transform = get_resize_transform(
-        params.img_size)
-    val_transform, val_mask_transform = get_resize_transform(
-        params.img_size_val)
-
+    train_transform, train_mask_transform = get_resize_transform(params.img_size)
+    val_transform, val_mask_transform = get_resize_transform(params.img_size_val)
     image_train_loader = image_val_loader = video_train_loader = video_val_loader = None
 
     # TODO: allow larger number of workers (params.workers)
@@ -420,7 +410,7 @@ def main(params):
         wam = nn.SyncBatchNorm.convert_sync_batchnorm(wam)
 
         wam_ddp = nn.parallel.DistributedDataParallel(
-            wam, device_ids=[params.local_rank])
+            wam, device_ids=[params.local_rank], find_unused_parameters=True)
         image_detection_loss.discriminator = nn.parallel.DistributedDataParallel(
             image_detection_loss.discriminator, device_ids=[params.local_rank])
         wam = wam_ddp.module
@@ -495,8 +485,7 @@ def main(params):
             image_detection_loss.disc_weight = 0.0
 
         # train and log
-        train_stats = train_one_epoch(
-            wam_ddp, optimizers, epoch_train_loader, epoch_modality, image_detection_loss, epoch, params, tensorboard=tensorboard)
+        train_stats = train_one_epoch(wam_ddp, optimizers, epoch_train_loader, epoch_modality, image_detection_loss, epoch, params, tensorboard=tensorboard)
         log_stats = {
             'epoch': epoch, 'modality': epoch_modality, 
             **{f'train_{k}': v for k, v in train_stats.items()}
