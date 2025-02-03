@@ -6,7 +6,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from .common import ChanRMSNorm, Upsample, Downsample, get_activation, get_normalization
+from .common import ChanRMSNorm, Upsample, Downsample, get_activation, get_normalization, get_conv_layer
 
 # https://github.com/lucidrains/imagen-pytorch/blob/main/imagen_pytorch/imagen_pytorch.py
 # https://github.com/milesial/Pytorch-UNet/blob/master/train.py
@@ -15,21 +15,21 @@ from .common import ChanRMSNorm, Upsample, Downsample, get_activation, get_norma
 class ResnetBlock(nn.Module):
     """Conv Norm Act * 2"""
 
-    def __init__(self, in_channels, out_channels, act_layer, norm_layer, mid_channels=None, id_init=False):
+    def __init__(self, in_channels, out_channels, act_layer, norm_layer, mid_channels=None, id_init=False, conv_layer=nn.Conv2d):
         super().__init__()
         if not mid_channels:
             mid_channels = out_channels
         self.double_conv = nn.Sequential(
-            nn.Conv2d(in_channels, mid_channels,
-                      kernel_size=3, padding=1, bias=False),
+            conv_layer(in_channels, mid_channels,
+                       kernel_size=3, padding=1, bias=False),
             norm_layer(mid_channels),
             act_layer(),
-            nn.Conv2d(mid_channels, out_channels,
-                      kernel_size=3, padding=1, bias=False),
+            conv_layer(mid_channels, out_channels,
+                       kernel_size=3, padding=1, bias=False),
             norm_layer(out_channels),
             act_layer()
         )
-        self.res_conv = nn.Conv2d(in_channels, out_channels, kernel_size=1)
+        self.res_conv = conv_layer(in_channels, out_channels, kernel_size=1)
         if id_init:
             self._id_init(self.res_conv)
 
@@ -48,16 +48,18 @@ class ResnetBlock(nn.Module):
                     m.weight.copy_(identity_kernel)
                     if m.bias is not None:
                         nn.init.zeros_(m.bias)
+        elif isinstance(m, nn.Conv3d):
+            raise NotImplemented("identity-initialized residual convolutions not implemented for conv3d")
         return m
 
 
 class UBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, act_layer, norm_layer, upsampling_type='bilinear', id_init=False):
+    def __init__(self, in_channels, out_channels, act_layer, norm_layer, upsampling_type='bilinear', id_init=False, conv_layer=nn.Conv2d):
         super().__init__()
         self.up = Upsample(upsampling_type, in_channels,
                            out_channels, 2, act_layer)
         self.conv = ResnetBlock(
-            out_channels, out_channels, act_layer, norm_layer, id_init=id_init)
+            out_channels, out_channels, act_layer, norm_layer, id_init=id_init, conv_layer=conv_layer)
 
     def forward(self, x):
         x = self.up(x)
@@ -65,7 +67,7 @@ class UBlock(nn.Module):
 
 
 class DBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, act_layer, norm_layer, upsampling_type='bilinear', id_init=False):
+    def __init__(self, in_channels, out_channels, act_layer, norm_layer, upsampling_type='bilinear', id_init=False, conv_layer=nn.Conv2d):
         super().__init__()
         if upsampling_type == 'bilinear':
             self.down = nn.Conv2d(in_channels, out_channels,
@@ -73,7 +75,7 @@ class DBlock(nn.Module):
         else:
             self.down = Downsample(in_channels, out_channels, act_layer)
         self.conv = ResnetBlock(
-            out_channels, out_channels, act_layer, norm_layer, id_init=id_init)
+            out_channels, out_channels, act_layer, norm_layer, id_init=id_init, conv_layer=conv_layer)
 
     def forward(self, x):
         x = self.down(x)
@@ -88,13 +90,14 @@ class BottleNeck(nn.Module):
                  act_layer: nn.Module,
                  norm_layer: nn.Module,
                  id_init: bool=False,
+                 conv_layer = nn.Conv2d,
                  *args, **kwargs
                  ) -> None:
         super(BottleNeck, self).__init__()
         model = []
         for _ in range(num_blocks):
             model += [ResnetBlock(channels_in, channels_out,
-                                  act_layer, norm_layer, id_init=id_init)]
+                                  act_layer, norm_layer, id_init=id_init, conv_layer=conv_layer)]
             channels_in = channels_out
         self.model = nn.Sequential(*model)
 
@@ -116,7 +119,8 @@ class UNetMsg(nn.Module):
         downsampling_type: str = 'bilinear',
         last_tanh: bool = True,
         zero_init: bool = False,
-        id_init: bool = False
+        id_init: bool = False,
+        conv_layer: str = "conv2d"
     ):
         super(UNetMsg, self).__init__()
         self.msg_processor = msg_processor
@@ -130,30 +134,31 @@ class UNetMsg(nn.Module):
 
         norm_layer = get_normalization(normalization)
         act_layer = get_activation(activation)
+        conv_layer = get_conv_layer(conv_layer)
 
         # Calculate the z_channels for each layer based on z_channels_mults
         z_channels = [self.z_channels * m for m in self.z_channels_mults]
 
         # Initial convolution
         self.inc = ResnetBlock(
-            in_channels, z_channels[0], act_layer, norm_layer, id_init=id_init)
+            in_channels, z_channels[0], act_layer, norm_layer, id_init=id_init, conv_layer=conv_layer)
 
         # Downward path
         self.downs = nn.ModuleList()
         for ii in range(len(z_channels) - 1):
             self.downs.append(DBlock(
-                z_channels[ii], z_channels[ii + 1], act_layer, norm_layer, downsampling_type, id_init))
+                z_channels[ii], z_channels[ii + 1], act_layer, norm_layer, downsampling_type, id_init, conv_layer=conv_layer))
 
         # Message mixing and middle blocks
         z_channels[-1] = z_channels[-1] + self.msg_processor.hidden_size
         self.bottleneck = BottleNeck(
-            num_blocks, z_channels[-1], z_channels[-1], act_layer, norm_layer, id_init=id_init)
+            num_blocks, z_channels[-1], z_channels[-1], act_layer, norm_layer, id_init=id_init, conv_layer=conv_layer)
 
         # Upward path
         self.ups = nn.ModuleList()
         for ii in reversed(range(len(z_channels) - 1)):
             self.ups.append(UBlock(
-                2 * z_channels[ii + 1], z_channels[ii], act_layer, norm_layer, upsampling_type, id_init))
+                2 * z_channels[ii + 1], z_channels[ii], act_layer, norm_layer, upsampling_type, id_init, conv_layer=conv_layer))
 
         # Final output convolution
         self.outc = nn.Conv2d(z_channels[0], out_channels, 1)

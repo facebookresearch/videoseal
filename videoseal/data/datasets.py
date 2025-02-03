@@ -25,6 +25,12 @@ from torchvision.transforms import ToTensor
 from ..utils import suppress_output
 from ..utils.data import LRUDict
 
+try:
+    import ffmpeg
+except ImportError:
+    print("[WARN]: `ffmpeg-python` not available, `SimpleVideoDataset` class will not be usable. Install it by `pip install ffmpeg-python`.", flush=True)
+
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -161,7 +167,10 @@ class CocoImageIDWrapper(CocoDetection):
 
 
 class VideoDataset(Dataset):
-    """Video classification dataset that loads video files directly from specified folders."""
+    """
+    Video dataset that loads video files directly from specified folders.
+    Intended for training.
+    """
 
     def __init__(
         self,
@@ -464,6 +473,58 @@ class VideoDataset(Dataset):
 
     def __len__(self):
         return len(self.videofiles) * self.num_clips
+
+
+class SimpleVideoDataset(Dataset):
+    """
+    Simple video dataset that loads video files directly from specified folders.
+    Intended for inference.
+    """
+    def __init__(self, paths, output_resolution=None):
+        self.output_resolution = output_resolution if output_resolution != -1 else None
+        self.video_files = sorted(glob.glob(os.path.join(paths, '*.mp4')))
+
+    def __len__(self):
+        return len(self.video_files)
+
+    def __getitem__(self, idx):
+        fn = self.video_files[idx]
+        size = SimpleVideoDataset.get_video_size(fn)
+
+        if self.output_resolution is not None:
+            size_tmp_ = size
+            # gcd_ = math.gcd(size[0], size[1])
+            # gcd_size_mult_ = round(self.output_resolution / (min(size) / gcd_))
+            # size = (size[0] // gcd_ * gcd_size_mult_, size[1] // gcd_ * gcd_size_mult_)
+            mult_ = min(size) / self.output_resolution
+            size = (int(size[0] / mult_), int(size[1] / mult_))
+            size = (round(size[0] / 2) * 2, round(size[1] / 2) * 2) # prevent odd size -- results in ffmpeg error
+            print(f"[INFO]: video {fn} resized from {size_tmp_} to {size}.", flush=True)
+
+        frames = SimpleVideoDataset.extract_frames(fn, size)
+        frames_torch = torch.from_numpy(frames).permute(0, 3, 1, 2).float().div_(255.)
+        return frames_torch, [None] * len(frames_torch)
+
+    @staticmethod
+    def get_video_size(video_path):
+        info = [s for s in ffmpeg.probe(video_path)["streams"] if s["codec_type"] == "video"][0]
+        return (info["width"], info["height"])
+
+    @staticmethod
+    def extract_frames(video_path, size=None):
+        cmd = ffmpeg.input(video_path)
+
+        if isinstance(size, int):
+            size = (size, size)
+        cmd = cmd.filter('scale', size[0], size[1])
+
+        out, _ = (
+            cmd.output('pipe:', format='rawvideo', pix_fmt='rgb24')
+            .run(capture_stdout=True, quiet=True)
+        )
+
+        video = np.frombuffer(out, np.uint8).reshape([-1, size[1], size[0], 3])
+        return video
 
 
 if __name__ == "__main__":

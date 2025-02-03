@@ -5,6 +5,7 @@ from videoseal.modules.convnext import ConvNeXtV2
 from videoseal.modules.hidden import HiddenDecoder
 from videoseal.modules.pixel_decoder import PixelDecoder
 from videoseal.modules.vit import ImageEncoderViT
+from videoseal.modules.dvmark import DVMarkDecoder
 
 
 class Extractor(nn.Module):
@@ -185,6 +186,8 @@ def build_extractor(name, cfg, img_size, nbits):
         convnext = ConvNeXtV2(**cfg.encoder)
         pixel_decoder = PixelDecoder(**cfg.pixel_decoder)
         extractor = ConvnextExtractor(convnext, pixel_decoder)
+    elif name.startswith("dvmark"):
+        extractor = DVMarkDecoder(nbits)
     else:
         raise NotImplementedError(f"Model {name} not implemented")
     return extractor
