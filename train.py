@@ -8,6 +8,7 @@ Example usage (cluster 1 gpu):
 
 Example:  decoding only, hidden like
     OMP_NUM_THREADS=40 torchrun --nproc_per_node=2 train.py --local_rank 0 --embedder_model hidden --extractor_model hidden
+    OMP_NUM_THREADS=40 torchrun --nproc_per_node=2 train.py --local_rank 0 --embedder_model hidden --extractor_model hidden --video_dataset none --image_dataset sa-1b-full-resized --workers 8
 
 With video compression aug:
     torchrun --nproc_per_node=2 train.py --local_rank 0  --image_dataset coco --video_dataset sa-v --augmentation_config configs/video_compression.yaml --extractor_model sam_tiny --embedder_model vae_small_bw --img_size 256 --img_size_extractor 256 --batch_size 16 --batch_size_eval 32 --epochs 100 --optimizer AdamW,lr=1e-4 --scheduler CosineLRScheduler,lr_min=1e-6,t_initial=100,warmup_lr_init=1e-6,warmup_t=5 --seed 0 --perceptual_loss mse --lambda_i 0.0 --lambda_d 0.0 --lambda_det 0.0 --lambda_dec 1.0 --nbits 32 --scaling_i 1.0 --scaling_w 0.2 --balanced  false --iter_per_epoch 5
@@ -411,7 +412,6 @@ def main(params):
 
     # specific thing to do if distributed training
     if params.distributed:
-
         # if model has batch norm convert it to sync batchnorm in distributed mode
         wam = nn.SyncBatchNorm.convert_sync_batchnorm(wam)
 
@@ -482,13 +482,17 @@ def main(params):
 
         # prepare if freezing the generator and finetuning the detector
         if epoch >= params.finetune_detector_start:
-            # remove the embedder from the optimizer
+            # remove the grads from embedder
             wam.embedder.requires_grad_(False)
             wam.embedder.eval()
-            
+
             # set to 0 the weights of the perceptual losses
+            params.lambda_i = 0.0
+            params.lambda_d = 0.0
+            params.balanced = False
             image_detection_loss.percep_weight = 0.0
             image_detection_loss.disc_weight = 0.0
+            image_detection_loss.balanced = False  # not supported here because embedder is frozen
 
         # train and log
         train_stats = train_one_epoch(wam_ddp, optimizers, epoch_train_loader, epoch_modality, image_detection_loss, epoch, params, tensorboard=tensorboard)
@@ -578,10 +582,13 @@ def train_one_epoch(
             batch_masks = batch_masks.unsqueeze(0)
             batch_imgs = batch_imgs.unsqueeze(0)
 
-        if params.sleepwake and params.lambda_d > 0:
-            optimizer_ids_for_epoch = [epoch % 2]
+        if params.lambda_d == 0:
+            optimizer_ids_for_epoch = [0]
         else:
-            optimizer_ids_for_epoch = [1, 0]
+            if params.sleepwake:
+                optimizer_ids_for_epoch = [epoch % 2]
+            else:
+                optimizer_ids_for_epoch = [1, 0]
 
         # reset the optimizer gradients before accum gradients
         for optimizer_idx in optimizer_ids_for_epoch:
@@ -602,8 +609,6 @@ def train_one_epoch(
 
             # index 1 for discriminator, 0 for embedder/extractor
             for optimizer_idx in optimizer_ids_for_epoch:
-                if params.lambda_d == 0 and optimizer_idx == 1:
-                    continue
                 loss, logs = image_detection_loss(
                     imgs, outputs["imgs_w"],
                     outputs["masks"], outputs["msgs"], outputs["preds"],
