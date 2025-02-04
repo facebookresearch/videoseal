@@ -592,7 +592,7 @@ def train_one_epoch(
             if params.sleepwake:
                 optimizer_ids_for_epoch = [epoch % 2]
             else:
-                optimizer_ids_for_epoch = [0, 1]
+                optimizer_ids_for_epoch = [1, 0]
 
         # reset the optimizer gradients before accum gradients
         for optimizer_idx in optimizer_ids_for_epoch:
