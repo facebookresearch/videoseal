@@ -592,7 +592,7 @@ def train_one_epoch(
             if params.sleepwake:
                 optimizer_ids_for_epoch = [epoch % 2]
             else:
-                optimizer_ids_for_epoch = [1, 0]
+                optimizer_ids_for_epoch = [0, 1]
 
         # reset the optimizer gradients before accum gradients
         for optimizer_idx in optimizer_ids_for_epoch:
@@ -657,7 +657,8 @@ def train_one_epoch(
                 metric_logger.update(**{name: value})
 
             # save images on training
-            if (epoch % params.saveimg_freq == 0) and it == acc_it == 0:
+            # if (epoch % params.saveimg_freq == 0) and it == acc_it == 0:
+            if (epoch % params.saveimg_freq == 0) and (it % 50) == 0:
                 ori_path = os.path.join(
                     params.output_dir, f'{epoch:03}_{it:03}_{epoch_modality}_train_0_ori.png')
                 wm_path = os.path.join(
