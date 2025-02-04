@@ -586,12 +586,12 @@ def train_one_epoch(
             batch_masks = batch_masks.unsqueeze(0)
             batch_imgs = batch_imgs.unsqueeze(0)
 
-        if params.lambda_d == 0:
+        if params.lambda_d == 0:  # no disc, optimize embedder/extractor only
             optimizer_ids_for_epoch = [0]
         else:
-            if params.sleepwake:
+            if params.sleepwake:  # alternate
                 optimizer_ids_for_epoch = [epoch % 2]
-            else:
+            else:  # both during the same epoch
                 optimizer_ids_for_epoch = [1, 0]
 
         # reset the optimizer gradients before accum gradients
@@ -657,8 +657,8 @@ def train_one_epoch(
                 metric_logger.update(**{name: value})
 
             # save images on training
-            # if (epoch % params.saveimg_freq == 0) and it == acc_it == 0:
-            if (epoch % params.saveimg_freq == 0) and (it % 50) == 0:
+            if (epoch % params.saveimg_freq == 0) and it == acc_it == 0:
+            # if (epoch % params.saveimg_freq == 0) and (it % 50) == 0:
                 ori_path = os.path.join(
                     params.output_dir, f'{epoch:03}_{it:03}_{epoch_modality}_train_0_ori.png')
                 wm_path = os.path.join(

@@ -36,7 +36,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 def get_image_paths(path):
-    cache_dir = '/checkpoint/pfz/projects/videoseal/cache'
+    cache_dir = '/large_experiments/omniseal/cache/videoseal'
     cache_file = path.replace('/', '_') + '.json'
     cache_file = os.path.join(cache_dir, cache_file)
     if os.path.exists(cache_file):
