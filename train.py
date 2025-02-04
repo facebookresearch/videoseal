@@ -416,7 +416,7 @@ def main(params):
         wam = nn.SyncBatchNorm.convert_sync_batchnorm(wam)
 
         wam_ddp = nn.parallel.DistributedDataParallel(
-            wam, device_ids=[params.local_rank], find_unused_parameters=True)
+            wam, device_ids=[params.local_rank])
         image_detection_loss.discriminator = nn.parallel.DistributedDataParallel(
             image_detection_loss.discriminator, device_ids=[params.local_rank])
         wam = wam_ddp.module
@@ -485,6 +485,10 @@ def main(params):
             # remove the grads from embedder
             wam.embedder.requires_grad_(False)
             wam.embedder.eval()
+            
+            # rebuild DDP with unused parameters
+            wam_ddp = nn.parallel.DistributedDataParallel(
+                wam, device_ids=[params.local_rank], find_unused_parameters=True)
 
             # set to 0 the weights of the perceptual losses
             params.lambda_i = 0.0
