@@ -8,6 +8,14 @@ hidden:
   normalization: 'group'
   activation: 'gelu'
 
+hidden_orig:
+  num_blocks: 8
+  num_bits: 16
+  in_channels: 3
+  z_channels: 64
+  normalization: 'batch'
+  activation: 'relu'
+
 hidden_pw:
   num_blocks: 8
   num_bits: 16

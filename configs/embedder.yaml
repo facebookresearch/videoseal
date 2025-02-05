@@ -10,6 +10,16 @@ hidden:
   activation: 'gelu'
   last_tanh: True
 
+hidden_orig:
+  num_blocks: 4
+  num_bits: 16
+  in_channels: 3
+  out_channels: 3
+  z_channels: 64
+  normalization: 'batch'
+  activation: 'relu'
+  last_tanh: False
+
 unet_small2_quant: # quantization friendly unet2
   msg_processor:
     nbits: 16
