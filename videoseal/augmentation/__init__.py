@@ -58,7 +58,7 @@ def get_validation_augs(
             (Hue(),               [0.25]),
             (JPEG(),              [40]),
             (GaussianBlur(),      [9]),
-            (MedianFilter(),      [9]),
+            # (MedianFilter(),      [9]),
             (H264(),              [30, 40, 50, 60]),
             (H264rgb(),           [30, 40, 50, 60]),
             (H265(),              [30, 40, 50]),  # crf > 50 is not valid
@@ -79,7 +79,7 @@ def get_validation_augs(
             (Hue(),               [-0.4, -0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3, 0.4, 0.5]),
             (JPEG(),              [40, 50, 60, 70, 80, 90]),
             (GaussianBlur(),      [3, 5, 9, 13, 17]),
-            (MedianFilter(),      [3, 5, 9, 13, 17]),
+            # (MedianFilter(),      [3, 5, 9, 13, 17]),
             (Sequential(JPEG(), Crop(), Brightness()), [(40, 0.71, 0.5)]),
             (Sequential(JPEG(), Crop(), Brightness()), [(60, 0.71, 0.5)]),
             (Sequential(JPEG(), Crop(), Brightness()), [(80, 0.71, 0.5)]),
