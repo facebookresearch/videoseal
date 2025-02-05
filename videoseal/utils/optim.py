@@ -6,6 +6,8 @@ import torch
 import timm.optim as optim
 import timm.scheduler as scheduler
 
+from contextlib import contextmanager
+
 
 class ScalingScheduler:
     """
@@ -47,6 +49,22 @@ class ScalingScheduler:
         setattr(self.obj, self.attribute, new_scaling)
         return new_scaling
 
+@contextmanager
+def freeze_grads(model):
+    """
+    Temporarily freezes the parameters of a PyTorch model.
+    Args:
+        model (torch.nn.Module): The model whose parameters will be frozen.
+    """
+    original_requires_grad = {}
+    for param in model.parameters():
+        original_requires_grad[param] = param.requires_grad
+        param.requires_grad = False
+    try:
+        yield
+    finally:
+        for param, requires_grad in original_requires_grad.items():
+            param.requires_grad = requires_grad
 
 def parse_params(s):
     """
@@ -63,8 +81,8 @@ def parse_params(s):
     return params
 
 def build_optimizer(
-    name, 
     model_params, 
+    name, 
     **optim_params
 ) -> torch.optim.Optimizer:
     """ Build optimizer from a dictionary of parameters """
@@ -81,8 +99,8 @@ def build_optimizer(
     raise ValueError(f'Unknown optimizer "{name}", choose among {str(tim_optimizers+torch_optimizers)}')
 
 def build_lr_scheduler(
-    name, 
     optimizer, 
+    name, 
     **lr_scheduler_params
 ) -> torch.optim.lr_scheduler._LRScheduler:
     """ 

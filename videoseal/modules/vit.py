@@ -135,7 +135,7 @@ class ImageEncoderViT(nn.Module):
             for blk in self.blocks:
                 x = blk(x)  # -> b h/16 h/16 d
 
-        x = self.neck(x.permute(0, 3, 1, 2))  # b h/16 w/16 d -> b out_chans h/16 w/16
+        x = self.neck(x.permute(0, 3, 1, 2).contiguous())  # b h/16 w/16 d -> b out_chans h/16 w/16
 
         return x
 
@@ -460,12 +460,12 @@ def add_decomposed_rel_pos(
     """
     q_h, q_w = q_size
     k_h, k_w = k_size
-    Rh = get_rel_pos(q_h, k_h, rel_pos_h)
-    Rw = get_rel_pos(q_w, k_w, rel_pos_w)
+    Rh = get_rel_pos(q_h, k_h, rel_pos_h)  # q_h q_w C
+    Rw = get_rel_pos(q_w, k_w, rel_pos_w)  # q_h q_w C
 
     B, _, dim = q.shape
-    r_q = q.reshape(B, q_h, q_w, dim)
-    rel_h = torch.einsum("bhwc,hkc->bhwk", r_q, Rh)
+    r_q = q.reshape(B, q_h, q_w, dim)  # B q_h q_w C
+    rel_h = torch.einsum("bhwc,hkc->bhwk", r_q, Rh)  
     rel_w = torch.einsum("bhwc,wkc->bhwk", r_q, Rw)
 
     attn = (

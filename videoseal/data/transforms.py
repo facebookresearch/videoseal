@@ -17,9 +17,9 @@ class RGB2YUV(nn.Module):
         self.M = nn.Parameter(M, requires_grad=False)
 
     def forward(self, x):
-        x = x.permute(0, 2, 3, 1)  # b h w c
+        x = x.permute(0, 2, 3, 1).contiguous()  # b h w c
         yuv = torch.matmul(x, self.M.T)
-        yuv = yuv.permute(0, 3, 1, 2)
+        yuv = yuv.permute(0, 3, 1, 2).contiguous()
         return yuv
 
 
@@ -32,9 +32,9 @@ class YUV2RGB(nn.Module):
         self.M = nn.Parameter(M, requires_grad=False)
 
     def forward(self, x):
-        x = x.permute(0, 2, 3, 1)  # b h w c
+        x = x.permute(0, 2, 3, 1).contiguous()  # b h w c
         rgb = torch.matmul(x, self.M.T)
-        rgb = rgb.permute(0, 3, 1, 2)
+        rgb = rgb.permute(0, 3, 1, 2).contiguous()
         return rgb
 
 
@@ -42,9 +42,9 @@ def rgb_to_yuv(img):
     M = torch.tensor([[0.299, 0.587, 0.114],
                       [-0.14713, -0.28886, 0.436],
                       [0.615, -0.51499, -0.10001]], dtype=torch.float32).to(img.device)
-    img = img.permute(0, 2, 3, 1)  # b h w c
+    img = img.permute(0, 2, 3, 1).contiguous()  # b h w c
     yuv = torch.matmul(img, M.T)
-    yuv = yuv.permute(0, 3, 1, 2)
+    yuv = yuv.permute(0, 3, 1, 2).contiguous()
     return yuv
 
 
@@ -52,9 +52,9 @@ def yuv_to_rgb(img):
     M = torch.tensor([[1.0, 0.0, 1.13983],
                       [1.0, -0.39465, -0.58060],
                       [1.0, 2.03211, 0.0]], dtype=torch.float32).to(img.device)
-    img = img.permute(0, 2, 3, 1)  # b h w c
+    img = img.permute(0, 2, 3, 1).contiguous()  # b h w c
     rgb = torch.matmul(img, M.T)
-    rgb = rgb.permute(0, 3, 1, 2)
+    rgb = rgb.permute(0, 3, 1, 2).contiguous()
     return rgb
 
 

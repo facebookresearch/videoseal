@@ -35,20 +35,29 @@ except ImportError:
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-
-@functools.lru_cache()
 def get_image_paths(path):
-    paths = []
-    for path, _, files in os.walk(path):
-        for filename in files:
-            paths.append(os.path.join(path, filename))
-    return sorted([fn for fn in paths if is_image_file(fn)])
+    cache_dir = '/large_experiments/omniseal/cache/videoseal'
+    cache_file = path.replace('/', '_') + '.json'
+    cache_file = os.path.join(cache_dir, cache_file)
+    if os.path.exists(cache_file):
+        with open(cache_file, 'r') as f:
+            paths = json.load(f)
+    else:
+        paths = []
+        for root, _, files in os.walk(path):
+            for filename in files:
+                if is_image_file(filename):
+                    paths.append(os.path.join(root, filename))
+        paths = sorted(paths)
+        with open(cache_file, 'w') as f:
+            json.dump(paths, f)
+    return paths
 
 
 class ImageFolder:
     """An image folder dataset intended for self-supervised learning."""
 
-    def __init__(self, path,  transform=None, mask_transform=None):
+    def __init__(self, path, transform=None, mask_transform=None):
         # assuming 'path' is a folder of image files path and
         # 'annotation_path' is the base path for corresponding annotation json files
         self.samples = get_image_paths(path)
@@ -73,8 +82,7 @@ class ImageFolder:
         return img, mask
 
     def __len__(self):
-        return len(self.samples) 
-
+        return len(self.samples)
 
 class CocoImageIDWrapper(CocoDetection):
     def __init__(

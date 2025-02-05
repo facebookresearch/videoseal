@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ..modules.discriminator import NLayerDiscriminator
+from ..utils.optim import freeze_grads
 from .perceptual import PerceptualLoss
 
 def hinge_d_loss(logits_real, logits_fake):
@@ -38,7 +39,7 @@ class VideosealLoss(nn.Module):
                  balanced=True, total_norm=0.0,
                  disc_weight=1.0, percep_weight=1.0, detect_weight=1.0, decode_weight=0.0,
                  disc_start=0, disc_num_layers=3, disc_in_channels=3, disc_loss="hinge", use_actnorm=False,
-                 percep_loss="lpips", disc_hinge_on_logits_fake=False
+                 percep_loss="lpips",
                  ):
         super().__init__()
         assert disc_loss in ["hinge", "vanilla"]
@@ -50,9 +51,6 @@ class VideosealLoss(nn.Module):
         self.detect_weight = detect_weight
         self.disc_weight = disc_weight
         self.decode_weight = decode_weight
-        self.freeze_embedder = False
-        self.freeze_detector = False
-        self.disc_hinge_on_logits_fake = disc_hinge_on_logits_fake
 
         # self.perceptual_loss = PerceptualLoss(percep_loss=percep_loss).to(torch.device("cuda"))
         self.perceptual_loss = PerceptualLoss(percep_loss=percep_loss)
@@ -104,18 +102,18 @@ class VideosealLoss(nn.Module):
         return scales
 
     def forward(self,
-                inputs: torch.Tensor, reconstructions: torch.Tensor,
-                masks: torch.Tensor, msgs: torch.Tensor, preds: torch.Tensor,
-                optimizer_idx: int, global_step: int,
-                last_layer=None, cond=None,
-                ):
+        inputs: torch.Tensor, reconstructions: torch.Tensor,
+        masks: torch.Tensor, msgs: torch.Tensor, preds: torch.Tensor,
+        optimizer_idx: int, global_step: int,
+        last_layer=None, cond=None,
+    ) -> tuple:
+        
         if optimizer_idx == 0:  # embedder update
-
             weights = {}
             losses = {}
 
             # perceptual loss
-            if self.percep_weight > 0 and not self.freeze_embedder:
+            if self.percep_weight > 0:
                 losses["percep"] = self.perceptual_loss(
                     imgs=inputs.contiguous(),
                     imgs_w=reconstructions.contiguous(),
@@ -123,44 +121,25 @@ class VideosealLoss(nn.Module):
                 weights["percep"] = self.percep_weight
 
             # discriminator loss
-            if self.disc_weight > 0 and not self.freeze_embedder:
+            if self.disc_weight > 0:
 
-                # training only embedder in this case the
-                # gan like discriminator(disc) should be frozen
-                # this is ensured by adding no_grad() to
-                # prevent loss from backprob to the discriminator
-                # loss flows normally to the geneator of reconstructions
-                self.discriminator.eval()
-
-                for param in self.discriminator.parameters():
-                    param.requires_grad = False
-
-                logits_fake = self.discriminator(
-                    reconstructions.contiguous())
-
-                for param in self.discriminator.parameters():
-                    param.requires_grad = True
-
-                disc_factor = adopt_weight(
-                    1.0, global_step, threshold=self.discriminator_iter_start)
-
-                if not self.disc_hinge_on_logits_fake:
+                with freeze_grads(self.discriminator):
+                    disc_factor = adopt_weight(1.0, global_step, threshold=self.discriminator_iter_start)
+                    logits_fake = self.discriminator(reconstructions.contiguous())
                     losses["disc"] = - logits_fake.mean()
-                else:
-                    margin = 0.2
-                    losses["disc"] = torch.mean(F.relu(margin - logits_fake))
+                    weights["disc"] = disc_factor * self.disc_weight
 
-                weights["disc"] = disc_factor * self.disc_weight
             # detection loss
-            if self.detect_weight > 0 and not self.freeze_detector:
+            if self.detect_weight > 0:
                 detection_loss = self.detection_loss(
                     preds[:, 0:1].contiguous(),
                     masks.contiguous(),
                 ).mean()
                 losses["detect"] = detection_loss
                 weights["detect"] = self.detect_weight
+
             # decoding loss
-            if self.decode_weight > 0 and not self.freeze_detector:
+            if self.decode_weight > 0:
                 msg_preds = preds[:, 1:]  # b nbits ...
                 if msg_preds.dim() == 2:  # extract predicts msg
                     decoding_loss = self.decoding_loss(
@@ -183,9 +162,10 @@ class VideosealLoss(nn.Module):
                     ).mean()
                 losses["decode"] = decoding_loss
                 weights["decode"] = self.decode_weight
+
             # calculate adaptive weights
             # turn off adaptive weights if any of the detector or embedder losses are turned off
-            if last_layer is not None and self.balanced and not self.freeze_embedder and not self.freeze_detector:
+            if last_layer is not None and self.balanced:
                 scales = self.calculate_adaptive_weights(
                     losses=losses.values(),
                     weights=weights.values(),
@@ -207,7 +187,8 @@ class VideosealLoss(nn.Module):
         if optimizer_idx == 1:  # discriminator update
             if cond is None:
                 # detach here prevents gradient leakage to any module other than the discriminator
-                logits_real = self.discriminator(inputs.contiguous().detach())
+                logits_real = self.discriminator(
+                    inputs.contiguous().detach())
                 logits_fake = self.discriminator(
                     reconstructions.contiguous().detach())
             else:
