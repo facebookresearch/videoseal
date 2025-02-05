@@ -7,11 +7,13 @@ Example usage (cluster 1 gpu):
         torchrun train.py --debug_slurm --only_eval True --output_dir output/
 
 Example:  decoding only, hidden like
-    torchrun --nproc_per_node=2 train.py --local_rank 0 --embedder_model hidden --extractor_model hidden
+    OMP_NUM_THREADS=40 torchrun --nproc_per_node=2 train.py --local_rank 0 --embedder_model hidden --extractor_model hidden
+    OMP_NUM_THREADS=40 torchrun --nproc_per_node=2 train.py --local_rank 0 --embedder_model hidden --extractor_model hidden --video_dataset none --image_dataset sa-1b-full-resized --workers 8
 
 With video compression aug:
     torchrun --nproc_per_node=2 train.py --local_rank 0  --image_dataset coco --video_dataset sa-v --augmentation_config configs/video_compression.yaml --extractor_model sam_tiny --embedder_model vae_small_bw --img_size 256 --img_size_extractor 256 --batch_size 16 --batch_size_eval 32 --epochs 100 --optimizer AdamW,lr=1e-4 --scheduler CosineLRScheduler,lr_min=1e-6,t_initial=100,warmup_lr_init=1e-6,warmup_t=5 --seed 0 --perceptual_loss mse --lambda_i 0.0 --lambda_d 0.0 --lambda_det 0.0 --lambda_dec 1.0 --nbits 32 --scaling_i 1.0 --scaling_w 0.2 --balanced  false --iter_per_epoch 5
 
+    
 Args inventory:
     --scheduler CosineLRScheduler,lr_min=1e-6,t_initial=100,warmup_lr_init=1e-6,warmup_t=5
     --optimizer Lamb,lr=1e-3
@@ -23,6 +25,8 @@ Args inventory:
     --local_rank 0  --only_eval True --scaling_w 2.0 --scaling_i 1.0 --nbits 16 --lambda_dec 6.0 --lambda_det 1.0 --lambda_d 0.0 --lambda_i 0.0 --perceptual_loss none --seed 0 --scheduler none --optimizer AdamW,lr=1e-5 --epochs 50 --batch_size_eval 32 --batch_size 16 --img_size 256 --attenuation jnd_1_3 --resume_from /checkpoint/pfz/2024_logs/0708_segmark_bigger_vae/_scaling_w=0.4_embedder_model=vae_small_extractor_model=sam_small/checkpoint.pth --embedder_model vae_small --extractor_model sam_small --augmentation_config configs/all_augs.yaml
     --video_dataset sa-v
     --image_dataset coco
+
+Put OMP_NUM_THREADS such that OMP_NUM_THREADS=(number of CPU threads)/(nproc per node)
 """
 
 import argparse
@@ -54,7 +58,7 @@ from videoseal.data.transforms import get_resize_transform
 from videoseal.evals.metrics import accuracy, bit_accuracy, iou, psnr, ssim
 from videoseal.losses.detperceptual import VideosealLoss
 from videoseal.models import VideoWam, Wam, build_embedder, build_extractor
-from videoseal.modules.jnd import JND
+from videoseal.modules.jnd import JND, VarianceBasedJND
 from videoseal.utils.data import Modalities, parse_dataset_params
 from videoseal.utils.display import save_vid
 from videoseal.utils.image import create_diff_img
@@ -70,14 +74,10 @@ def get_parser():
         group.add_argument(*args, **kwargs)
 
     group = parser.add_argument_group('Dataset parameters')
-    aa("--image_dataset", type=str,
-        choices=["coco", "coco-stuff-blurred", "sa-1b", "sa-1b-resized"], help="Name of the image dataset.",
-        default="sa-1b"
-        )
+    aa("--image_dataset", type=str, 
+        help="Name of the image dataset.", default="sa-1b")
     aa("--video_dataset", type=str,
-        choices=["sa-v"], help="Name of the video dataset.",
-        default="sa-v"
-        )
+        help="Name of the video dataset.", default="sa-v")
     aa("--prop_img_vid", type=float, default=0.5,
         help="Percentage of images in the hybrid dataset 0.5 means for each 5 epochs of images 5 video epoch is made. Only applicable if both --image_dataset and --video_dataset are provided.")
     aa("--video_start", type=int, default=500,
@@ -236,23 +236,17 @@ def main(params):
     # Copy the config files to the output dir
     if udist.is_main_process():
         os.makedirs(os.path.join(params.output_dir, 'configs'), exist_ok=True)
-        os.system(
-            f'cp {params.embedder_config} {params.output_dir}/configs/embedder.yaml')
-        os.system(
-            f'cp {params.augmentation_config} {params.output_dir}/configs/augs.yaml')
-        os.system(
-            f'cp {params.extractor_config} {params.output_dir}/configs/extractor.yaml')
+        os.system(f'cp {params.embedder_config} {params.output_dir}/configs/embedder.yaml')
+        os.system(f'cp {params.augmentation_config} {params.output_dir}/configs/augs.yaml')
+        os.system(f'cp {params.extractor_config} {params.output_dir}/configs/extractor.yaml')
 
     # Build the embedder model
     embedder_cfg = omegaconf.OmegaConf.load(params.embedder_config)
     params.embedder_model = params.embedder_model or embedder_cfg.model
     embedder_params = embedder_cfg[params.embedder_model]
-    embedder = build_embedder(params.embedder_model,
-                              embedder_params, params.nbits
-                              )
+    embedder = build_embedder(params.embedder_model, embedder_params, params.nbits)
     print(embedder)
-    print(
-        f'embedder: {sum(p.numel() for p in embedder.parameters() if p.requires_grad) / 1e6:.1f}M parameters')
+    print(f'embedder: {sum(p.numel() for p in embedder.parameters() if p.requires_grad) / 1e6:.1f}M parameters')
 
     # build the augmenter
     augmenter_cfg = omegaconf.OmegaConf.load(params.augmentation_config)
@@ -266,15 +260,20 @@ def main(params):
     extractor_cfg = omegaconf.OmegaConf.load(params.extractor_config)
     params.extractor_model = params.extractor_model or extractor_cfg.model
     extractor_params = extractor_cfg[params.extractor_model]
-    extractor = build_extractor(
-        params.extractor_model, extractor_params, params.img_size_extractor, params.nbits)
-    print(
-        f'extractor: {sum(p.numel() for p in extractor.parameters() if p.requires_grad) / 1e6:.1f}M parameters')
+    extractor = build_extractor(params.extractor_model, extractor_params, params.img_size_extractor, params.nbits)
+    print(f'extractor: {sum(p.numel() for p in extractor.parameters() if p.requires_grad) / 1e6:.1f}M parameters')
 
     # build attenuation
     if params.attenuation.lower() != "none":
         attenuation_cfg = omegaconf.OmegaConf.load(params.attenuation_config)
-        attenuation = JND(**attenuation_cfg[params.attenuation]).to(device)
+        if params.attenuation.lower().startswith("jnd"):
+            attenuation_cfg = omegaconf.OmegaConf.load(params.attenuation_config)
+            attenuation = JND(**attenuation_cfg[params.attenuation]).to(device)
+        elif params.attenuation.lower().startswith("simplified"):
+            attenuation_cfg = omegaconf.OmegaConf.load(params.attenuation_config)
+            attenuation = VarianceBasedJND(**attenuation_cfg[params.attenuation]).to(device)
+        else:
+            attenuation = None
     else:
         attenuation = None
     print(f'attenuation: {attenuation}')
@@ -320,23 +319,21 @@ def main(params):
     print('scheduler: %s' % scheduler)
 
     # discriminator optimizer
-    optim_params_d = uoptim.parse_params(
-        params.optimizer) if params.optimizer_d is None else uoptim.parse_params(params.optimizer_d)
+    if params.optimizer_d is None:
+        optim_params_d = uoptim.parse_params(params.optimizer) 
+    else:
+        optim_params_d = uoptim.parse_params(params.optimizer_d)
     optimizer_d = uoptim.build_optimizer(
         model_params=[*image_detection_loss.discriminator.parameters()],
         **optim_params_d
     )
-    scheduler_d = uoptim.build_lr_scheduler(
-        optimizer=optimizer_d, **scheduler_params)
+    scheduler_d = uoptim.build_lr_scheduler(optimizer=optimizer_d, **scheduler_params)
     print('optimizer_d: %s' % optimizer_d)
     print('scheduler_d: %s' % scheduler_d)
 
     # Data loaders
-    train_transform, train_mask_transform = get_resize_transform(
-        params.img_size)
-    val_transform, val_mask_transform = get_resize_transform(
-        params.img_size_val)
-
+    train_transform, train_mask_transform = get_resize_transform(params.img_size)
+    val_transform, val_mask_transform = get_resize_transform(params.img_size_val)
     image_train_loader = image_val_loader = video_train_loader = video_val_loader = None
 
     # TODO: allow larger number of workers (params.workers)
@@ -415,7 +412,6 @@ def main(params):
 
     # specific thing to do if distributed training
     if params.distributed:
-
         # if model has batch norm convert it to sync batchnorm in distributed mode
         wam = nn.SyncBatchNorm.convert_sync_batchnorm(wam)
 
@@ -486,17 +482,24 @@ def main(params):
 
         # prepare if freezing the generator and finetuning the detector
         if epoch >= params.finetune_detector_start:
-            # remove the embedder from the optimizer
+            # remove the grads from embedder
             wam.embedder.requires_grad_(False)
             wam.embedder.eval()
             
+            # rebuild DDP with unused parameters
+            wam_ddp = nn.parallel.DistributedDataParallel(
+                wam, device_ids=[params.local_rank], find_unused_parameters=True)
+
             # set to 0 the weights of the perceptual losses
+            params.lambda_i = 0.0
+            params.lambda_d = 0.0
+            params.balanced = False
             image_detection_loss.percep_weight = 0.0
             image_detection_loss.disc_weight = 0.0
+            image_detection_loss.balanced = False  # not supported here because embedder is frozen
 
         # train and log
-        train_stats = train_one_epoch(
-            wam_ddp, optimizers, epoch_train_loader, epoch_modality, image_detection_loss, epoch, params, tensorboard=tensorboard)
+        train_stats = train_one_epoch(wam_ddp, optimizers, epoch_train_loader, epoch_modality, image_detection_loss, epoch, params, tensorboard=tensorboard)
         log_stats = {
             'epoch': epoch, 'modality': epoch_modality, 
             **{f'train_{k}': v for k, v in train_stats.items()}
@@ -583,10 +586,13 @@ def train_one_epoch(
             batch_masks = batch_masks.unsqueeze(0)
             batch_imgs = batch_imgs.unsqueeze(0)
 
-        if params.sleepwake and params.lambda_d > 0:
-            optimizer_ids_for_epoch = [epoch % 2]
+        if params.lambda_d == 0:  # no disc, optimize embedder/extractor only
+            optimizer_ids_for_epoch = [0]
         else:
-            optimizer_ids_for_epoch = [1, 0]
+            if params.sleepwake:  # alternate
+                optimizer_ids_for_epoch = [epoch % 2]
+            else:  # both during the same epoch
+                optimizer_ids_for_epoch = [1, 0]
 
         # reset the optimizer gradients before accum gradients
         for optimizer_idx in optimizer_ids_for_epoch:
@@ -607,8 +613,6 @@ def train_one_epoch(
 
             # index 1 for discriminator, 0 for embedder/extractor
             for optimizer_idx in optimizer_ids_for_epoch:
-                if params.lambda_d == 0 and optimizer_idx == 1:
-                    continue
                 loss, logs = image_detection_loss(
                     imgs, outputs["imgs_w"],
                     outputs["masks"], outputs["msgs"], outputs["preds"],
@@ -654,6 +658,7 @@ def train_one_epoch(
 
             # save images on training
             if (epoch % params.saveimg_freq == 0) and it == acc_it == 0:
+            # if (epoch % params.saveimg_freq == 0) and (it % 50) == 0:
                 ori_path = os.path.join(
                     params.output_dir, f'{epoch:03}_{it:03}_{epoch_modality}_train_0_ori.png')
                 wm_path = os.path.join(

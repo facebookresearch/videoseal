@@ -161,6 +161,7 @@ def restart_from_checkpoint(ckp_path, run_variables=None, **kwargs):
                     print("=> failed to load '{}' from checkpoint: '{}'".format(key, ckp_path))
         else:
             print("=> key '{}' not found in checkpoint: '{}'".format(key, ckp_path))
+    print(flush=True)
 
     # re load variable important for the run
     if run_variables is not None:

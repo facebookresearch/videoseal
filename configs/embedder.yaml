@@ -146,7 +146,39 @@ unet_small2:
     normalization: 'rms'
     z_channels_mults: [1, 2, 4, 8]
     last_tanh: True
-  
+
+unet_small2_conv3d:
+  msg_processor:
+    nbits: 16
+    hidden_size: 32     # nbits * 2
+    msg_processor_type: 'binary+concat'
+  unet:
+    in_channels: 3
+    out_channels: 3
+    z_channels: 16
+    num_blocks: 8
+    activation: 'silu'
+    normalization: 'rms'
+    z_channels_mults: [1, 2, 4, 8]
+    last_tanh: True
+    conv_layer: 'conv3d'
+
+unet_small2_conv2p1d:
+  msg_processor:
+    nbits: 16
+    hidden_size: 32     # nbits * 2
+    msg_processor_type: 'binary+concat'
+  unet:
+    in_channels: 3
+    out_channels: 3
+    z_channels: 16
+    num_blocks: 8
+    activation: 'silu'
+    normalization: 'rms'
+    z_channels_mults: [1, 2, 4, 8]
+    last_tanh: True
+    conv_layer: 'conv2p1d'
+
 unet_small2_yuv:
   msg_processor:
     nbits: 16
@@ -162,7 +194,7 @@ unet_small2_yuv:
     z_channels_mults: [1, 2, 4, 8]
     last_tanh: True
 
-unet_small2_yuv_relu_rms:
+unet_small2_yuv_quant:
   msg_processor:
     nbits: 16
     hidden_size: 32     # nbits * 2
@@ -173,55 +205,10 @@ unet_small2_yuv_relu_rms:
     z_channels: 16
     num_blocks: 8
     activation: 'relu'
-    normalization: 'rms'
-    z_channels_mults: [1, 2, 4, 8]
-    last_tanh: True
-
-unet_small2_yuv_silu_group:
-  msg_processor:
-    nbits: 16
-    hidden_size: 32     # nbits * 2
-    msg_processor_type: 'binary+concat'
-  unet:
-    in_channels: 1
-    out_channels: 1
-    z_channels: 16
-    num_blocks: 8
-    activation: 'silu'
-    normalization: 'group'
-    z_channels_mults: [1, 2, 4, 8]
-    last_tanh: True
-
-unet_small2_yuv_silu_batch:
-  msg_processor:
-    nbits: 16
-    hidden_size: 32     # nbits * 2
-    msg_processor_type: 'binary+concat'
-  unet:
-    in_channels: 1
-    out_channels: 1
-    z_channels: 16
-    num_blocks: 8
-    activation: 'silu'
     normalization: 'batch'
     z_channels_mults: [1, 2, 4, 8]
     last_tanh: True
-
-unet_small2_yuv_relu_group:
-  msg_processor:
-    nbits: 16
-    hidden_size: 32     # nbits * 2
-    msg_processor_type: 'binary+concat'
-  unet:
-    in_channels: 1
-    out_channels: 1
-    z_channels: 16
-    num_blocks: 8
-    activation: 'relu'
-    normalization: 'group'
-    z_channels_mults: [1, 2, 4, 8]
-    last_tanh: True
-
+  
 unet_small2_yuv_idinit:
   msg_processor:
     nbits: 16
@@ -567,3 +554,6 @@ patchmixer_small_yuv:
 #   num_res_blocks: 2
 #   attn_resolutions: []
 #   dropout: 0.0
+
+dvmark:
+  params: []

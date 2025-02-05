@@ -113,8 +113,6 @@ class JND(nn.Module):
         return self.postprocess(imgs_w)
 
 
-
-
 class JNDSimplified(nn.Module):
     """ https://ieeexplore.ieee.org/document/7885108 """
     
@@ -199,5 +197,122 @@ class JNDSimplified(nn.Module):
         imgs = self.preprocess(imgs)
         imgs_w = self.preprocess(imgs_w)
         hmaps = self.heatmaps(imgs)
+        imgs_w = imgs + alpha * hmaps * (imgs_w - imgs)
+        return self.postprocess(imgs_w)
+
+
+class VarianceBasedJND(nn.Module):
+    """ https://fb.workplace.com/groups/333602299016183/permalink/596243969418680/
+        https://fb.workplace.com/groups/333602299016183/permalink/628744052835338/ """
+    
+    def __init__(self, 
+            preprocess = lambda x: x,
+            postprocess = lambda x: x,
+            in_channels = 3,
+            out_channels = 1,
+            min_heatmap_value = 0.2,
+            max_heatmap_value = 1.0,
+            max_squared_gradient_value_for_clipping=2500,  # mode == contrast*
+            avg_pool_kernel_size=5,  # mode == variance
+            max_variance_value_for_clipping=2000,  # mode == variance 
+            mode = "contrast"
+    ) -> None:
+        super(VarianceBasedJND, self).__init__()
+        assert mode in ["contrast", "contrast_sqrt", "variance"], "SimplifiedJND.mode must be either 'contrast', 'contrast_sqrt' or 'variance'"
+
+        self.mode = mode
+        self.max_squared_gradient_value_for_clipping = max_squared_gradient_value_for_clipping
+        self.min_heatmap_value = min_heatmap_value
+        self.max_heatmap_value = max_heatmap_value
+
+        self.avg_pool_kernel_size = avg_pool_kernel_size
+        self.max_variance_value_for_clipping = max_variance_value_for_clipping
+
+        kernel_x = torch.tensor(
+            [[-1., 0., 1.], 
+            [-2., 0., 2.], 
+            [-1., 0., 1.]]
+        ).unsqueeze(0).unsqueeze(0)
+        kernel_y = torch.tensor(
+            [[1., 2., 1.], 
+            [0., 0., 0.], 
+            [-1., -2., -1.]]
+        ).unsqueeze(0).unsqueeze(0)
+        kernel_to_grayscale = torch.tensor(
+            [0.299, 0.587, 0.114]
+        ).unsqueeze(1).unsqueeze(1).unsqueeze(0)
+
+        self.conv_rgb = nn.Conv2d(3, 1, kernel_size=1, padding=0, bias=False)
+        self.conv_x = nn.Conv2d(1, 1, kernel_size=3, padding=1, bias=False, padding_mode='reflect')
+        self.conv_y = nn.Conv2d(1, 1, kernel_size=3, padding=1, bias=False, padding_mode='reflect')
+        self.conv_rgb.weight = nn.Parameter(kernel_to_grayscale, requires_grad=False)
+        self.conv_x.weight = nn.Parameter(kernel_x, requires_grad=False)
+        self.conv_y.weight = nn.Parameter(kernel_y, requires_grad=False)
+
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        assert out_channels == 1
+        assert in_channels in [1, 3]
+
+        # setup pre and post processing
+        self.preprocess = preprocess
+        self.postprocess = postprocess
+
+    def heatmaps(self, x):
+        assert len(x.shape) == 4 and x.shape[1] == self.in_channels, "shape must be [B, in_channels, H, W]"
+        x = x.to(self.conv_x.weight.device)
+
+        if self.in_channels == 3:
+            x = self.conv_rgb(x)
+        
+        if self.mode.startswith("contrast"):
+            return self.compute_contrast(x, do_sqrt=self.mode=="contrast_sqrt")
+        if self.mode == "variance":
+            return self.compute_variance(x)
+        
+        raise NotImplemented(f"{self.mode} not implemented")
+
+    def compute_contrast(self, x, do_sqrt=False):
+        grad_x = self.conv_x(x)
+        grad_y = self.conv_y(x)
+        cm = grad_x.mul_(grad_x).add_(grad_y.mul_(grad_y))
+
+        max_ = self.max_squared_gradient_value_for_clipping
+        if max_ is None:
+            max_ = cm.max()
+        if do_sqrt:
+            cm.sqrt_()
+            max_ = max_ ** 0.5
+
+        cm = cm.clamp(0, max_)
+        # Map the raw gradient values between 0 and (max_heatmap_value - min_heatmap_value)
+        # Make sure that every pixel obtains at least the minimum heatmap value
+        cm.mul_((self.max_heatmap_value - self.min_heatmap_value) / max_).add_(self.min_heatmap_value)
+        return cm
+
+    def compute_variance(self, x):
+        k = self.avg_pool_kernel_size
+        mean = F.avg_pool2d(F.pad(x, (k // 2, k // 2, k // 2, k // 2), mode='reflect'), kernel_size=k, stride=1)
+
+        # Calculate the squared difference from the mean
+        squared_diff = mean.sub_(x).square_()
+        vm = F.avg_pool2d(F.pad(squared_diff, (k // 2, k // 2, k // 2, k // 2), mode='reflect'), kernel_size=k, stride=1)
+
+        max_ = self.max_variance_value_for_clipping
+        if max_ is None:
+            max_ = vm.max()
+
+        vm.clamp_(0, max_)
+        # Map the raw gradient values between 0 and (max_heatmap_value - min_heatmap_value)
+        # Make sure that every pixel obtains at least the minimum heatmap value
+        vm.mul_((self.max_heatmap_value - self.min_heatmap_value) / max_).add_(self.min_heatmap_value)
+        return vm
+
+    def forward(self, imgs: torch.Tensor, imgs_w: torch.Tensor, alpha: float = 1.0) -> torch.Tensor:
+        """ imgs and deltas must be in [0,1] after preprocess """
+        imgs = self.preprocess(imgs)
+        imgs_w = self.preprocess(imgs_w)
+        hmaps = self.heatmaps(imgs * 255)  # the c++ code uses the original [0, 255] range, therefore we do the same
+
         imgs_w = imgs + alpha * hmaps * (imgs_w - imgs)
         return self.postprocess(imgs_w)
