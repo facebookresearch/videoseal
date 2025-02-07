@@ -12,6 +12,9 @@ from contextlib import contextmanager
 class ScalingScheduler:
     """
     Set the scaling parameter depending on the epoch.
+    Ex:
+        "Linear,scaling_min=0.05,epochs=100"
+        ScalingScheduler(model, "scaling", "linear", 0.3, 0.05, 100)
     """
     def __init__(
         self, 
@@ -20,14 +23,18 @@ class ScalingScheduler:
         name: str,
         scaling_o: float,
         scaling_min: float,
-        epochs: int
+        epochs: int,
+        start_epoch: int = 0,
+        end_epoch: int = None
     ):
         self.obj = obj
         self.attribute = attribute
         self.name = name.lower()
         self.scaling = scaling_o
         self.scaling_min = scaling_min
-        self.epochs = epochs - 1
+        self.epochs = epochs
+        self.start_epoch = start_epoch
+        self.end_epoch = end_epoch if end_epoch is not None else start_epoch + epochs
     
     @staticmethod
     def linear_scaling(value_o, value_f, epoch, epochs):
@@ -38,14 +45,20 @@ class ScalingScheduler:
         return value_f + 0.5 * (value_o - value_f) * (1 + math.cos(epoch / epochs * math.pi))
 
     def step(self, epoch):
-        if self.name == "none" or self.name == "constant":
+        if epoch < self.start_epoch:
             new_scaling = self.scaling
-        elif self.name == "linear":
-            new_scaling = self.linear_scaling(self.scaling, self.scaling_min, epoch, self.epochs)
-        elif self.name == "cosine":
-            new_scaling = self.cosine_scaling(self.scaling, self.scaling_min, epoch, self.epochs)
+        elif epoch > self.end_epoch:
+            new_scaling = self.scaling_min
         else:
-            raise ValueError(f"Unknown scaling schedule '{self.schedule}'")
+            epoch_in_schedule = epoch - self.start_epoch
+            if self.name == "none" or self.name == "constant":
+                new_scaling = self.scaling
+            elif self.name == "linear":
+                new_scaling = self.linear_scaling(self.scaling, self.scaling_min, epoch_in_schedule, self.epochs)
+            elif self.name == "cosine":
+                new_scaling = self.cosine_scaling(self.scaling, self.scaling_min, epoch_in_schedule, self.epochs)
+            else:
+                raise ValueError(f"Unknown scaling schedule '{self.name}'")
         setattr(self.obj, self.attribute, new_scaling)
         return new_scaling
 

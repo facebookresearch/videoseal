@@ -122,7 +122,7 @@ def get_parser():
     aa("--scaling_w", type=float, default=0.2,
        help="Scaling factor for the watermark in the embedder model")
     aa("--scaling_w_schedule", type=str, default=None,
-       help="Scaling factor for the watermark in the embedder model")
+       help="Scaling factor for the watermark in the embedder model. Ex: 'Linear,scaling_min=0.025,epochs=100,start_epoch=0'")
     aa("--scaling_i", type=float, default=1.0,
        help="Scaling factor for the image in the embedder model")
     # VideoWam parameters related how to do video watermarking inference
@@ -303,7 +303,7 @@ def main(params):
     if params.scaling_w_schedule is not None:
         scaling_w_schedule = uoptim.parse_params(params.scaling_w_schedule)
         scaling_scheduler = uoptim.ScalingScheduler(
-            obj=wam, attribute="scaling_w", scaling_o=params.scaling_w,
+            obj=wam.blender, attribute="scaling_w", scaling_o=params.scaling_w,
             **scaling_w_schedule
         )
     else:
