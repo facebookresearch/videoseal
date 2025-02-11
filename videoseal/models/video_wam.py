@@ -42,7 +42,8 @@ class VideoWam(Wam):
         clamp: bool = True,
         chunk_size: int = 8,
         step_size: int = 4,
-        blending_method: str = "additive"
+        blending_method: str = "additive",
+        video_mode: str = "repeat",
     ) -> None:
         """
         Initializes the VideoWam model.
@@ -56,6 +57,7 @@ class VideoWam(Wam):
             img_size (int, optional): The size of the frame to resize to intermediately while generating the watermark then upscale, the final video / image size is kept the same. Defaults to 256.
             chunk_size (int, optional): The number of frames/imgs to encode at a time. Defaults to 8.
             step_size (int, optional): The number of frames/imgs to propagate the watermark to. Defaults to 4.
+            video_mode (str, optional): The mode to use for video watermarking. Can be one of "alternate", "repeat", "interpolate".
         """
         super().__init__(
             embedder=embedder,
@@ -71,6 +73,7 @@ class VideoWam(Wam):
         # video settings
         self.chunk_size = chunk_size  # encode 8 frames/imgs at a time
         self.step_size = step_size  # propagate the wm to 4 next frame/img
+        self.video_mode = video_mode  # repeat, alternate or interpolate
 
     def forward(
         self,
@@ -121,13 +124,46 @@ class VideoWam(Wam):
         msg: torch.Tensor,
     ) -> torch.Tensor:
         """
-        Generates deltas one every step_size frames, then repeats for the next step_size frames.
+        Generates deltas one every step_size frames, then applies video mode:
+        - repeat: repeats the same delta for step_size frames
+        - alternate: applies delta every step_size frames, zeros in between
+        - interpolate: interpolates between consecutive deltas
         """
-        # TODO: deal with the case where the embedder predicts images instead of deltas
         msg = msg.repeat(len(imgs) // self.step_size, 1)  # n k
         preds_w = self.embedder(imgs[::self.step_size], msg)  # n 3 h w
-        preds_w = torch.repeat_interleave(
-            preds_w, self.step_size, dim=0)
+        
+        if self.video_mode == "repeat":
+            preds_w = torch.repeat_interleave(preds_w, self.step_size, dim=0)
+        elif self.video_mode == "alternate":
+            # Create tensor of zeros with same shape as final output
+            full_size = (len(imgs),) + preds_w.shape[1:]
+            full_preds = torch.zeros(full_size, device=preds_w.device)
+            # Place the predictions at step_size intervals
+            full_preds[::self.step_size] = preds_w
+            preds_w = full_preds
+        elif self.video_mode == "interpolate":
+            # Create tensor for interpolated predictions
+            full_size = (len(imgs),) + preds_w.shape[1:]  # f c h w
+            full_preds = torch.zeros(full_size, device=preds_w.device)
+
+            # Calculate interpolation weights
+            alpha = 1 - torch.linspace(0, 1, steps=self.step_size, device=preds_w.device)  # step_size
+            alpha = alpha.repeat((len(imgs)-1) // self.step_size).view(-1, 1, 1, 1)  # f // step_size
+            print(f"alpha: {alpha.shape}")
+
+            # Handle all pairs of consecutive predictions except the last one
+            start_frames = torch.repeat_interleave(preds_w[:-1], self.step_size, dim=0)  # f-f%stepsize c h w
+            end_frames = torch.repeat_interleave(preds_w[1:], self.step_size, dim=0)  # f-f%stepsize c h w
+            print(f"start_frames: {start_frames.shape}")
+            print(f"end_frames: {end_frames.shape}")
+
+            interpolated_preds = alpha * start_frames + (1-alpha) * end_frames  # f-f%stepsize c h w
+
+            # Handle last segment (repeat last prediction)
+            last_start = len(interpolated_preds)
+            full_preds[:last_start] = interpolated_preds  # f c h w
+            full_preds[last_start:] = preds_w[-1]
+            preds_w = full_preds      
         return preds_w[:len(imgs)]  # f 3 h w
 
     def video_forward(
