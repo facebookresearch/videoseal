@@ -93,7 +93,8 @@ def create_diff_img(img1, img2):
     diff = img1 - img2
     # normalize the difference image
     diff = (diff - diff.min()) / ((diff.max() - diff.min()) + 1e-6)
-    return torch.abs(diff - 0.5)
+    diff = 2*torch.abs(diff - 0.5)
+    return diff.clamp(0, 1)
 
 
 if __name__ == '__main__':

@@ -5,6 +5,10 @@ python -m videoseal.evals.full \
     
     --dataset coco --is_video false \
     --dataset sa-v --is_video true --num_samples 1 \
+
+python -m videoseal.evals.full \
+    --checkpoint /checkpoint/pfz/2025_logs/0207_vseal_y_64bits_scalingw_schedule/_scaling_w_schedule=0_scaling_w=0.1/checkpoint700.pth \
+    --dataset sa-v --is_video true --num_samples 1 
 """
     
 import argparse
@@ -147,7 +151,7 @@ def evaluate(
                     # timer.start()
                     save_vid(imgs, ori_path, fps)
                     save_vid(imgs_w, wm_path, fps)
-                    save_vid(imgs - imgs_w, diff_path, fps)
+                    save_vid(create_diff_img(imgs, imgs_w), diff_path, fps)
                     # metrics['save_vid_time'] = timer.end()
 
             # extract watermark and evaluate robustness
@@ -242,6 +246,8 @@ def main():
                         help='Number of frames to chunk during forward pass')
     group.add_argument('--videowam_step_size', type=int, default=4,
                         help='The number of frames to propagate the watermark to')
+    group.add_argument('--videowam_mode', type=str, default='repeat', 
+                        help='The inference mode for videos')
 
     group = parser.add_argument_group('Experiment')
     group.add_argument("--output_dir", type=str, default="output/", help="Output directory for logs and images (Default: /output)")
@@ -261,6 +267,7 @@ def main():
     model.blender.scaling_w = args.scaling_w or model.blender.scaling_w
     model.chunk_size = args.videowam_chunk_size or model.chunk_size
     model.step_size = args.videowam_step_size or model.step_size
+    model.video_mode = args.videowam_mode or model.mode
 
     # Setup the device
     avail_device = 'cuda' if torch.cuda.is_available() else 'cpu'
