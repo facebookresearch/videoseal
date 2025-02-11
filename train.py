@@ -116,6 +116,8 @@ def get_parser():
        help="Size of the input images for data preprocessing, used at loading time for validation.")
     aa("--img_size_proc", type=int, default=256, 
        help="Size of the input images for interpolation in the embedder/extractor models")
+    aa("--resize_only", type=utils.bool_inst, default=False,
+         help="If True, only resize the image no crop is applied at loading time (without preserving aspect ratio)")
     aa("--attenuation", type=str, default="None", help="Attenuation model to use")
     aa("--blending_method", type=str, default="additive",
        help="The blending method to use. Options include: additive, multiplicative ..etc see Blender Class for more")
@@ -332,7 +334,7 @@ def main(params):
     print('scheduler_d: %s' % scheduler_d)
 
     # Data loaders
-    train_transform, train_mask_transform = get_resize_transform(params.img_size)
+    train_transform, train_mask_transform = get_resize_transform(params.img_size, resize_only=params.resize_only)
     val_transform, val_mask_transform = get_resize_transform(params.img_size_val)
     image_train_loader = image_val_loader = video_train_loader = video_val_loader = None
 
