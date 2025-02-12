@@ -519,11 +519,11 @@ def main(params):
                     log_stats = {
                         **log_stats, **{f'val_{val_modality}_{k}': v for k, v in val_stats.items()}}
 
-                    if epoch == params.epochs-1:  # log params in tensorboard @last epoch
-                        tensorboard.add_hparams(
-                            {k: str(v) for k, v in vars(params).items()},
-                            {f"VALID/{k}": v for k, v in log_stats.items()}
-                        )
+                    # if epoch == params.epochs-1:  # log params in tensorboard @last epoch
+                    #     tensorboard.add_hparams(
+                    #         {k: str(v) for k, v in vars(params).items()},
+                    #         {f"VALID/{k}": v for k, v in log_stats.items()}
+                    #     )
 
         if udist.is_main_process():
             with open(os.path.join(params.output_dir, 'log.txt'), 'a') as f:

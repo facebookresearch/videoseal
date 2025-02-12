@@ -7,8 +7,8 @@ python -m videoseal.evals.full \
     --dataset sa-v --is_video true --num_samples 1 \
 
 python -m videoseal.evals.full \
-    --checkpoint /checkpoint/pfz/2025_logs/0207_vseal_y_64bits_scalingw_schedule/_scaling_w_schedule=0_scaling_w=0.1/checkpoint700.pth \
-    --dataset sa-v --is_video true --num_samples 1 
+    --checkpoint /checkpoint/pfz/2025_logs/0207_vseal_y_64bits_scalingw_schedule/_scaling_w_schedule=0_scaling_w=0.1/checkpoint900.pth \
+    --dataset sa-1b-full-resized --is_video false --num_samples 10 --save_first 10 --attenuation simplified_jnd_variance_clamp --scaling_w 0.025
 """
     
 import argparse
