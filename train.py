@@ -11,7 +11,7 @@ Example:  decoding only, hidden like
     OMP_NUM_THREADS=40 torchrun --nproc_per_node=2 train.py --local_rank 0 --embedder_model hidden --extractor_model hidden --video_dataset none --image_dataset sa-1b-full-resized --workers 8
 
 With video compression aug:
-    torchrun --nproc_per_node=2 train.py --local_rank 0  --image_dataset coco --video_dataset sa-v --augmentation_config configs/video_compression.yaml --extractor_model sam_tiny --embedder_model vae_small_bw --img_size 256 --img_size_extractor 256 --batch_size 16 --batch_size_eval 32 --epochs 100 --optimizer AdamW,lr=1e-4 --scheduler CosineLRScheduler,lr_min=1e-6,t_initial=100,warmup_lr_init=1e-6,warmup_t=5 --seed 0 --perceptual_loss mse --lambda_i 0.0 --lambda_d 0.0 --lambda_det 0.0 --lambda_dec 1.0 --nbits 32 --scaling_i 1.0 --scaling_w 0.2 --balanced  false --iter_per_epoch 5
+    torchrun --nproc_per_node=2 train.py --local_rank 0  --image_dataset coco --video_dataset sa-v --augmentation_config configs/video_compression.yaml --extractor_model sam_tiny --embedder_model vae_small_bw --img_size 256 --img_size_proc 256 --batch_size 16 --batch_size_eval 32 --epochs 100 --optimizer AdamW,lr=1e-4 --scheduler CosineLRScheduler,lr_min=1e-6,t_initial=100,warmup_lr_init=1e-6,warmup_t=5 --seed 0 --perceptual_loss mse --lambda_i 0.0 --lambda_d 0.0 --lambda_det 0.0 --lambda_dec 1.0 --nbits 32 --scaling_i 1.0 --scaling_w 0.2 --balanced  false --iter_per_epoch 5
 
 
     torchrun --nproc_per_node=2 train.py --balanced False --attenuatpion None --total_gnorm 1.0 --scaling_w 0.025 --scaling_i 1.0 --nbits 64 --lambda_dec 1.0 --lambda_det 0.0 --lambda_d 0.1 --lambda_i 0.0 --perceptual_loss mse --seed 444 --scheduler None --optimizer AdamW,lr=1e-5 --resume_from /checkpoint/pfz/2025_logs/0207_vseal_y_64bits_scalingw_schedule/_scaling_w_schedule=0_scaling_w=0.1/checkpoint700.pth --saveimg_freq 50 --eval_freq 10 --full_eval_freq 50 --batch_size_video_eval 1 --batch_size_video 1 --batch_size_eval 32 --batch_size 16 --workers 0 --iter_per_valid 10 --videowam_step_size 8 --finetune_detector_start 2000 --video_start 0 --prop_img_vid 0.0 --epochs 100 --iter_per_epoch 1000 --img_size_proc 256 --img_size_val 1024 --img_size 1024 --extractor_model sam_small --embedder_model unet_small2_yuv_quant --augmentation_config configs/all_augs.yaml --video_dataset sa-v --image_dataset none
@@ -115,11 +115,13 @@ def get_parser():
     aa("--nbits", type=int, default=32,
        help="Number of bits used to generate the message. If 0, no message is used.")
     aa("--img_size", type=int, default=256,
-       help="Size of the input images for data preprocessing, at inference time the images are resized to this size")
-    aa("--img_size_extractor", type=int, default=256, 
-       help="Images are resized to this size before being fed to the extractor")
+       help="Size of the input images for data preprocessing, used at loading time for training.")
     aa("--img_size_val", type=int, default=256,
-       help="Size of the input images for data preprocessing, at inference time the images are resized to this size")
+       help="Size of the input images for data preprocessing, used at loading time for validation.")
+    aa("--img_size_proc", type=int, default=256, 
+       help="Size of the input images for interpolation in the embedder/extractor models")
+    aa("--resize_only", type=utils.bool_inst, default=False,
+         help="If True, only resize the image no crop is applied at loading time (without preserving aspect ratio)")
     aa("--attenuation", type=str, default="None", help="Attenuation model to use")
     aa("--blending_method", type=str, default="additive",
        help="The blending method to use. Options include: additive, multiplicative ..etc see Blender Class for more")
@@ -264,7 +266,7 @@ def main(params):
     extractor_cfg = omegaconf.OmegaConf.load(params.extractor_config)
     params.extractor_model = params.extractor_model or extractor_cfg.model
     extractor_params = extractor_cfg[params.extractor_model]
-    extractor = build_extractor(params.extractor_model, extractor_params, params.img_size_extractor, params.nbits)
+    extractor = build_extractor(params.extractor_model, extractor_params, params.img_size_proc, params.nbits)
     print(f'extractor: {sum(p.numel() for p in extractor.parameters() if p.requires_grad) / 1e6:.1f}M parameters')
 
     # build attenuation
@@ -285,7 +287,7 @@ def main(params):
     # build the complete model
     wam = VideoWam(embedder, extractor, augmenter, attenuation,
                    params.scaling_w, params.scaling_i,
-                   img_size=params.img_size,
+                   img_size=params.img_size_proc,
                    chunk_size=params.videowam_chunk_size,
                    step_size=params.videowam_step_size,
                    blending_method=params.blending_method)
@@ -336,7 +338,7 @@ def main(params):
     print('scheduler_d: %s' % scheduler_d)
 
     # Data loaders
-    train_transform, train_mask_transform = get_resize_transform(params.img_size)
+    train_transform, train_mask_transform = get_resize_transform(params.img_size, resize_only=params.resize_only)
     val_transform, val_mask_transform = get_resize_transform(params.img_size_val)
     image_train_loader = image_val_loader = video_train_loader = video_val_loader = None
 
@@ -813,20 +815,8 @@ def eval_one_epoch(
                 for transform_instance, strengths in validation_augs:
 
                     for strength in strengths:
-                        do_resize = False  # hardcode for now, might need to change
-                        if not do_resize:
-                            imgs_aug, masks_aug = transform_instance(
+                        imgs_aug, masks_aug = transform_instance(
                                 imgs_masked, masks, strength)
-                        else:
-                            # h, w = imgs_w.shape[-2:]
-                            h, w = params.img_size_extractor, params.img_size_extractor
-                            imgs_aug, masks_aug = transform_instance(
-                                imgs_masked, masks, strength)
-                            if imgs_aug.shape[-2:] != (h, w):
-                                imgs_aug = nn.functional.interpolate(imgs_aug, size=(h, w),
-                                                                     mode='bilinear', align_corners=False, antialias=True)
-                                masks_aug = nn.functional.interpolate(masks_aug, size=(h, w),
-                                                                      mode='bilinear', align_corners=False, antialias=True)
                         selected_aug = str(transform_instance) + f"_{strength}"
                         selected_aug = selected_aug.replace(", ", "_")
 
