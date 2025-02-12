@@ -175,27 +175,51 @@ class VideoWam(Wam):
             assert msgs.shape[0] == 1, "Message should be unique"
         msgs = msgs.to(imgs.device)
         msgs = msgs.expand(len(imgs), -1)  # frames k
+
+        # interpolate to processing size
+        imgs_res = imgs.clone()
+        if imgs.shape[-2:] != (self.img_size, self.img_size):
+            imgs_res = F.interpolate(imgs, size=(self.img_size, self.img_size),
+                                     mode="bilinear", align_corners=False, antialias=False)
+
         # generate watermarked images
         if self.embedder.yuv:  # take y channel only
             key_frame_preds = self.embedder(
-                self.rgb2yuv(imgs)[:, 0:1][::self.step_size], 
+                self.rgb2yuv(imgs_res)[:, 0:1][::self.step_size], 
                 msgs[::self.step_size]
             )
         else:
-            key_frame_preds = self.embedder(imgs[::self.step_size], msgs[::self.step_size])
+            key_frame_preds = self.embedder(imgs_res[::self.step_size], msgs[::self.step_size])
+
+        # interpolate predictions back to original size
+        if imgs.shape[-2:] != (self.img_size, self.img_size):
+            key_frame_preds = F.interpolate(key_frame_preds, size=imgs.shape[-2:],
+                                    mode="bilinear", align_corners=False, antialias=False)
+        key_frame_preds = key_frame_preds.to(imgs.device)
+
+        # apply video mode and blend
         preds_w = self._apply_video_mode(key_frame_preds, len(imgs), self.step_size, self.video_mode)
         imgs_w = self.blender(imgs, preds_w)  # frames c h w
+
         # apply attenuation and clamp
         if self.attenuation is not None:
             self.attenuation.to(imgs.device)
             imgs_w = self.attenuation(imgs, imgs_w)
         if self.clamp:
             imgs_w = torch.clamp(imgs_w, 0, 1)
+
         # augment
         imgs_aug, masks, selected_aug = self.augmenter(
-            imgs_w, imgs, masks, is_video=True)
+            imgs_w, imgs, masks, is_video=True, do_resize=True)
+
+        # interpolate augmented images to processing size for detection
+        if imgs.shape[-2:] != (self.img_size, self.img_size):
+            imgs_aug = F.interpolate(imgs_aug, size=(self.img_size, self.img_size),
+                                     mode="bilinear", align_corners=False, antialias=False)
+
         # detect watermark
         preds = self.detector(imgs_aug)
+
         # create and return outputs
         outputs = {
             # message per video but repeated for batchsize: b x k
@@ -214,7 +238,7 @@ class VideoWam(Wam):
         imgs: torch.Tensor,
         msgs: torch.Tensor = None,
         is_video: bool = True,
-        interpolation: dict = {"mode": "bilinear", "align_corners": False, "antialias": True},
+        interpolation: dict = {"mode": "bilinear", "align_corners": False, "antialias": False},
     ) -> dict:
         """ 
         Generates watermarked videos from the input images and messages (used for inference).
@@ -280,7 +304,7 @@ class VideoWam(Wam):
         imgs: torch.Tensor,
         msgs: torch.Tensor = None,
         is_video: bool = True,
-        interpolation: dict = {"mode": "bilinear", "align_corners": False, "antialias": True},
+        interpolation: dict = {"mode": "bilinear", "align_corners": False, "antialias": False},
     ) -> dict:
         """ 
         Generates watermarked videos from the input images and messages (used for inference).
@@ -360,7 +384,7 @@ class VideoWam(Wam):
         self,
         imgs: torch.Tensor,
         is_video: bool = True,
-        interpolation: dict = {"mode": "bilinear", "align_corners": False, "antialias": True},
+        interpolation: dict = {"mode": "bilinear", "align_corners": False, "antialias": False},
     ) -> dict:
         """
         Performs the forward pass of the detector only.
@@ -397,7 +421,7 @@ class VideoWam(Wam):
         self,
         imgs: torch.Tensor,
         aggregation: str = "avg",
-        interpolation: dict = {"mode": "bilinear", "align_corners": False, "antialias": True},
+        interpolation: dict = {"mode": "bilinear", "align_corners": False, "antialias": False},
     ) -> torch.Tensor:
         """
         Detects the message in a video and aggregates the predictions across frames.

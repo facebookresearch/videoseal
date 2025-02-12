@@ -143,7 +143,8 @@ class Augmenter(nn.Module):
         imgs_w: torch.Tensor,
         imgs: torch.Tensor,
         masks: torch.Tensor,
-        is_video=True
+        is_video=True,
+        do_resize=True
     ) -> torch.Tensor:
         """
         Args:
@@ -164,7 +165,7 @@ class Augmenter(nn.Module):
             selected_augs = []
             for _ in range(self.num_augs):
                 imgs_aug, mask_targets, selected_aug_ = self.augment(
-                    imgs_aug, mask_targets, is_video)
+                    imgs_aug, mask_targets, is_video, do_resize)
                 selected_augs.append(selected_aug_)
             selected_aug = "+".join(selected_augs)
             return imgs_aug, mask_targets, selected_aug
@@ -175,7 +176,7 @@ class Augmenter(nn.Module):
             selected_augs = []
             for _ in range(self.num_augs):
                 imgs_aug, mask_targets, selected_aug_ = self.augment(
-                    imgs_aug, mask_targets, is_video)
+                    imgs_aug, mask_targets, is_video, do_resize)
                 selected_augs.append(selected_aug_)
             return imgs_aug, mask_targets, selected_aug
 
