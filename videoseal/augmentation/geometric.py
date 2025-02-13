@@ -29,7 +29,11 @@ class Rotate(nn.Module):
     def get_random_angle(self):
         if self.min_angle is None or self.max_angle is None:
             raise ValueError("min_angle and max_angle must be provided")
-        return torch.randint(self.min_angle, self.max_angle + 1, size=(1,)).item()
+        base_angles = torch.tensor([-90, 0, 90])
+        base_angle = base_angles[
+            torch.multinomial(torch.tensor([0.2, 0.6, 0.2]), 1).item()
+        ].item()
+        return base_angle + torch.randint(self.min_angle, self.max_angle + 1, size=(1,)).item()
 
     def forward(self, image, mask=None, angle=None):
         angle = angle or self.get_random_angle()
