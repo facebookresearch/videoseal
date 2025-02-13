@@ -113,7 +113,7 @@ class Wam(nn.Module):
             imgs_w, imgs, masks, is_video=False, do_resize=False)
 
         # interpolate back
-        if imgs.shape[-2:] != (self.img_size, self.img_size):
+        if imgs_aug.shape[-2:] != (self.img_size, self.img_size):
             imgs_aug = F.interpolate(imgs_aug, size=(self.img_size, self.img_size),
                                         **interpolation)
             
