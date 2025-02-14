@@ -36,7 +36,7 @@ class DropFrameAugmenter(nn.Module):
             if random.random() >= self.drop_frame_prob:
                 continue
 
-            diff_ = -1 if random.random < 0.5 else 1
+            diff_ = -1 if random.random() < 0.5 else 1
             new_i = (i + diff_) % len(frames)
             output[i] = frames[new_i]
         return output, mask
