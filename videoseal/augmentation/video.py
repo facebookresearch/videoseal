@@ -8,6 +8,39 @@ import av
 import numpy as np
 import torch
 import torch.nn as nn
+import random
+
+
+class DropFrameAugmenter(nn.Module):
+    """
+    It randomly replaces random frames with the adjacent ones.
+
+    Attributes:
+        drop_frame_prob (float): Probability that a frame is replaced by its neighbour.
+    """
+
+    def __init__(self, drop_frame_prob=0.125):
+        super(DropFrameAugmenter, self).__init__()
+        self.drop_frame_prob = drop_frame_prob
+
+    def forward(self, frames, mask=None, *args, **kwargs) -> torch.Tensor:
+        """
+        Parameters:
+            frames (torch.Tensor): Video frames as a tensor with shape (T, C, H, W).
+            mask (torch.Tensor): Optional mask for the video frames.
+        Returns:
+            torch.Tensor: Video frames as a tensor with shape (T, C, H, W).
+        """
+        output = frames.clone()
+        for i in range(len(frames)):
+            if random.random() >= self.drop_frame_prob:
+                continue
+
+            diff_ = -1 if random.random < 0.5 else 1
+            new_i = (i + diff_) % len(frames)
+            output[i] = frames[new_i]
+        return output, mask
+
 
 class VideoCompression(nn.Module):
     """
