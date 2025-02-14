@@ -44,14 +44,14 @@ augs_params:
     min_kernel_size: 3
     max_kernel_size: 7
   brightness:
-    min_factor: 0.5
-    max_factor: 2
+    min_factor: 1.5
+    max_factor: 1.5
   contrast:
-    min_factor: 0.5
-    max_factor: 2.0
+    min_factor: 1.5
+    max_factor: 1.5
   saturation:
-    min_factor: 0.5
-    max_factor: 2
+    min_factor: 1.5
+    max_factor: 1.5
   hue:
     min_factor: -0.1
     max_factor: 0.1
