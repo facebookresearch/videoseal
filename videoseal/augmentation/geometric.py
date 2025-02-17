@@ -21,17 +21,18 @@ class Identity(nn.Module):
 
 
 class Rotate(nn.Module):
-    def __init__(self, min_angle=None, max_angle=None):
+    def __init__(self, min_angle=None, max_angle=None, do90=False):
         super(Rotate, self).__init__()
         self.min_angle = min_angle
         self.max_angle = max_angle
+        if do90:
+            self.base_angles = torch.tensor([-90, 0, 0, 90])
 
     def get_random_angle(self):
         if self.min_angle is None or self.max_angle is None:
             raise ValueError("min_angle and max_angle must be provided")
-        base_angles = torch.tensor([-90, 0, 90])
-        base_angle = base_angles[
-            torch.multinomial(torch.tensor([0.2, 0.6, 0.2]), 1).item()
+        base_angle = self.base_angles[
+            torch.randint(0, len(self.base_angles), size=(1,)).item()
         ].item()
         return base_angle + torch.randint(self.min_angle, self.max_angle + 1, size=(1,)).item()
 
