@@ -14,6 +14,8 @@ With video compression aug:
     torchrun --nproc_per_node=2 train.py --local_rank 0  --image_dataset coco --video_dataset sa-v --augmentation_config configs/video_compression.yaml --extractor_model sam_tiny --embedder_model vae_small_bw --img_size 256 --img_size_proc 256 --batch_size 16 --batch_size_eval 32 --epochs 100 --optimizer AdamW,lr=1e-4 --scheduler CosineLRScheduler,lr_min=1e-6,t_initial=100,warmup_lr_init=1e-6,warmup_t=5 --seed 0 --perceptual_loss mse --lambda_i 0.0 --lambda_d 0.0 --lambda_det 0.0 --lambda_dec 1.0 --nbits 32 --scaling_i 1.0 --scaling_w 0.2 --balanced  false --iter_per_epoch 5
 
     
+    torchrun --nproc_per_node=2 train.py --balanced False --attenuatpion None --total_gnorm 1.0 --scaling_w 0.025 --scaling_i 1.0 --nbits 64 --lambda_dec 1.0 --lambda_det 0.0 --lambda_d 0.1 --lambda_i 0.0 --perceptual_loss mse --seed 444 --scheduler None --optimizer AdamW,lr=1e-5 --resume_from /checkpoint/pfz/2025_logs/0207_vseal_y_64bits_scalingw_schedule/_scaling_w_schedule=0_scaling_w=0.1/checkpoint700.pth --saveimg_freq 50 --eval_freq 10 --full_eval_freq 50 --batch_size_video_eval 1 --batch_size_video 1 --batch_size_eval 32 --batch_size 16 --workers 0 --iter_per_valid 10 --videowam_step_size 8 --finetune_detector_start 2000 --video_start 0 --prop_img_vid 0.0 --epochs 100 --iter_per_epoch 1000 --img_size_proc 256 --img_size_val 1024 --img_size 1024 --extractor_model sam_small --embedder_model unet_small2_yuv_quant --augmentation_config configs/all_augs.yaml --video_dataset sa-v --image_dataset none
+
 Args inventory:
     --scheduler CosineLRScheduler,lr_min=1e-6,t_initial=100,warmup_lr_init=1e-6,warmup_t=5
     --optimizer Lamb,lr=1e-3
