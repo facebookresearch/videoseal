@@ -38,6 +38,7 @@ name2aug = {
     'h265': H265,
     # 'bmshj2018': bmshj2018,
 }
+video_augs = ['video_compression', 'h264', 'h264rgb', 'h265']
 
 
 def get_dummy_augmenter():
@@ -123,8 +124,8 @@ class Augmenter(nn.Module):
 
     def augment(self, image, mask, is_video, do_resize=True):
         
-        if not is_video:  # replace video compression with identity
-            augs = [aug if aug.__class__.__name__ != 'VideoCompressorAugmenter' else Identity() for aug in self.augs]
+        if not is_video:  # remove video compressions
+            augs = [aug for aug in self.augs if aug.__class__.__name__ not in video_augs]
         else:
             augs = self.augs
         index = torch.multinomial(self.aug_probs, 1).item()
