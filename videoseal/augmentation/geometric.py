@@ -27,6 +27,8 @@ class Rotate(nn.Module):
         self.max_angle = max_angle
         if do90:
             self.base_angles = torch.tensor([-90, 0, 0, 90])
+        else:
+            self.base_angles = torch.tensor([0])
 
     def get_random_angle(self):
         if self.min_angle is None or self.max_angle is None:
