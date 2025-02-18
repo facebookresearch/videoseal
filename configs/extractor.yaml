@@ -230,12 +230,46 @@ sam_small_nearest:
     sigmoid_output: False
     upscale_type: 'nearest'  
 
-convnext:
+
+# def convnextv2_atto(**kwargs):
+#     model = ConvNeXtV2(depths=[2, 2, 6, 2], dims=[40, 80, 160, 320], **kwargs)
+#     return model
+
+# def convnextv2_femto(**kwargs):
+#     model = ConvNeXtV2(depths=[2, 2, 6, 2], dims=[48, 96, 192, 384], **kwargs)
+#     return model
+
+# def convnext_pico(**kwargs):
+#     model = ConvNeXtV2(depths=[2, 2, 6, 2], dims=[64, 128, 256, 512], **kwargs)
+#     return model
+
+# def convnextv2_nano(**kwargs):
+#     model = ConvNeXtV2(depths=[2, 2, 8, 2], dims=[80, 160, 320, 640], **kwargs)
+#     return model
+
+# def convnextv2_tiny(**kwargs):
+#     model = ConvNeXtV2(depths=[3, 3, 9, 3], dims=[96, 192, 384, 768], **kwargs)
+#     return model
+
+# def convnextv2_base(**kwargs):
+#     model = ConvNeXtV2(depths=[3, 3, 27, 3], dims=[128, 256, 512, 1024], **kwargs)
+#     return model
+
+# def convnextv2_large(**kwargs):
+#     model = ConvNeXtV2(depths=[3, 3, 27, 3], dims=[192, 384, 768, 1536], **kwargs)
+#     return model
+
+# def convnextv2_huge(**kwargs):
+#     model = ConvNeXtV2(depths=[3, 3, 27, 3], dims=[352, 704, 1408, 2816], **kwargs)
+#     return model
+
+convnext_atto:
   encoder:
     depths: [2, 2, 6, 2]
     dims: [40, 80, 160, 320]
   pixel_decoder:
-    upscale_stages: [4, 4, 2]  # 4*2*2 = x16 (patch size)
+    pixelwise: False  # return msg per pixel (k h w)
+    upscale_stages: [1]
     embed_dim: 320  # = encoder.out_chans
     nbits: 16
     sigmoid_output: False
@@ -246,7 +280,8 @@ convnext_femto:
     depths: [2, 2, 6, 2]
     dims: [48, 96, 192, 384]
   pixel_decoder:
-    upscale_stages: [4, 4, 2]  # 4*2*2 = x16 (patch size)
+    pixelwise: False  # return msg per pixel (k h w)
+    upscale_stages: [1]
     embed_dim: 384  # = encoder.out_chans
     nbits: 16
     sigmoid_output: False
@@ -256,7 +291,8 @@ convnext_pico:
     depths: [2, 2, 6, 2]
     dims: [64, 128, 256, 512]
   pixel_decoder:
-    upscale_stages: [4, 4, 2]  # 4*2*2 = x16 (patch size)
+    pixelwise: False  # return msg per pixel (k h w)
+    upscale_stages: [1]
     embed_dim: 512  # = encoder.out_chans
     nbits: 16
     sigmoid_output: False
@@ -266,7 +302,8 @@ convnext_nano:
     depths: [2, 2, 8, 2]
     dims: [80, 160, 320, 640]
   pixel_decoder:
-    upscale_stages: [4, 4, 2]  # 4*2*2 = x16 (patch size)
+    pixelwise: False  # return msg per pixel (k h w)
+    upscale_stages: [1]
     embed_dim: 640  # = encoder.out_chans
     nbits: 16
     sigmoid_output: False
@@ -276,10 +313,88 @@ convnext_tiny:
     depths: [3, 3, 9, 3]
     dims: [96, 192, 384, 768]
   pixel_decoder:
+    pixelwise: False  # return msg per pixel (k h w)
+    upscale_stages: [1]
+    embed_dim: 768  # = encoder.out_chans
+    nbits: 16
+    sigmoid_output: False
+
+convnext_base:
+  encoder:
+    depths: [3, 3, 27, 3]
+    dims: [128, 256, 512, 1024]
+  pixel_decoder:
+    pixelwise: False  # return msg per pixel (k h w)
+    upscale_stages: [1]
+    embed_dim: 1024  # = encoder.out_chans
+    nbits: 16
+    sigmoid_output: False
+
+convnext_atto_pw:
+  encoder:
+    depths: [2, 2, 6, 2]
+    dims: [40, 80, 160, 320]
+  pixel_decoder:
+    upscale_stages: [4, 4, 2]  # 4*2*2 = x16 (patch size)
+    embed_dim: 320  # = encoder.out_chans
+    nbits: 16
+    sigmoid_output: False
+    upscale_type: 'bilinear'
+
+convnext_femto_pw:
+  encoder:
+    depths: [2, 2, 6, 2]
+    dims: [48, 96, 192, 384]
+  pixel_decoder:
+    upscale_stages: [4, 4, 2]  # 4*2*2 = x16 (patch size)
+    embed_dim: 384  # = encoder.out_chans
+    nbits: 16
+    sigmoid_output: False
+    pixelwise: True
+
+convnext_pico_pw:
+  encoder:
+    depths: [2, 2, 6, 2]
+    dims: [64, 128, 256, 512]
+  pixel_decoder:
+    upscale_stages: [4, 4, 2]  # 4*2*2 = x16 (patch size)
+    embed_dim: 512  # = encoder.out_chans
+    nbits: 16
+    sigmoid_output: False
+    pixelwise: True
+
+convnext_nano_pw:
+  encoder:
+    depths: [2, 2, 8, 2]
+    dims: [80, 160, 320, 640]
+  pixel_decoder:
+    upscale_stages: [4, 4, 2]  # 4*2*2 = x16 (patch size)
+    embed_dim: 640  # = encoder.out_chans
+    nbits: 16
+    sigmoid_output: False
+    pixelwise: True
+
+convnext_tiny_pw:
+  encoder:
+    depths: [3, 3, 9, 3]
+    dims: [96, 192, 384, 768]
+  pixel_decoder:
     upscale_stages: [4, 4, 2]  # 4*2*2 = x16 (patch size)
     embed_dim: 768  # = encoder.out_chans
     nbits: 16
     sigmoid_output: False
+    pixelwise: True
+
+convnext_base_pw:
+  encoder:
+    depths: [3, 3, 27, 3]
+    dims: [128, 256, 512, 1024]
+  pixel_decoder:
+    upscale_stages: [4, 4, 2]  # 4*2*2 = x16 (patch size)
+    embed_dim: 1024  # = encoder.out_chans
+    nbits: 16
+    sigmoid_output: False
+    pixelwise: True
 
 dvmark:
   params: []

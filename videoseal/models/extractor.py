@@ -181,7 +181,7 @@ def build_extractor(name, cfg, img_size, nbits):
         extractor = HiddenExtractor(hidden_decoder)
     elif name.startswith('convnext'):
         # updates some cfg
-        cfg.num_bits = nbits
+        cfg.pixel_decoder.nbits = nbits
         # build the encoder, decoder and msg processor
         convnext = ConvNeXtV2(**cfg.encoder)
         pixel_decoder = PixelDecoder(**cfg.pixel_decoder)
