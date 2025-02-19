@@ -88,12 +88,18 @@ class Augmenter(nn.Module):
             augs=augs,
             augs_params=augs_params
         )
+        self.augs_video, self.aug_probs_video = self.parse_augmentations(
+            augs=augs,
+            augs_params=augs_params,
+            is_video=True
+        )
         self.num_augs = num_augs
 
     def parse_augmentations(
         self,
         augs: dict[str, float],
         augs_params: dict[str, dict[str, float]],
+        is_video: bool = False
     ):
         """
         Parse the post augmentations into a list of augmentations.
@@ -107,9 +113,10 @@ class Augmenter(nn.Module):
         probs = []
         # parse each augmentation
         for aug_name in augs.keys():
+            if aug_name in video_augs and not is_video:
+                continue
             aug_prob = float(augs[aug_name])
-            aug_params = augs_params[aug_name] if aug_name in augs_params else {
-            }
+            aug_params = augs_params[aug_name] if aug_name in augs_params else {}
             try:
                 selected_aug = name2aug[aug_name](**aug_params)
             except KeyError:
@@ -123,14 +130,10 @@ class Augmenter(nn.Module):
         return augmentations, torch.tensor(probs)
 
     def augment(self, image, mask, is_video, do_resize=True):
-        
-        if not is_video:  # remove video compressions
-            augs = [aug for aug in self.augs if aug.__class__.__name__ not in video_augs]
-        else:
-            augs = self.augs
-        index = torch.multinomial(self.aug_probs, 1).item()
+        augs = self.augs_video if is_video else self.augs
+        aug_probs = self.aug_probs_video if is_video else self.aug_probs
+        index = torch.multinomial(aug_probs, 1).item()
         selected_aug = augs[index]
-        # print(selected_aug)
         if not do_resize:
             image, mask = selected_aug(image, mask)
         else:
