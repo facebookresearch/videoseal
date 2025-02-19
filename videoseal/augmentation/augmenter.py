@@ -130,7 +130,7 @@ class Augmenter(nn.Module):
             augs = self.augs
         index = torch.multinomial(self.aug_probs, 1).item()
         selected_aug = augs[index]
-        print(selected_aug)
+        # print(selected_aug)
         if not do_resize:
             image, mask = selected_aug(image, mask)
         else:
