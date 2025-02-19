@@ -34,7 +34,7 @@ class Rotate(nn.Module):
         if self.min_angle is None or self.max_angle is None:
             raise ValueError("min_angle and max_angle must be provided")
         base_angle = self.base_angles[
-            torch.randint(0, len(self.base_angles), size=(1,)).item()
+            torch.randint(0, len(self.base_angles), size=(1,))
         ].item()
         return base_angle + torch.randint(self.min_angle, self.max_angle + 1, size=(1,)).item()
 

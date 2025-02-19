@@ -32,7 +32,7 @@ augs_params:
   rotate:
     min_angle: -10
     max_angle: 10
-    do90: True
+    do90: False
   perspective:
     min_distortion_scale: 0.1
     max_distortion_scale: 0.5
