@@ -800,7 +800,7 @@ def eval_one_epoch(
                     diff_path = diff_path.replace(".png", ".mp4")
                     save_vid(imgs, ori_path, fps)
                     save_vid(imgs_w, wm_path, fps)
-                    save_vid(imgs - imgs_w, diff_path, fps)
+                    save_vid(create_diff_img(imgs, imgs_w), diff_path, fps)
                     tensorboard.add_video(
                         "VALID/VIDEOS/orig", imgs.unsqueeze(0), acc_it*it*epoch, fps)
                     tensorboard.add_video(
