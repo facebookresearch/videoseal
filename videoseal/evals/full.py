@@ -9,6 +9,12 @@ python -m videoseal.evals.full \
 python -m videoseal.evals.full \
     --checkpoint /checkpoint/pfz/2025_logs/0207_vseal_y_64bits_scalingw_schedule/_scaling_w_schedule=0_scaling_w=0.1/checkpoint900.pth \
     --dataset sa-1b-full-resized --is_video false --num_samples 10 --save_first 10 --attenuation simplified_jnd_variance_clamp --scaling_w 0.025
+
+python -m videoseal.evals.full \
+    --checkpoint /checkpoint/pfz/2025_logs/0219_vseal_convnextextractor/_nbits=128_lambda_i=0.1_embedder_model=1/checkpoint600.pth \
+    --dataset sa-1b-full-resized --is_video false --num_samples 10 --save_first 10 --attenuation None --scaling_w 0.016 \
+    --img_size_proc 448
+    
 """
     
 import argparse
@@ -240,6 +246,8 @@ def main():
        help="Path to the attenuation config file")
     group.add_argument("--attenuation", type=str, default="None",
                         help="Attenuation model to use")
+    group.add_argument("--img_size_proc", type=int, default=256, 
+                        help="Size of the input images for interpolation in the embedder/extractor models")
     group.add_argument("--scaling_w", type=float, default=None,
                         help="Scaling factor for the watermark in the embedder model")
     group.add_argument('--videowam_chunk_size', type=int, default=32, 
@@ -268,6 +276,7 @@ def main():
     model.chunk_size = args.videowam_chunk_size or model.chunk_size
     model.step_size = args.videowam_step_size or model.step_size
     model.video_mode = args.videowam_mode or model.mode
+    model.img_size = args.img_size_proc or model.img_size
 
     # Setup the device
     avail_device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -295,7 +304,7 @@ def main():
     # evaluate the model, quality and extraction metrics
     os.makedirs(args.output_dir, exist_ok=True)
     metrics = evaluate(
-        model = model, 
+        model = model,
         dataset = dataset, 
         is_video = args.is_video,
         output_dir = args.output_dir,
