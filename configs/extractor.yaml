@@ -281,5 +281,17 @@ convnext_tiny:
     nbits: 16
     sigmoid_output: False
 
+convnext_tiny_temporal:
+  encoder:
+    depths: [3, 3, 9, 3]
+    dims: [96, 192, 384, 768]
+    temporal_convs: True
+    temporal_attention: True
+  pixel_decoder:
+    upscale_stages: [4, 4, 2]  # 4*2*2 = x16 (patch size)
+    embed_dim: 768  # = encoder.out_chans
+    nbits: 16
+    sigmoid_output: False
+
 dvmark:
   params: []
