@@ -163,6 +163,7 @@ class VideoWam(Wam):
         imgs: torch.Tensor,  # [frames, c, h, w] for a single video
         masks: torch.Tensor,
         msgs: torch.Tensor = None,  # 1 message per video
+        interpolation: dict = {"mode": "bilinear", "align_corners": False, "antialias": True},
     ) -> dict:
         """
         Generate watermarked video from the input video imgs.
@@ -180,7 +181,7 @@ class VideoWam(Wam):
         imgs_res = imgs.clone()
         if imgs.shape[-2:] != (self.img_size, self.img_size):
             imgs_res = F.interpolate(imgs, size=(self.img_size, self.img_size),
-                                     mode="bilinear", align_corners=False, antialias=False)
+                                    **interpolation)
 
         # generate watermarked images
         if self.embedder.yuv:  # take y channel only
@@ -194,7 +195,7 @@ class VideoWam(Wam):
         # interpolate predictions back to original size
         if imgs.shape[-2:] != (self.img_size, self.img_size):
             key_frame_preds = F.interpolate(key_frame_preds, size=imgs.shape[-2:],
-                                    mode="bilinear", align_corners=False, antialias=False)
+                                            **interpolation)
         key_frame_preds = key_frame_preds.to(imgs.device)
 
         # apply video mode and blend
@@ -210,12 +211,12 @@ class VideoWam(Wam):
 
         # augment
         imgs_aug, masks, selected_aug = self.augmenter(
-            imgs_w, imgs, masks, is_video=True, do_resize=True)
+            imgs_w, imgs, masks, is_video=True, do_resize=False)
 
         # interpolate augmented images to processing size for detection
         if imgs.shape[-2:] != (self.img_size, self.img_size):
             imgs_aug = F.interpolate(imgs_aug, size=(self.img_size, self.img_size),
-                                     mode="bilinear", align_corners=False, antialias=False)
+                                    **interpolation)
 
         # detect watermark
         preds = self.detector(imgs_aug)
@@ -238,7 +239,7 @@ class VideoWam(Wam):
         imgs: torch.Tensor,
         msgs: torch.Tensor = None,
         is_video: bool = True,
-        interpolation: dict = {"mode": "bilinear", "align_corners": False, "antialias": False},
+        interpolation: dict = {"mode": "bilinear", "align_corners": False, "antialias": True},
     ) -> dict:
         """ 
         Generates watermarked videos from the input images and messages (used for inference).
@@ -304,7 +305,7 @@ class VideoWam(Wam):
         imgs: torch.Tensor,
         msgs: torch.Tensor = None,
         is_video: bool = True,
-        interpolation: dict = {"mode": "bilinear", "align_corners": False, "antialias": False},
+        interpolation: dict = {"mode": "bilinear", "align_corners": False, "antialias": True},
     ) -> dict:
         """ 
         Generates watermarked videos from the input images and messages (used for inference).
@@ -384,7 +385,7 @@ class VideoWam(Wam):
         self,
         imgs: torch.Tensor,
         is_video: bool = True,
-        interpolation: dict = {"mode": "bilinear", "align_corners": False, "antialias": False},
+        interpolation: dict = {"mode": "bilinear", "align_corners": False, "antialias": True},
     ) -> dict:
         """
         Performs the forward pass of the detector only.

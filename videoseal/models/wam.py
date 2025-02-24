@@ -70,7 +70,7 @@ class Wam(nn.Module):
         imgs: torch.Tensor,
         masks: torch.Tensor,
         msgs: torch.Tensor = None,
-        interpolation: dict = {"mode": "bilinear", "align_corners": False, "antialias": False},
+        interpolation: dict = {"mode": "bilinear", "align_corners": False, "antialias": True},
     ) -> dict:
         """
         Does the full forward pass of the WAM model (used for training).
@@ -135,7 +135,7 @@ class Wam(nn.Module):
         self,
         imgs: torch.Tensor,
         msgs: torch.Tensor = None,
-        interpolation: dict = {"mode": "bilinear", "align_corners": False, "antialias": False},
+        interpolation: dict = {"mode": "bilinear", "align_corners": False, "antialias": True},
     ) -> dict:
         """
         Generates watermarked images from the input images and messages (used for inference).
@@ -190,7 +190,7 @@ class Wam(nn.Module):
     def detect(
         self,
         imgs: torch.Tensor,
-        interpolation: dict = {"mode": "bilinear", "align_corners": False, "antialias": False},
+        interpolation: dict = {"mode": "bilinear", "align_corners": False, "antialias": True},
     ) -> dict:
         """
         Performs the forward pass of the detector only (used at inference).
