@@ -184,6 +184,8 @@ def get_parser():
        help='Weight for the discriminator loss')
     aa('--disc_num_layers', default=2, type=int,
        help='Number of layers for the discriminator')
+    aa('--disc_in_channels', default=3, type=int,
+         help='Number of input channels for the discriminator')
     
     group = parser.add_argument_group('Loading parameters')
     aa('--batch_size', default=32, type=int, help='Batch size')
@@ -308,7 +310,7 @@ def main(params):
         balanced=params.balanced, total_norm=params.total_gnorm,
         disc_weight=params.lambda_d, percep_weight=params.lambda_i,
         detect_weight=params.lambda_det, decode_weight=params.lambda_dec,
-        disc_start=params.disc_start, disc_num_layers=params.disc_num_layers,
+        disc_start=params.disc_start, disc_num_layers=params.disc_num_layers, disc_in_channels=params.disc_in_channels,
         percep_loss=params.perceptual_loss,
     ).to(device)
     print(image_detection_loss)
