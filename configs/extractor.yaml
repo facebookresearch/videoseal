@@ -288,7 +288,8 @@ convnext_tiny_temporal:
     temporal_convs: True
     temporal_attention: True
   pixel_decoder:
-    upscale_stages: [4, 4, 2]  # 4*2*2 = x16 (patch size)
+    pixelwise: False  # return msg per pixel (k h w)
+    upscale_stages: [1]
     embed_dim: 768  # = encoder.out_chans
     nbits: 16
     sigmoid_output: False

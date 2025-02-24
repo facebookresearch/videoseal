@@ -44,10 +44,11 @@ class Block(nn.Module):
         x = self.act(x)
         x = self.grn(x)
         x = self.pwconv2(x)
-        x = x.permute(0, 3, 1, 2) # (N, H, W, C) -> (N, C, H, W)
 
         if self.temp_block is not None:
             x = self.temp_block(x)
+
+        x = x.permute(0, 3, 1, 2) # (N, H, W, C) -> (N, C, H, W)
 
         x = input + self.drop_path(x)
         return x
