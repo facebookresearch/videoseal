@@ -30,7 +30,7 @@ import torch
 from torch.utils.data import Dataset, Subset
 from torchvision.utils import save_image
 
-from .metrics import vmaf_on_tensor, bit_accuracy, iou, accuracy, pvalue, capacity, psnr, ssim, bd_rate
+from .metrics import vmaf_on_tensor, bit_accuracy, iou, accuracy, pvalue, capacity, psnr, ssim, msssim, bd_rate
 from ..augmentation import get_validation_augs
 from ..models import VideoWam
 from ..modules.jnd import JND, VarianceBasedJND
@@ -113,6 +113,9 @@ def evaluate(
                 imgs[:num_frames],
                 is_video).mean().item()
             metrics['ssim'] = ssim(
+                imgs_w[:num_frames], 
+                imgs[:num_frames]).mean().item()
+            metrics['msssim'] = msssim(
                 imgs_w[:num_frames], 
                 imgs[:num_frames]).mean().item()
             metrics['lpips'] = lpips_loss(

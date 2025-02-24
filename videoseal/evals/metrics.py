@@ -12,7 +12,7 @@ import numpy as np
 from scipy import stats, interpolate
 
 import torch
-from pytorch_msssim import ssim as pytorch_ssim
+import pytorch_msssim
 
 def psnr(x, y, is_video=False):
     """ 
@@ -37,7 +37,16 @@ def ssim(x, y, data_range=1.0):
         x: Image tensor with normalized values (≈ [0,1])
         y: Image tensor with normalized values (≈ [0,1]), ex: original image
     """
-    return pytorch_ssim(x, y, data_range=data_range, size_average=False)
+    return pytorch_msssim.ssim(x, y, data_range=data_range, size_average=False)
+
+def msssim(x, y, data_range=1.0):
+    """
+    Return MSSSIM
+    Args:
+        x: Image tensor with normalized values (≈ [0,1])
+        y: Image tensor with normalized values (≈ [0,1]), ex: original image
+    """
+    return pytorch_msssim.ms_ssim(x, y, data_range=data_range, size_average=False)
 
 def iou(preds, targets, threshold=0.0, label=1):
     """
