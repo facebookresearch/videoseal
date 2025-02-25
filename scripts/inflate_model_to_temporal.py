@@ -1,3 +1,18 @@
+"""
+Run with:
+    python inflate_model_to_temporal.py --ckpt <path_to_checkpoint> --output <path_to_output_checkpoint>
+
+
+    python inflate_model_to_temporal.py \
+        --ckpt /checkpoint/pfz/2025_logs/0214_vseal_rgb_96bits_scalingw_schedule/_scaling_w_schedule=0_scaling_w=0.2_perceptual_loss=yuv/checkpoint.pth \
+        --output /checkpoint/pfz/2025_logs/0214_vseal_rgb_96bits_scalingw_schedule/_scaling_w_schedule=0_scaling_w=0.2_perceptual_loss=yuv/checkpoint_inflated.pth
+
+    python inflate_model_to_temporal.py \
+        --ckpt /checkpoint/pfz/2025_logs/0207_vseal_y_96bits_scalingw_schedule/_scaling_w_schedule=0_scaling_w=0.2/checkpoint.pth \
+        --output /checkpoint/pfz/2025_logs/0207_vseal_y_96bits_scalingw_schedule/_scaling_w_schedule=0_scaling_w=0.2/checkpoint_inflated.pth
+   
+"""
+
 import argparse
 import torch
 import sys
@@ -150,7 +165,7 @@ if __name__ == "__main__":
     parser.add_argument("--output", type=str, help="The name of the inflated model checkpoint.", required=True)
     args = parser.parse_args()
 
-    ckpt = torch.load(args.ckpt)
+    ckpt = torch.load(args.ckpt, weights_only=True)
     assert "model" in ckpt, "The model checkpoint has an unexpected format"
     
     inflate_convs_unet_embedder_inplace(ckpt["model"])
