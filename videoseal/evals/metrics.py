@@ -48,6 +48,16 @@ def msssim(x, y, data_range=1.0):
     """
     return pytorch_msssim.ms_ssim(x, y, data_range=data_range, size_average=False)
 
+def linf(x, y, data_range=1.0):
+    """
+    Return L_inf in pixel space (integer between 0 and 255)
+    Args:
+        x: Image tensor with normalized values (≈ [0,1])
+        y: Image tensor with normalized values (≈ [0,1]), ex: original image
+    """
+    multiplier = 255.0 / data_range
+    return torch.max(torch.abs(x - y)) * multiplier
+    
 def iou(preds, targets, threshold=0.0, label=1):
     """
     Return IoU for a specific label (0 or 1).

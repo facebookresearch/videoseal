@@ -53,6 +53,7 @@ def evaluate(
     bdrate: bool = True,
     decoding: bool = True,
     detection: bool = False,
+    interpolation: dict = {"mode": "bilinear", "align_corners": False, "antialias": True},
 ):
     """
     Gives detailed evaluation metrics for a model on a given dataset.
@@ -96,7 +97,7 @@ def evaluate(
             # forward embedder, at any resolution
             # does cpu -> gpu -> cpu when gpu is available
             timer.start()
-            outputs = model.embed(imgs, is_video=is_video)
+            outputs = model.embed(imgs, is_video=is_video, interpolation=interpolation)
             metrics['embed_time'] = timer.end()
             msgs = outputs["msgs"]  # b k
             imgs_w = outputs["imgs_w"]  # b c h w
@@ -181,7 +182,7 @@ def evaluate(
                         # extract watermark
                         timer.start()
                         if is_video:
-                            preds = model.detect_and_aggregate(imgs_aug, video_aggregation)  # 1 k     
+                            preds = model.detect_and_aggregate(imgs_aug, video_aggregation, interpolation)  # 1 k
                             preds = torch.cat([torch.ones(preds.size(0), 1).to(preds.device), preds], dim=1)  # 1 1+k
                             outputs = {"preds": preds}
                             msgs = msgs[:1]  # 1 k
@@ -268,6 +269,15 @@ def main():
     group.add_argument('--decoding', type=bool_inst, default=True, help='Whether to evaluate decoding metrics')
     group.add_argument('--detection', type=bool_inst, default=False, help='Whether to evaluate detection metrics')
 
+    group = parser.add_argument_group('Interpolation')
+    group.add_argument('--interpolation_mode', type=str, default='bilinear',
+                      choices=['nearest', 'bilinear', 'bicubic', 'area'],
+                      help='Interpolation mode for resizing')
+    group.add_argument('--interpolation_align_corners', type=bool_inst, default=False,
+                      help='Align corners for interpolation')
+    group.add_argument('--interpolation_antialias', type=bool_inst, default=True,
+                      help='Use antialiasing for interpolation')
+
     args = parser.parse_args()
 
     # Setup the model
@@ -306,6 +316,11 @@ def main():
 
     # evaluate the model, quality and extraction metrics
     os.makedirs(args.output_dir, exist_ok=True)
+    interpolation = {
+        "mode": args.interpolation_mode,
+        "align_corners": args.interpolation_align_corners,
+        "antialias": args.interpolation_antialias
+    }
     metrics = evaluate(
         model = model,
         dataset = dataset, 
@@ -318,6 +333,7 @@ def main():
         bdrate = args.bdrate,
         decoding = args.decoding,
         detection = args.detection,
+        interpolation = interpolation,
     )
 
     # Print mean
