@@ -93,9 +93,12 @@ class ConvNeXtV2(nn.Module):
         drop_path_rate (float): Stochastic depth rate. Default: 0.
         head_init_scale (float): Init scaling value for classifier weights and biases. Default: 1.
     """
-    def __init__(self, in_chans=3,
-                 depths=[3, 3, 9, 3], dims=[96, 192, 384, 768], 
-                 drop_path_rate=0., head_init_scale=1., temporal_convs=False, temporal_attention=False):
+    def __init__(
+        self, in_chans=3,
+        depths=[3, 3, 9, 3], dims=[96, 192, 384, 768], 
+        drop_path_rate=0., head_init_scale=1., 
+        temporal_convs=False, temporal_attention=False
+    ) -> None:
         super().__init__()
         self.depths = depths
         self.downsample_layers = nn.ModuleList() # stem and 3 intermediate downsampling conv layers
@@ -117,7 +120,10 @@ class ConvNeXtV2(nn.Module):
         cur = 0
         for i in range(4):
             stage = nn.Sequential(
-                *[Block(dim=dims[i], drop_path=dp_rates[cur + j], temporal_attention=temporal_attention) for j in range(depths[i])]
+                *[Block(
+                    dim=dims[i], drop_path=dp_rates[cur + j], 
+                    temporal_attention=temporal_attention
+                ) for j in range(depths[i])]
             )
             self.stages.append(stage)
             cur += depths[i]
