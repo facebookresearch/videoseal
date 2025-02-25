@@ -89,6 +89,12 @@ class VideoCompression(nn.Module):
         """
         self.crf = crf or self.crf
 
+        # if width or height is not divisible by 2, pad the frames, as some codecs require even dimensions
+        if frames.shape[2] % 2 != 0 or frames.shape[3] % 2 != 0:
+            frames = nn.functional.pad(frames, (0, frames.shape[3] % 2, 0, frames.shape[2] % 2), mode='constant', value=0)
+            if mask is not None:
+                mask = nn.functional.pad(mask, (0, mask.shape[3] % 2, 0, mask.shape[2] % 2), mode='constant', value=0)
+
         input_frames = self._preprocess_frames(frames)  # convert to np.uint8
         with io.BytesIO() as buffer:
             buffer = self._compress_frames(buffer, input_frames)
