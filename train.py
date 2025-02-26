@@ -121,6 +121,8 @@ def get_parser():
     group = parser.add_argument_group('Image and watermark parameters')
     aa("--nbits", type=int, default=32,
        help="Number of bits used to generate the message. If 0, no message is used.")
+    aa("--hidden_size_multiplier", type=int, default=2,
+         help="Hidden size multiplier for the message processor")
     aa("--img_size", type=int, default=256,
        help="Size of the input images for data preprocessing, used at loading time for training.")
     aa("--img_size_val", type=int, default=256,
