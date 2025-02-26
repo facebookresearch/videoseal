@@ -35,6 +35,22 @@ unet_small2_quant: # quantization friendly unet2
     z_channels_mults: [1, 2, 4, 8]
     last_tanh: True
 
+unet_small2_quant_conv3d: # quantization friendly unet2
+  msg_processor:
+    nbits: 16
+    hidden_size: 32     # nbits * 2
+    msg_processor_type: 'binary+concat'
+  unet:
+    in_channels: 3
+    out_channels: 3
+    z_channels: 16
+    num_blocks: 8
+    activation: 'relu'
+    normalization: 'batch'
+    z_channels_mults: [1, 2, 4, 8]
+    last_tanh: True
+    conv_layer: 'conv3d'
+
 unet_medium2_quant: # quantization friendly unet2
   msg_processor:
     nbits: 16

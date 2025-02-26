@@ -12,6 +12,8 @@ import torch.nn.functional as F
 from timm.models.layers import trunc_normal_, DropPath
 
 from .common import LayerNorm, GRN
+from .vit import TemporalBlock
+
 
 class Block(nn.Module):
     """ ConvNeXtV2 Block.
@@ -20,7 +22,7 @@ class Block(nn.Module):
         dim (int): Number of input channels.
         drop_path (float): Stochastic depth rate. Default: 0.0
     """
-    def __init__(self, dim, drop_path=0.):
+    def __init__(self, dim, drop_path=0., temporal_attention=False):
         super().__init__()
         self.dwconv = nn.Conv2d(dim, dim, kernel_size=7, padding=3, groups=dim) # depthwise conv
         self.norm = LayerNorm(dim, eps=1e-6, data_format="channels_last")
@@ -29,6 +31,9 @@ class Block(nn.Module):
         self.grn = GRN(4 * dim)
         self.pwconv2 = nn.Linear(4 * dim, dim)
         self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
+        self.temp_block = None
+        if temporal_attention:
+            self.temp_block = TemporalBlock(dim, num_heads=dim//48, use_rel_pos=True, video_len=32)
 
     def forward(self, x):
         input = x
@@ -39,9 +44,41 @@ class Block(nn.Module):
         x = self.act(x)
         x = self.grn(x)
         x = self.pwconv2(x)
+
+        if self.temp_block is not None:
+            x = self.temp_block(x)
+
         x = x.permute(0, 3, 1, 2) # (N, H, W, C) -> (N, C, H, W)
 
         x = input + self.drop_path(x)
+        return x
+
+
+class ConvnextConv2p1dWrapper(nn.Module):
+    def __init__(self, *args, temporal_kernel_size=3, **kwargs):
+        """
+        Wrapper for 2D convolution then optional temporal convolution to handle 4D input tensors.
+        Allows to keep 2D convolution unchanged, then add a temporal convolution.
+        Args:
+            *args: Arguments for nn.Conv2d.
+            **kwargs: Keyword arguments for nn.Conv2d.
+        """
+        super().__init__()
+        self.conv = nn.Conv2d(*args, **kwargs)
+        assert temporal_kernel_size % 2 == 1
+        self.temp_conv = nn.Conv3d(
+            args[1], args[1], # in_channels, out_channels
+            kernel_size=(temporal_kernel_size, 1, 1), 
+            padding=(temporal_kernel_size // 2, 0, 0), 
+            bias=False
+        )
+
+    def forward(self, x):
+        assert len(x.shape) == 4
+        x = self.conv(x)
+        x = x.unsqueeze(0).permute(0, 2, 1, 3, 4) # change [B, C, H, W] to [1, C, T, H, W]
+        x = self.temp_conv(x)
+        x = x.permute(0, 2, 1, 3, 4).squeeze(0)
         return x
 
 
@@ -56,10 +93,12 @@ class ConvNeXtV2(nn.Module):
         drop_path_rate (float): Stochastic depth rate. Default: 0.
         head_init_scale (float): Init scaling value for classifier weights and biases. Default: 1.
     """
-    def __init__(self, in_chans=3,
-                 depths=[3, 3, 9, 3], dims=[96, 192, 384, 768], 
-                 drop_path_rate=0., head_init_scale=1.
-                 ):
+    def __init__(
+        self, in_chans=3,
+        depths=[3, 3, 9, 3], dims=[96, 192, 384, 768], 
+        drop_path_rate=0., head_init_scale=1., 
+        temporal_convs=False, temporal_attention=False
+    ) -> None:
         super().__init__()
         self.depths = depths
         self.downsample_layers = nn.ModuleList() # stem and 3 intermediate downsampling conv layers
@@ -68,10 +107,11 @@ class ConvNeXtV2(nn.Module):
             LayerNorm(dims[0], eps=1e-6, data_format="channels_first")
         )
         self.downsample_layers.append(stem)
+        op_ = ConvnextConv2p1dWrapper if temporal_convs else nn.Conv2d
         for i in range(3):
             downsample_layer = nn.Sequential(
                     LayerNorm(dims[i], eps=1e-6, data_format="channels_first"),
-                    nn.Conv2d(dims[i], dims[i+1], kernel_size=2, stride=2),
+                    op_(dims[i], dims[i+1], kernel_size=2, stride=2),
             )
             self.downsample_layers.append(downsample_layer)
 
@@ -80,7 +120,10 @@ class ConvNeXtV2(nn.Module):
         cur = 0
         for i in range(4):
             stage = nn.Sequential(
-                *[Block(dim=dims[i], drop_path=dp_rates[cur + j]) for j in range(depths[i])]
+                *[Block(
+                    dim=dims[i], drop_path=dp_rates[cur + j], 
+                    temporal_attention=temporal_attention
+                ) for j in range(depths[i])]
             )
             self.stages.append(stage)
             cur += depths[i]

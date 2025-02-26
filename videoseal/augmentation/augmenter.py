@@ -16,7 +16,7 @@ from .geometric import (Crop, HorizontalFlip, Identity, Perspective, Resize,
 from .masks import get_mask_embedder
 from .valuemetric import (JPEG, Brightness, Contrast, GaussianBlur, Hue,
                           MedianFilter, Saturation)
-from .video import VideoCompressorAugmenter, H264, H265, H264rgb
+from .video import VideoCompressorAugmenter, DropFrameAugmenter, H264, H265, H264rgb
 
 name2aug = {
     'rotate': Rotate,
@@ -37,6 +37,7 @@ name2aug = {
     'h264rgb': H264rgb,
     'h265': H265,
     # 'bmshj2018': bmshj2018,
+    'drop_frame': DropFrameAugmenter
 }
 video_augs = ['video_compression', 'h264', 'h264rgb', 'h265']
 

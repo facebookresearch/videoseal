@@ -168,6 +168,26 @@ class Hue(nn.Module):
     def __repr__(self):
         return f"Hue"
 
+class GaussianNoise(nn.Module):
+    def __init__(self, min_std=None, max_std=None):
+        super(GaussianNoise, self).__init__()
+        self.min_std = min_std
+        self.max_std = max_std
+
+    def get_random_std(self):
+        if self.min_std is None or self.max_std is None:
+            raise ValueError("Standard deviation range must be specified")
+        return torch.rand(1).item() * (self.max_std - self.min_std) + self.min_std
+
+    def forward(self, image, mask, std=None):
+        std = self.get_random_std() if std is None else std
+        noise = torch.randn_like(image) * std
+        image = image + noise
+        return image, mask
+
+    def __repr__(self):
+        return f"GaussianNoise"
+
 
 if __name__ == "__main__":
     import os
@@ -188,6 +208,7 @@ if __name__ == "__main__":
         (JPEG, [40, 60, 80]),
         (GaussianBlur, [3, 5, 9, 17]),
         (MedianFilter, [3, 5, 9, 17]),
+        (GaussianNoise, [0.05, 0.1, 0.15, 0.2]),
         # (bmshj2018, [2, 4, 6, 8])
     ]
 
