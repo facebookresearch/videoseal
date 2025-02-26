@@ -152,7 +152,7 @@ def main(args):
         if embedder_name not in embedder_cfg:
             continue
         embedder_args = embedder_cfg[embedder_name]
-        embedder = build_embedder(embedder_name, embedder_args, args.nbits)
+        embedder = build_embedder(embedder_name, embedder_args, args.nbits, args.hidden_size_multiplier)
         embedder = embedder.to(device)
         # flops
         if args.do_flops:
@@ -235,6 +235,8 @@ if __name__ == '__main__':
     parser.add_argument('--embedder_models', type=str, default=None)
     parser.add_argument('--extractor_models', type=str, default=None)
     parser.add_argument('--nbits', type=int, default=32)
+    parser.add_argument('--hidden_size_multiplier', type=int
+                        , default=2)
     parser.add_argument('--output_dir', type=str, default='output')
     parser.add_argument('--do_flops', type=bool_inst, default=True, 
                         help='Calculate FLOPS for each model')

@@ -237,12 +237,12 @@ class DVMarkEmbedder(Embedder):
         return imgs_w
 
 
-def build_embedder(name, cfg, nbits):
+def build_embedder(name, cfg, nbits, hidden_size_multiplier=2):
     if name.startswith('vae'):
         # updates some cfg
         cfg.msg_processor.nbits = nbits
-        cfg.msg_processor.hidden_size = nbits * 2
-        cfg.decoder.z_channels = (nbits * 2) + cfg.encoder.z_channels
+        cfg.msg_processor.hidden_size = nbits * hidden_size_multiplier
+        cfg.decoder.z_channels = (nbits * hidden_size_multiplier) + cfg.encoder.z_channels
         # build the encoder, decoder and msg processor
         encoder = VAEEncoder(**cfg.encoder)
         msg_processor = MsgProcessor(**cfg.msg_processor)
@@ -251,7 +251,7 @@ def build_embedder(name, cfg, nbits):
     elif name.startswith('unet'):
         # updates some cfg
         cfg.msg_processor.nbits = nbits
-        cfg.msg_processor.hidden_size = nbits * 2
+        cfg.msg_processor.hidden_size = nbits * hidden_size_multiplier
         # build the encoder, decoder and msg processor
         msg_processor = MsgProcessor(**cfg.msg_processor)
         unet = UNetMsg(msg_processor=msg_processor, **cfg.unet)
