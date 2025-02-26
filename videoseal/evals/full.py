@@ -54,6 +54,7 @@ def evaluate(
     decoding: bool = True,
     detection: bool = False,
     interpolation: dict = {"mode": "bilinear", "align_corners": False, "antialias": True},
+    lowres_attenuation: bool = False,
 ):
     """
     Gives detailed evaluation metrics for a model on a given dataset.
@@ -97,7 +98,10 @@ def evaluate(
             # forward embedder, at any resolution
             # does cpu -> gpu -> cpu when gpu is available
             timer.start()
-            outputs = model.embed(imgs, is_video=is_video, interpolation=interpolation)
+            if lowres_attenuation:
+                outputs = model.embed_lowres_attenuation(imgs, is_video=is_video, interpolation=interpolation)
+            else:
+                outputs = model.embed(imgs, is_video=is_video, interpolation=interpolation)
             metrics['embed_time'] = timer.end()
             msgs = outputs["msgs"]  # b k
             imgs_w = outputs["imgs_w"]  # b c h w
@@ -250,6 +254,8 @@ def main():
        help="Path to the attenuation config file")
     group.add_argument("--attenuation", type=str, default="None",
                         help="Attenuation model to use")
+    group.add_argument("--lowres_attenuation", type=bool_inst, default=False,
+                        help="Whether to do attenuation at low resolution")
     group.add_argument("--img_size_proc", type=int, default=256, 
                         help="Size of the input images for interpolation in the embedder/extractor models")
     group.add_argument("--scaling_w", type=float, default=None,
@@ -334,6 +340,7 @@ def main():
         decoding = args.decoding,
         detection = args.detection,
         interpolation = interpolation,
+        lowres_attenuation = args.lowres_attenuation,
     )
 
     # Print mean
