@@ -238,7 +238,7 @@ class VP9(VideoCompression):
             codec='libvpx-vp9', fps=fps)
         self.crf = -1
 
-    def forward(self, frames, mask=None) -> torch.Tensor:
+    def forward(self, frames, mask=None, *args, **kwargs) -> torch.Tensor:
         output, mask = super().forward(frames, mask)
         return output, mask
 

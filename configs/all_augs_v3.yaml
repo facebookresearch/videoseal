@@ -60,10 +60,10 @@ augs_params:
     max_factor: 0.1
   h264:
     min_crf: 28
-    max_crf: 46
+    max_crf: 40
   h264rgb:
     min_crf: 28
-    max_crf: 46
+    max_crf: 40
   h265:
     min_crf: 28
-    max_crf: 46
+    max_crf: 40

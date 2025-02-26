@@ -1,7 +1,7 @@
 from .sequential import Sequential
 from .geometric import Crop, HorizontalFlip, Identity, Perspective, Resize, Rotate
 from .valuemetric import JPEG, Brightness, Contrast, GaussianBlur, Hue, MedianFilter, Saturation
-from .video import H264, H264rgb, H265
+from .video import H264, H264rgb, H265, VP9, AV1
 
 
 def get_validation_augs_subset(
@@ -59,9 +59,10 @@ def get_validation_augs(
             (JPEG(),              [40]),
             (GaussianBlur(),      [9]),
             # (MedianFilter(),      [9]),
-            (H264(),              [30, 40, 50, 60]),
-            (H264rgb(),           [30, 40, 50, 60]),
-            (H265(),              [30, 40, 50]),  # crf > 50 is not valid
+            (H264(),              [23, 30, 40, 50]),
+            (H264rgb(),           [23, 30, 40, 50]),
+            (H265(),              [23, 30, 40, 50]),  # crf > 50 is not valid
+            (AV1(),               [23, 30, 40, 50]),
             (Sequential(H264(), Crop(), Brightness()), [(30, 0.71, 0.5)]),
             (Sequential(H264(), Crop(), Brightness()), [(40, 0.71, 0.5)]),
             (Sequential(H264(), Crop(), Brightness()), [(50, 0.71, 0.5)]),

@@ -12,6 +12,7 @@ python -m videoseal.evals.full \
 
 python -m videoseal.evals.full \
     --checkpoint /checkpoint/pfz/2025_logs/0219_vseal_convnextextractor/_nbits=128_lambda_i=0.1_embedder_model=1/checkpoint600.pth \
+    --dataset sa-v --is_video true --num_samples 10 --save_first 10 --attenuation None --scaling_w 0.016 \
     --dataset sa-1b-full-resized --is_video false --num_samples 10 --save_first 10 --attenuation None --scaling_w 0.016 \
     --img_size_proc 448
     
