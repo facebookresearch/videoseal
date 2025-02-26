@@ -286,7 +286,6 @@ convnext_tiny:
     nbits: 16
     sigmoid_output: False
 
-<<<<<<< HEAD
 convnext_base:
   encoder:
     depths: [3, 3, 27, 3]
@@ -363,7 +362,7 @@ convnext_base_pw:
     nbits: 16
     sigmoid_output: False
     pixelwise: True
-=======
+  
 convnext_tiny_temporal:
   encoder:
     depths: [3, 3, 9, 3]
@@ -376,7 +375,6 @@ convnext_tiny_temporal:
     embed_dim: 768  # = encoder.out_chans
     nbits: 16
     sigmoid_output: False
->>>>>>> main
 
 dvmark:
   params: []
