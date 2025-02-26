@@ -1,7 +1,26 @@
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
+def apply_jnd(imgs, imgs_w, hmaps, mode, alpha=1.0):
+    """ 
+    Apply the JND model to the images.
+    Args:
+        imgs (torch.Tensor): The original images.
+        imgs_w (torch.Tensor): The watermarked images.
+        hmaps (torch.Tensor): The JND heatmaps.
+        mode (str): The mode of applying the JND model.
+            If 'multiply', the JND model is applied by multiplying the heatmaps with the difference between the watermarked and original images.
+            If 'clamp', the JND model is applied by clamping the difference between the -jnd and +jnd values.
+        alpha (float): The alpha value.
+    """
+    deltas = alpha * (imgs_w - imgs)
+    if mode == 'multiply':
+        deltas = hmaps * deltas
+    elif mode == 'clamp':
+        deltas = torch.clamp(deltas, -hmaps, hmaps)
+    return imgs + deltas
+
 
 class JND(nn.Module):
     """ https://ieeexplore.ieee.org/document/7885108 """
@@ -11,7 +30,8 @@ class JND(nn.Module):
             postprocess = lambda x: x,
             in_channels = 1,
             out_channels = 3,
-            blue = False
+            blue = False,
+            apply_mode = "multiply"
     ) -> None:
         super(JND, self).__init__()
 
@@ -56,6 +76,9 @@ class JND(nn.Module):
         # setup pre and post processing
         self.preprocess = preprocess
         self.postprocess = postprocess
+
+        # setup apply mode
+        self.apply_mode = apply_mode
 
     def jnd_la(self, x, alpha=1.0, eps=1e-5):
         """ Luminance masking: x must be in [0,255] """
@@ -109,7 +132,7 @@ class JND(nn.Module):
         imgs = self.preprocess(imgs)
         imgs_w = self.preprocess(imgs_w)
         hmaps = self.heatmaps(imgs, clc=0.3)
-        imgs_w = imgs + alpha * hmaps * (imgs_w - imgs)
+        imgs_w = apply_jnd(imgs, imgs_w, hmaps, self.apply_mode, alpha)
         return self.postprocess(imgs_w)
 
 
@@ -121,7 +144,8 @@ class JNDSimplified(nn.Module):
             postprocess = lambda x: x,
             in_channels = 1,
             out_channels = 3,
-            blue = False
+            blue = False,
+            apply_mode = "multiply"
     ) -> None:
         super(JNDSimplified, self).__init__()
 
@@ -156,6 +180,9 @@ class JNDSimplified(nn.Module):
         # setup pre and post processing
         self.preprocess = preprocess
         self.postprocess = postprocess
+
+        # setup apply mode
+        self.apply_mode = apply_mode
 
     # @torch.no_grad()
     def heatmaps(
@@ -197,7 +224,7 @@ class JNDSimplified(nn.Module):
         imgs = self.preprocess(imgs)
         imgs_w = self.preprocess(imgs_w)
         hmaps = self.heatmaps(imgs)
-        imgs_w = imgs + alpha * hmaps * (imgs_w - imgs)
+        imgs_w = apply_jnd(imgs, imgs_w, hmaps, self.apply_mode, alpha)
         return self.postprocess(imgs_w)
 
 
@@ -215,7 +242,8 @@ class VarianceBasedJND(nn.Module):
             max_squared_gradient_value_for_clipping=2500,  # mode == contrast*
             avg_pool_kernel_size=5,  # mode == variance
             max_variance_value_for_clipping=2000,  # mode == variance 
-            mode = "contrast"
+            mode = "contrast",
+            apply_mode = "multiply"
     ) -> None:
         super(VarianceBasedJND, self).__init__()
         assert mode in ["contrast", "contrast_sqrt", "variance"], "SimplifiedJND.mode must be either 'contrast', 'contrast_sqrt' or 'variance'"
@@ -257,6 +285,9 @@ class VarianceBasedJND(nn.Module):
         # setup pre and post processing
         self.preprocess = preprocess
         self.postprocess = postprocess
+
+        # setup apply mode
+        self.apply_mode = apply_mode
 
     def heatmaps(self, x):
         assert len(x.shape) == 4 and x.shape[1] == self.in_channels, "shape must be [B, in_channels, H, W]"
@@ -314,5 +345,5 @@ class VarianceBasedJND(nn.Module):
         imgs_w = self.preprocess(imgs_w)
         hmaps = self.heatmaps(imgs * 255)  # the c++ code uses the original [0, 255] range, therefore we do the same
 
-        imgs_w = imgs + alpha * hmaps * (imgs_w - imgs)
+        imgs_w = apply_jnd(imgs, imgs_w, hmaps, self.apply_mode, alpha)
         return self.postprocess(imgs_w)

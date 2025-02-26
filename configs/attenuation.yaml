@@ -2,6 +2,11 @@ jnd_1_1:
   in_channels: 1
   out_channels: 1
 
+jnd_1_1_clamp:
+  in_channels: 1
+  out_channels: 1
+  apply_mode: "clamp"
+
 jnd_3_3:
   in_channels: 3
   out_channels: 3
@@ -19,3 +24,16 @@ simplified_jnd_variance:
   max_variance_value_for_clipping: 300
   min_heatmap_value: 0.1
   avg_pool_kernel_size: 3
+
+simplified_jnd_variance_min0:
+  mode: "variance"
+  max_variance_value_for_clipping: 300
+  min_heatmap_value: 0.0
+  avg_pool_kernel_size: 3
+
+simplified_jnd_variance_min0_clamp:
+  mode: "variance"
+  max_variance_value_for_clipping: 300
+  min_heatmap_value: 0.0
+  avg_pool_kernel_size: 3
+  apply_mode: "clamp"

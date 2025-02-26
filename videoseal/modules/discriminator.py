@@ -8,6 +8,8 @@ import torch.nn.functional as F
 
 from torch.nn.utils import spectral_norm
 
+from ..data.transforms import RGB2YUV
+
 class ActNorm(nn.Module):
     def __init__(self, num_features, logdet=False, affine=True, allow_reverse_init=False):
         assert affine
@@ -105,6 +107,9 @@ class NLayerDiscriminator(nn.Module):
             use_bias = norm_layer != nn.GroupNorm
             # use_bias = norm_layer != nn.BatchNorm2d
 
+        self.input_nc = input_nc
+        self.rgb2yuv = RGB2YUV()
+
         kw = 4
         padw = 1
         sequence = [nn.Conv2d(input_nc, ndf, kernel_size=kw, stride=2, padding=padw), nn.LeakyReLU(0.2, True)]
@@ -133,6 +138,9 @@ class NLayerDiscriminator(nn.Module):
 
     def forward(self, input):
         """Standard forward."""
+        # If input has 3 channels but the model is for 1 channel, only use the first channel
+        if self.input_nc == 1 and input.shape[1] == 3:
+            input = self.rgb2yuv(input)[:, 0:1]
         return self.main(input)
 
 

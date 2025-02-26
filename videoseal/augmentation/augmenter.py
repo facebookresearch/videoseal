@@ -16,7 +16,7 @@ from .geometric import (Crop, HorizontalFlip, Identity, Perspective, Resize,
 from .masks import get_mask_embedder
 from .valuemetric import (JPEG, Brightness, Contrast, GaussianBlur, Hue,
                           MedianFilter, Saturation)
-from .video import VideoCompressorAugmenter, DropFrameAugmenter
+from .video import VideoCompressorAugmenter, DropFrameAugmenter, H264, H265, H264rgb
 
 name2aug = {
     'rotate': Rotate,
@@ -33,9 +33,13 @@ name2aug = {
     'saturation': Saturation,
     'hue': Hue,
     'video_compression': VideoCompressorAugmenter,
+    'h264': H264,
+    'h264rgb': H264rgb,
+    'h265': H265,
     # 'bmshj2018': bmshj2018,
     'drop_frame': DropFrameAugmenter
 }
+video_augs = ['video_compression', 'h264', 'h264rgb', 'h265']
 
 
 def get_dummy_augmenter():
@@ -85,12 +89,18 @@ class Augmenter(nn.Module):
             augs=augs,
             augs_params=augs_params
         )
+        self.augs_video, self.aug_probs_video = self.parse_augmentations(
+            augs=augs,
+            augs_params=augs_params,
+            is_video=True
+        )
         self.num_augs = num_augs
 
     def parse_augmentations(
         self,
         augs: dict[str, float],
         augs_params: dict[str, dict[str, float]],
+        is_video: bool = False
     ):
         """
         Parse the post augmentations into a list of augmentations.
@@ -104,9 +114,10 @@ class Augmenter(nn.Module):
         probs = []
         # parse each augmentation
         for aug_name in augs.keys():
+            if aug_name in video_augs and not is_video:
+                continue
             aug_prob = float(augs[aug_name])
-            aug_params = augs_params[aug_name] if aug_name in augs_params else {
-            }
+            aug_params = augs_params[aug_name] if aug_name in augs_params else {}
             try:
                 selected_aug = name2aug[aug_name](**aug_params)
             except KeyError:
@@ -120,12 +131,9 @@ class Augmenter(nn.Module):
         return augmentations, torch.tensor(probs)
 
     def augment(self, image, mask, is_video, do_resize=True):
-        
-        if not is_video:  # replace video compression with identity
-            augs = [aug if aug.__class__.__name__ != 'VideoCompressorAugmenter' else Identity() for aug in self.augs]
-        else:
-            augs = self.augs
-        index = torch.multinomial(self.aug_probs, 1).item()
+        augs = self.augs_video if is_video else self.augs
+        aug_probs = self.aug_probs_video if is_video else self.aug_probs
+        index = torch.multinomial(aug_probs, 1).item()
         selected_aug = augs[index]
         if not do_resize:
             image, mask = selected_aug(image, mask)
@@ -144,7 +152,8 @@ class Augmenter(nn.Module):
         imgs_w: torch.Tensor,
         imgs: torch.Tensor,
         masks: torch.Tensor,
-        is_video=True
+        is_video=True,
+        do_resize=True
     ) -> torch.Tensor:
         """
         Args:
@@ -165,7 +174,7 @@ class Augmenter(nn.Module):
             selected_augs = []
             for _ in range(self.num_augs):
                 imgs_aug, mask_targets, selected_aug_ = self.augment(
-                    imgs_aug, mask_targets, is_video)
+                    imgs_aug, mask_targets, is_video, do_resize)
                 selected_augs.append(selected_aug_)
             selected_aug = "+".join(selected_augs)
             return imgs_aug, mask_targets, selected_aug
@@ -176,7 +185,7 @@ class Augmenter(nn.Module):
             selected_augs = []
             for _ in range(self.num_augs):
                 imgs_aug, mask_targets, selected_aug_ = self.augment(
-                    imgs_aug, mask_targets, is_video)
+                    imgs_aug, mask_targets, is_video, do_resize)
                 selected_augs.append(selected_aug_)
             return imgs_aug, mask_targets, selected_aug
 

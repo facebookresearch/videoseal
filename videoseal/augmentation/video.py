@@ -122,6 +122,12 @@ class VideoCompression(nn.Module):
         """
         self.crf = crf or self.crf
 
+        # if width or height is not divisible by 2, pad the frames, as some codecs require even dimensions
+        if frames.shape[2] % 2 != 0 or frames.shape[3] % 2 != 0:
+            frames = nn.functional.pad(frames, (0, frames.shape[3] % 2, 0, frames.shape[2] % 2), mode='constant', value=0)
+            if mask is not None:
+                mask = nn.functional.pad(mask, (0, mask.shape[3] % 2, 0, mask.shape[2] % 2), mode='constant', value=0)
+
         input_frames = self._preprocess_frames(frames)  # convert to np.uint8
         with io.BytesIO() as buffer:
             buffer = self._compress_frames(buffer, input_frames)
@@ -165,11 +171,11 @@ class VideoCompressorAugmenter(VideoCompression):
 
 
 class H264(VideoCompression):
-    def __init__(self, crf_min=None, crf_max=None, fps=24):
+    def __init__(self, min_crf=None, max_crf=None, fps=24):
         super(H264, self).__init__(
             codec='libx264', fps=fps)
-        self.crf_min = crf_min
-        self.crf_max = crf_max
+        self.min_crf = min_crf
+        self.max_crf = max_crf
 
     def get_random_crf(self):
         if self.min_crf is None or self.max_crf is None:
@@ -185,11 +191,11 @@ class H264(VideoCompression):
         return f"H264"
 
 class H264rgb(VideoCompression):
-    def __init__(self, crf_min=None, crf_max=None, fps=24):
+    def __init__(self, min_crf=None, max_crf=None, fps=24):
         super(H264rgb, self).__init__(
             codec='libx264rgb', fps=fps)
-        self.crf_min = crf_min
-        self.crf_max = crf_max
+        self.min_crf = min_crf
+        self.max_crf = max_crf
 
     def get_random_crf(self):
         if self.min_crf is None or self.max_crf is None:
@@ -206,11 +212,11 @@ class H264rgb(VideoCompression):
 
 
 class H265(VideoCompression):
-    def __init__(self, crf_min=None, crf_max=None, fps=24):
+    def __init__(self, min_crf=None, max_crf=None, fps=24):
         super(H265, self).__init__(
             codec='libx265', fps=fps)
-        self.crf_min = crf_min
-        self.crf_max = crf_max
+        self.min_crf = min_crf
+        self.max_crf = max_crf
 
     def get_random_crf(self):
         if self.min_crf is None or self.max_crf is None:
@@ -241,11 +247,11 @@ class VP9(VideoCompression):
 
 
 class AV1(VideoCompression):
-    def __init__(self, crf_min=None, crf_max=None, fps=24):
+    def __init__(self, min_crf=None, max_crf=None, fps=24):
         super(AV1, self).__init__(
             codec='libaom-av1', fps=fps)
-        self.crf_min = crf_min
-        self.crf_max = crf_max
+        self.min_crf = min_crf
+        self.max_crf = max_crf
 
     def get_random_crf(self):
         if self.min_crf is None or self.max_crf is None:
@@ -281,11 +287,12 @@ def compress_decompress(frames, codec='libx264', crf=28, fps=24) -> torch.Tensor
 if __name__ == "__main__":    
     import time
     from videoseal.data.loader import load_video
-    vid_o = 'assets/videos/sav_013754.mp4'
+    vid_o = 'assets/videos/sa-v/sav_013754.mp4'
     print("> test compression")
 
-    vid_o = load_video(vid_o) / 255
+    vid_o = load_video(vid_o)
     vid_o = vid_o[:60]  # Use only the first 60 frames
+
     # h264, h264rgb, h265, vp9, av1 (slow)
     for codec in ['libx264', 'libx264rgb', 'libx265', 'libvpx-vp9', 'libaom-av1']:
         crfs = [28, 34, 40, 46] if codec != 'libvpx-vp9' else [-1]
@@ -296,6 +303,6 @@ if __name__ == "__main__":
                 compressed_frames, _ = compressor(vid_o)
                 end = time.time()
                 mse = torch.nn.functional.mse_loss(vid_o, compressed_frames)
-                print(f"Codec: {codec}, CRF: {crf} - MSE: {mse:.4f} - Time: {end - start:.2f}s")
+                print(f"Codec: {codec}, CRF: {crf} - MSE: {mse:.2e} - Time: {end - start:.2f}s")
             except Exception as e:
                 print(f":warning: An error occurred with {codec}: {str(e)}")

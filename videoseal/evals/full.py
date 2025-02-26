@@ -5,6 +5,16 @@ python -m videoseal.evals.full \
     
     --dataset coco --is_video false \
     --dataset sa-v --is_video true --num_samples 1 \
+
+python -m videoseal.evals.full \
+    --checkpoint /checkpoint/pfz/2025_logs/0207_vseal_y_64bits_scalingw_schedule/_scaling_w_schedule=0_scaling_w=0.1/checkpoint900.pth \
+    --dataset sa-1b-full-resized --is_video false --num_samples 10 --save_first 10 --attenuation simplified_jnd_variance_clamp --scaling_w 0.025
+
+python -m videoseal.evals.full \
+    --checkpoint /checkpoint/pfz/2025_logs/0219_vseal_convnextextractor/_nbits=128_lambda_i=0.1_embedder_model=1/checkpoint600.pth \
+    --dataset sa-1b-full-resized --is_video false --num_samples 10 --save_first 10 --attenuation None --scaling_w 0.016 \
+    --img_size_proc 448
+    
 """
     
 import argparse
@@ -20,7 +30,7 @@ import torch
 from torch.utils.data import Dataset, Subset
 from torchvision.utils import save_image
 
-from .metrics import vmaf_on_tensor, bit_accuracy, iou, accuracy, pvalue, capacity, psnr, ssim, bd_rate
+from .metrics import vmaf_on_tensor, bit_accuracy, iou, accuracy, pvalue, capacity, psnr, ssim, msssim, bd_rate
 from ..augmentation import get_validation_augs
 from ..models import VideoWam
 from ..modules.jnd import JND, VarianceBasedJND
@@ -43,6 +53,7 @@ def evaluate(
     bdrate: bool = True,
     decoding: bool = True,
     detection: bool = False,
+    interpolation: dict = {"mode": "bilinear", "align_corners": False, "antialias": True},
 ):
     """
     Gives detailed evaluation metrics for a model on a given dataset.
@@ -86,7 +97,7 @@ def evaluate(
             # forward embedder, at any resolution
             # does cpu -> gpu -> cpu when gpu is available
             timer.start()
-            outputs = model.embed(imgs, is_video=is_video)
+            outputs = model.embed(imgs, is_video=is_video, interpolation=interpolation)
             metrics['embed_time'] = timer.end()
             msgs = outputs["msgs"]  # b k
             imgs_w = outputs["imgs_w"]  # b c h w
@@ -103,6 +114,9 @@ def evaluate(
                 imgs[:num_frames],
                 is_video).mean().item()
             metrics['ssim'] = ssim(
+                imgs_w[:num_frames], 
+                imgs[:num_frames]).mean().item()
+            metrics['msssim'] = msssim(
                 imgs_w[:num_frames], 
                 imgs[:num_frames]).mean().item()
             metrics['lpips'] = lpips_loss(
@@ -147,7 +161,7 @@ def evaluate(
                     # timer.start()
                     save_vid(imgs, ori_path, fps)
                     save_vid(imgs_w, wm_path, fps)
-                    save_vid(imgs - imgs_w, diff_path, fps)
+                    save_vid(create_diff_img(imgs, imgs_w), diff_path, fps)
                     # metrics['save_vid_time'] = timer.end()
 
             # extract watermark and evaluate robustness
@@ -168,7 +182,7 @@ def evaluate(
                         # extract watermark
                         timer.start()
                         if is_video:
-                            preds = model.detect_and_aggregate(imgs_aug, video_aggregation)  # 1 k     
+                            preds = model.detect_and_aggregate(imgs_aug, video_aggregation, interpolation)  # 1 k
                             preds = torch.cat([torch.ones(preds.size(0), 1).to(preds.device), preds], dim=1)  # 1 1+k
                             outputs = {"preds": preds}
                             msgs = msgs[:1]  # 1 k
@@ -236,12 +250,16 @@ def main():
        help="Path to the attenuation config file")
     group.add_argument("--attenuation", type=str, default="None",
                         help="Attenuation model to use")
+    group.add_argument("--img_size_proc", type=int, default=256, 
+                        help="Size of the input images for interpolation in the embedder/extractor models")
     group.add_argument("--scaling_w", type=float, default=None,
                         help="Scaling factor for the watermark in the embedder model")
     group.add_argument('--videowam_chunk_size', type=int, default=32, 
                         help='Number of frames to chunk during forward pass')
     group.add_argument('--videowam_step_size', type=int, default=4,
                         help='The number of frames to propagate the watermark to')
+    group.add_argument('--videowam_mode', type=str, default='repeat', 
+                        help='The inference mode for videos')
 
     group = parser.add_argument_group('Experiment')
     group.add_argument("--output_dir", type=str, default="output/", help="Output directory for logs and images (Default: /output)")
@@ -250,6 +268,15 @@ def main():
     group.add_argument('--bdrate', type=bool_inst, default=False, help='Whether to compute BD-rate')
     group.add_argument('--decoding', type=bool_inst, default=True, help='Whether to evaluate decoding metrics')
     group.add_argument('--detection', type=bool_inst, default=False, help='Whether to evaluate detection metrics')
+
+    group = parser.add_argument_group('Interpolation')
+    group.add_argument('--interpolation_mode', type=str, default='bilinear',
+                      choices=['nearest', 'bilinear', 'bicubic', 'area'],
+                      help='Interpolation mode for resizing')
+    group.add_argument('--interpolation_align_corners', type=bool_inst, default=False,
+                      help='Align corners for interpolation')
+    group.add_argument('--interpolation_antialias', type=bool_inst, default=True,
+                      help='Use antialiasing for interpolation')
 
     args = parser.parse_args()
 
@@ -261,6 +288,8 @@ def main():
     model.blender.scaling_w = args.scaling_w or model.blender.scaling_w
     model.chunk_size = args.videowam_chunk_size or model.chunk_size
     model.step_size = args.videowam_step_size or model.step_size
+    model.video_mode = args.videowam_mode or model.mode
+    model.img_size = args.img_size_proc or model.img_size
 
     # Setup the device
     avail_device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -287,8 +316,13 @@ def main():
 
     # evaluate the model, quality and extraction metrics
     os.makedirs(args.output_dir, exist_ok=True)
+    interpolation = {
+        "mode": args.interpolation_mode,
+        "align_corners": args.interpolation_align_corners,
+        "antialias": args.interpolation_antialias
+    }
     metrics = evaluate(
-        model = model, 
+        model = model,
         dataset = dataset, 
         is_video = args.is_video,
         output_dir = args.output_dir,
@@ -299,6 +333,7 @@ def main():
         bdrate = args.bdrate,
         decoding = args.decoding,
         detection = args.detection,
+        interpolation = interpolation,
     )
 
     # Print mean

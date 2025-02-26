@@ -70,6 +70,7 @@ class Wam(nn.Module):
         imgs: torch.Tensor,
         masks: torch.Tensor,
         msgs: torch.Tensor = None,
+        interpolation: dict = {"mode": "bilinear", "align_corners": False, "antialias": True},
     ) -> dict:
         """
         Does the full forward pass of the WAM model (used for training).
@@ -81,12 +82,26 @@ class Wam(nn.Module):
         if msgs is None:
             msgs = self.get_random_msg(imgs.shape[0])  # b x k
             msgs = msgs.to(imgs.device)
+
+        # interpolate
+        imgs_res = imgs.clone()
+        if imgs.shape[-2:] != (self.img_size, self.img_size):
+            imgs_res = F.interpolate(imgs, size=(self.img_size, self.img_size),
+                                     **interpolation)
+
         # generate watermarked images
         if self.embedder.yuv:  # take y channel only
-            preds_w = self.embedder(self.rgb2yuv(imgs)[:, 0:1], msgs)
+            preds_w = self.embedder(self.rgb2yuv(imgs_res)[:, 0:1], msgs)
         else:
-            preds_w = self.embedder(imgs, msgs)
+            preds_w = self.embedder(imgs_res, msgs)
+
+        # interpolate back
+        if imgs.shape[-2:] != (self.img_size, self.img_size):
+            preds_w = F.interpolate(preds_w, size=imgs.shape[-2:],
+                                    **interpolation)
+        preds_w = preds_w.to(imgs.device)
         imgs_w = self.blender(imgs, preds_w)
+
         # apply attenuation and clamp
         if self.attenuation is not None:
             self.attenuation.to(imgs.device)
@@ -95,7 +110,13 @@ class Wam(nn.Module):
             imgs_w = torch.clamp(imgs_w, 0, 1)
         # augment
         imgs_aug, masks, selected_aug = self.augmenter(
-            imgs_w, imgs, masks, is_video=False)
+            imgs_w, imgs, masks, is_video=False, do_resize=False)
+
+        # interpolate back
+        if imgs_aug.shape[-2:] != (self.img_size, self.img_size):
+            imgs_aug = F.interpolate(imgs_aug, size=(self.img_size, self.img_size),
+                                        **interpolation)
+            
         # detect watermark
         preds = self.detector(imgs_aug)
         # create and return outputs
