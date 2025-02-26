@@ -17,9 +17,9 @@ augs:
   contrast:           1
   saturation:         1
   hue:                1
-  h264:               1
-  h264rgb:            1
-  h265:               1
+  h264:               0
+  h264rgb:            0
+  h265:               0
 
 augs_params:
   resize:

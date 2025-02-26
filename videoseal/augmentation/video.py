@@ -83,7 +83,7 @@ class VideoCompression(nn.Module):
             stream.options = {
                 'crf': str(self.crf), 
                 'threads': str(self.threads), 
-                'x265-params': 'log_level=none'  # Disable x265 logging
+                'x265-params': 'log_level=none',  # Disable x265 logging
             }
             for frame_arr in frames:
                 frame = av.VideoFrame.from_ndarray(frame_arr, format='rgb24')
@@ -249,7 +249,7 @@ class VP9(VideoCompression):
 class AV1(VideoCompression):
     def __init__(self, min_crf=None, max_crf=None, fps=24):
         super(AV1, self).__init__(
-            codec='libaom-av1', fps=fps)
+            codec='libsvtav1', fps=fps)
         self.min_crf = min_crf
         self.max_crf = max_crf
 
@@ -285,17 +285,25 @@ def compress_decompress(frames, codec='libx264', crf=28, fps=24) -> torch.Tensor
 
 
 if __name__ == "__main__":    
+    import os
     import time
     from videoseal.data.loader import load_video
+    from torchvision.utils import save_image
+
     vid_o = 'assets/videos/sa-v/sav_013754.mp4'
     print("> test compression")
 
     vid_o = load_video(vid_o)
     vid_o = vid_o[:60]  # Use only the first 60 frames
 
+    # Create the output directory
+    output_dir = "outputs"
+    os.makedirs(output_dir, exist_ok=True)
+
     # h264, h264rgb, h265, vp9, av1 (slow)
-    for codec in ['libx264', 'libx264rgb', 'libx265', 'libvpx-vp9', 'libaom-av1']:
-        crfs = [28, 34, 40, 46] if codec != 'libvpx-vp9' else [-1]
+    # for codec in ['libx264', 'libx264rgb', 'libx265', 'libvpx-vp9', 'libaom-av1']:
+    for codec in ['libx264', 'libx264rgb', 'libx265', 'libvpx-vp9']:
+        crfs = [28, 34, 40, 46] if codec not in ['libvpx-vp9'] else [-1]
         for crf in crfs:
             try:
                 compressor = VideoCompression(codec=codec, crf=crf)
@@ -304,5 +312,17 @@ if __name__ == "__main__":
                 end = time.time()
                 mse = torch.nn.functional.mse_loss(vid_o, compressed_frames)
                 print(f"Codec: {codec}, CRF: {crf} - MSE: {mse:.2e} - Time: {end - start:.2f}s")
+
+                # Save first, middle and last frame of both original and compressed video
+                indices = [0, len(vid_o)//2, -1]
+                for idx in indices:
+                    # Create filename
+                    filename = f"{codec.replace('lib', '')}_crf_{crf}_frame_{idx}.png"
+                    # Stack original and compressed frame side by side
+                    comparison = torch.cat([vid_o[idx], compressed_frames[idx]], dim=2)
+                    # Save the comparison image
+                    save_image(comparison.clamp(0, 1), os.path.join(output_dir, filename))
+                    print(f"Saved comparison frame {idx} to:", os.path.join(output_dir, filename))
+
             except Exception as e:
                 print(f":warning: An error occurred with {codec}: {str(e)}")

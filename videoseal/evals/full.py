@@ -252,7 +252,7 @@ def main():
 
     group = parser.add_argument_group('Model parameters to override. If not provided, the checkpoint values are used.')
     group.add_argument("--attenuation_config", type=str, default="configs/attenuation.yaml",
-       help="Path to the attenuation config file")
+                        help="Path to the attenuation config file")
     group.add_argument("--attenuation", type=str, default="None",
                         help="Attenuation model to use")
     group.add_argument("--lowres_attenuation", type=bool_inst, default=False,

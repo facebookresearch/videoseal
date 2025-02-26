@@ -62,7 +62,7 @@ def get_validation_augs(
             (H264(),              [23, 30, 40, 50]),
             (H264rgb(),           [23, 30, 40, 50]),
             (H265(),              [23, 30, 40, 50]),  # crf > 50 is not valid
-            (AV1(),               [23, 30, 40, 50]),
+            (VP9(),               [-1]),
             (Sequential(H264(), Crop(), Brightness()), [(23, 0.71, 0.5)]),
             (Sequential(H264(), Crop(), Brightness()), [(30, 0.71, 0.5)]),
             (Sequential(H264(), Crop(), Brightness()), [(40, 0.71, 0.5)]),
