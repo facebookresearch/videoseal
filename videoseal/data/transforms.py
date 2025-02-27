@@ -11,10 +11,14 @@ default_transform = transforms.Compose([
 class RGB2YUV(nn.Module):
     def __init__(self):
         super(RGB2YUV, self).__init__()
-        M = torch.tensor([[0.299, 0.587, 0.114],
-                          [-0.14713, -0.28886, 0.436],
-                          [0.615, -0.51499, -0.10001]], dtype=torch.float32)
-        self.M = nn.Parameter(M, requires_grad=False)
+        # M = torch.tensor([[0.299, 0.587, 0.114],
+        #                   [-0.14713, -0.28886, 0.436],
+        #                   [0.615, -0.51499, -0.10001]], dtype=torch.float32)
+        # self.M = nn.Parameter(M, requires_grad=False)
+        self.register_buffer('M', torch.tensor([[0.299, 0.587, 0.114],
+                                                [-0.14713, -0.28886, 0.436],
+                                                [0.615, -0.51499, -0.10001]], dtype=torch.float32)
+        )
 
     def forward(self, x):
         x = x.permute(0, 2, 3, 1).contiguous()  # b h w c
