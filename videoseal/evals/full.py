@@ -259,7 +259,7 @@ def main():
                         help="Whether to do attenuation at low resolution")
     group.add_argument("--img_size_proc", type=int, default=256, 
                         help="Size of the input images for interpolation in the embedder/extractor models")
-    group.add_argument("--scaling_w", type=float, default=None,
+    group.add_argument("--scaling_w", default=None,
                         help="Scaling factor for the watermark in the embedder model")
     group.add_argument('--videowam_chunk_size', type=int, default=32, 
                         help='Number of frames to chunk during forward pass')
