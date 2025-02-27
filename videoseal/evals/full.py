@@ -287,6 +287,10 @@ def main():
 
     args = parser.parse_args()
 
+    # change some of the params to accept None from json
+    if args.scaling_w in ['None', 'none', -1]:
+        args.scaling_w = None
+
     # Setup the model
     model = setup_model_from_checkpoint(args.checkpoint)
     model.eval()

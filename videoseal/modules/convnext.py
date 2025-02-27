@@ -1,10 +1,14 @@
-
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 
 # All rights reserved.
 
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
+
+"""
+Test with:
+    python -m videoseal.modules.convnext
+"""
 
 import torch
 import torch.nn as nn
@@ -183,3 +187,12 @@ def convnextv2_large(**kwargs):
 def convnextv2_huge(**kwargs):
     model = ConvNeXtV2(depths=[3, 3, 27, 3], dims=[352, 704, 1408, 2816], **kwargs)
     return model
+
+
+if __name__ == '__main__':
+    model = convnextv2_tiny()
+    x = torch.randn(1, 3, 256, 256)
+    y = model(x)
+    print(y.shape)
+    print(model)
+    print("ConvNeXtV2 model created successfully.")
