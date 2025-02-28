@@ -784,7 +784,10 @@ def eval_one_epoch(
 
             # forward embedder
             embed_time = time.time()
-            outputs = wam.embed(imgs, is_video=is_video)
+            if params.lowres_attenuation:
+                outputs = wam.embed(imgs, is_video=is_video)
+            else:
+                outputs = wam.embed_lowres_attenuation(imgs, is_video=is_video)
             embed_time = (time.time() - embed_time) / imgs.shape[0]
             msgs = outputs["msgs"].to(device)  # b k
             imgs_w = outputs["imgs_w"]  # b c h w
