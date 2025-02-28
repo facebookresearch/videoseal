@@ -221,8 +221,12 @@ class Wam(nn.Module):
 
         # generate watermark in low resolution
         if self.embedder.yuv:  # take y channel only
-            imgs_res = self.rgb2yuv(imgs_res)[:, 0:1]
-        preds_w = self.embedder(imgs_res, msgs.to(self.device))
+            preds_w = self.embedder(
+                self.rgb2yuv(imgs_res)[:, 0:1], 
+                msgs.to(self.device)
+            )
+        else:
+            preds_w = self.embedder(imgs_res, msgs.to(self.device))
         
         # attenuate in low resolution if needed
         if self.attenuation is not None:

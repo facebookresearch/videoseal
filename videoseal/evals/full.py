@@ -7,9 +7,12 @@ python -m videoseal.evals.full \
     --dataset sa-v --is_video true --num_samples 1 \
 
 python -m videoseal.evals.full \
-    --checkpoint /checkpoint/pfz/2025_logs/0207_vseal_y_64bits_scalingw_schedule/_scaling_w_schedule=0_scaling_w=0.1/checkpoint900.pth \
-    --dataset sa-1b-full-resized --is_video false --num_samples 10 --save_first 10 --attenuation simplified_jnd_variance_clamp --scaling_w 0.025
+    --dataset sa-1b-full-resized --is_video false --num_samples 10 --save_first 10 --attenuation none --scaling_w 0.025 \
+    --checkpoint  /checkpoint/pfz/2025_logs/0226_vseal_128bits_ftvid_complete_bis/_optimizer=AdamW,lr=1e-6_finetune_detector_start=2000_augmentation_config=0/checkpoint200.pth 
 
+    --dataset sa-1b-full-resized --is_video false --num_samples 10 --save_first 10 --attenuation simplified_jnd_variance_clamp --scaling_w 0.025
+    --checkpoint /checkpoint/pfz/2025_logs/0207_vseal_y_64bits_scalingw_schedule/_scaling_w_schedule=0_scaling_w=0.1/checkpoint900.pth \
+    
 python -m videoseal.evals.full \
     --checkpoint /checkpoint/pfz/2025_logs/0219_vseal_convnextextractor/_nbits=128_lambda_i=0.1_embedder_model=1/checkpoint600.pth \
     --dataset sa-v --is_video true --num_samples 10 --save_first 10 --attenuation None --scaling_w 0.016 \
@@ -296,7 +299,7 @@ def main():
     model.eval()
     
     # Override model parameters in args
-    model.blender.scaling_w = args.scaling_w or model.blender.scaling_w
+    model.blender.scaling_w = float(args.scaling_w or model.blender.scaling_w)
     model.chunk_size = args.videowam_chunk_size or model.chunk_size
     model.step_size = args.videowam_step_size or model.step_size
     model.video_mode = args.videowam_mode or model.mode
