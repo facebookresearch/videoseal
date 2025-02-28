@@ -44,6 +44,7 @@ class VideoWam(Wam):
         step_size: int = 4,
         blending_method: str = "additive",
         video_mode: str = "repeat",
+        lowres_attenuation: bool = False,
     ) -> None:
         """
         Initializes the VideoWam model.
@@ -74,6 +75,7 @@ class VideoWam(Wam):
         self.chunk_size = chunk_size  # encode 8 frames/imgs at a time
         self.step_size = step_size  # propagate the wm to 4 next frame/img
         self.video_mode = video_mode  # repeat, alternate or interpolate
+        self.lowres_attenuation = lowres_attenuation
 
     @staticmethod
     def _apply_video_mode(preds_w: torch.Tensor, total_frames: int, step_size: int, video_mode: str) -> torch.Tensor:
@@ -192,20 +194,40 @@ class VideoWam(Wam):
         else:
             key_frame_preds = self.embedder(imgs_res[::self.step_size], msgs[::self.step_size])
 
-        # interpolate predictions back to original size
-        if imgs.shape[-2:] != (self.img_size, self.img_size):
-            key_frame_preds = F.interpolate(key_frame_preds, size=imgs.shape[-2:],
-                                            **interpolation)
-        key_frame_preds = key_frame_preds.to(imgs.device)
+        # apply video mode to expand predictions across all frames
+        preds_w = self._apply_video_mode(key_frame_preds, len(imgs_res), self.step_size, self.video_mode)
 
-        # apply video mode and blend
-        preds_w = self._apply_video_mode(key_frame_preds, len(imgs), self.step_size, self.video_mode)
-        imgs_w = self.blender(imgs, preds_w)  # frames c h w
+        # Handle attenuation based on the lowres_attenuation flag
+        if self.lowres_attenuation and self.attenuation is not None:
+            # Apply attenuation at low resolution
+            self.attenuation.to(imgs_res.device)
+            hmaps = self.attenuation.heatmaps(imgs_res)
+            preds_w = hmaps * preds_w
 
-        # apply attenuation and clamp
-        if self.attenuation is not None:
-            self.attenuation.to(imgs.device)
-            imgs_w = self.attenuation(imgs, imgs_w)
+            # interpolate predictions back to original size
+            if imgs.shape[-2:] != (self.img_size, self.img_size):
+                preds_w = F.interpolate(preds_w, size=imgs.shape[-2:],
+                                        **interpolation)
+            preds_w = preds_w.to(imgs.device)
+            
+            # blend with no additional attenuation
+            imgs_w = self.blender(imgs, preds_w)  # frames c h w
+        else:
+            # interpolate predictions back to original size
+            if imgs.shape[-2:] != (self.img_size, self.img_size):
+                preds_w = F.interpolate(preds_w, size=imgs.shape[-2:],
+                                        **interpolation)
+            preds_w = preds_w.to(imgs.device)
+            
+            # blend
+            imgs_w = self.blender(imgs, preds_w)  # frames c h w
+
+            # apply attenuation at full resolution
+            if self.attenuation is not None:
+                self.attenuation.to(imgs.device)
+                imgs_w = self.attenuation(imgs, imgs_w)
+
+        # always apply clamping
         if self.clamp:
             imgs_w = torch.clamp(imgs_w, 0, 1)
 

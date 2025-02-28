@@ -145,6 +145,8 @@ def get_parser():
        help="The number of frames to encode at a time.")
     aa("--videowam_step_size", type=int, default=4,
        help="The number of frames to propagate the watermark to.")
+    aa("--lowres_attenuation", type=utils.bool_inst, default=False,
+       help="Apply attenuation at low resolution for high-res images (more memory efficient)")
 
     group = parser.add_argument_group('Optimizer parameters')
     aa("--optimizer", type=str, default="AdamW,lr=1e-4",
@@ -305,7 +307,8 @@ def main(params):
                    img_size=params.img_size_proc,
                    chunk_size=params.videowam_chunk_size,
                    step_size=params.videowam_step_size,
-                   blending_method=params.blending_method)
+                   blending_method=params.blending_method,
+                   lowres_attenuation=params.lowres_attenuation)
     wam = wam.to(device)
     # print(wam)
 

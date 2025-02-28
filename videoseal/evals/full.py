@@ -7,6 +7,9 @@ python -m videoseal.evals.full \
     --dataset sa-v --is_video true --num_samples 1 \
 
 python -m videoseal.evals.full \
+    --scaling_w none --checkpoint baselines/cin --lowres_attenuation True --videowam_mode repeat --save_first 10 --bdrate False --videowam_step_size 4 --num_samples 100 --dataset sa-1b-full-resized --is_video false
+    
+python -m videoseal.evals.full \
     --dataset sa-1b-full-resized --is_video false --num_samples 10 --save_first 10 --attenuation none --scaling_w 0.025 \
     --checkpoint  /checkpoint/pfz/2025_logs/0226_vseal_128bits_ftvid_complete_bis/_optimizer=AdamW,lr=1e-6_finetune_detector_start=2000_augmentation_config=0/checkpoint200.pth 
 
