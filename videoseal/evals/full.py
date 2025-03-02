@@ -263,7 +263,7 @@ def main():
                         help="Attenuation model to use")
     group.add_argument("--lowres_attenuation", type=bool_inst, default=False,
                         help="Whether to do attenuation at low resolution")
-    group.add_argument("--img_size_proc", type=int, default=256, 
+    group.add_argument("--img_size_proc", type=int, default=None, 
                         help="Size of the input images for interpolation in the embedder/extractor models")
     group.add_argument("--scaling_w", default=None,
                         help="Scaling factor for the watermark in the embedder model")

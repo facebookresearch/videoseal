@@ -158,7 +158,7 @@ def main(args):
         if args.do_flops:
             channels = 1 if 'yuv' in embedder_name else 3
             flops, macs, params = get_flops(
-                embedder, channels, args.img_size_work, device)
+                embedder, channels, args.img_size_proc, device)
             result.update({
                 'gflops': flops / 1e9,
                 'gmacs': macs / 1e9,
@@ -169,7 +169,7 @@ def main(args):
             channels = 1 if 'yuv' in embedder_name else 3
             data_loader = get_data_loader(args.batch_size, args.img_size, channels, args.workers, args.nsamples)
             embedder_stats = benchmark_model(
-                embedder, args.img_size_work, data_loader, device)
+                embedder, args.img_size_proc, data_loader, device)
             result.update({
                 # 'model': embedder_name,
                 # 'params': sum(p.numel() for p in embedder.parameters() if p.requires_grad) / 1e6,
@@ -185,13 +185,13 @@ def main(args):
             continue
         extractor_args = extractor_cfg[extractor_name]
         extractor = build_extractor(
-            extractor_name, extractor_args, args.img_size_work, args.nbits)
+            extractor_name, extractor_args, args.img_size_proc, args.nbits)
         extractor = extractor.to(device)
         # flops
         if args.do_flops:
             channels = 1 if 'yuv' in extractor_name else 3
             flops, macs, params = get_flops(
-                extractor, channels, args.img_size_work, device)
+                extractor, channels, args.img_size_proc, device)
             result.update({
                 'gflops': flops / 1e9,
                 'gmacs': macs / 1e9,
@@ -202,7 +202,7 @@ def main(args):
             channels = 1 if 'yuv' in extractor_name else 3
             data_loader = get_data_loader(args.batch_size, args.img_size, channels, args.workers, args.nsamples)
             extractor_stats = benchmark_model(
-                extractor, args.img_size_work, data_loader, device)
+                extractor, args.img_size_proc, data_loader, device)
             result.update({
                 # 'model': extractor_name,
                 # 'params': sum(p.numel() for p in extractor.parameters() if p.requires_grad) / 1e6,
@@ -226,7 +226,7 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size', type=int, default=16)
     parser.add_argument('--nsamples', type=int, default=100)
     parser.add_argument('--img_size', type=int, default=512)
-    parser.add_argument('--img_size_work', type=int, default=256)
+    parser.add_argument('--img_size_proc', type=int, default=256)
     parser.add_argument('--workers', type=int, default=4)
     parser.add_argument('--embedder_config', type=str,
                         default='configs/embedder.yaml')
@@ -236,7 +236,7 @@ if __name__ == '__main__':
     parser.add_argument('--extractor_models', type=str, default=None)
     parser.add_argument('--nbits', type=int, default=32)
     parser.add_argument('--hidden_size_multiplier', type=int
-                        , default=2)
+                        , default=1)
     parser.add_argument('--output_dir', type=str, default='output')
     parser.add_argument('--do_flops', type=bool_inst, default=True, 
                         help='Calculate FLOPS for each model')
