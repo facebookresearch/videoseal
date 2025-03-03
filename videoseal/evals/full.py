@@ -62,6 +62,7 @@ def evaluate(
     detection: bool = False,
     interpolation: dict = {"mode": "bilinear", "align_corners": False, "antialias": True},
     lowres_attenuation: bool = False,
+    skip_image_metrics: bool = False,
 ):
     """
     Gives detailed evaluation metrics for a model on a given dataset.
@@ -73,13 +74,14 @@ def evaluate(
         num_frames (int): Number of frames to evaluate for video quality and extraction (default: 24*3 i.e. 3seconds)
         decoding (bool): Whether to evaluate decoding metrics (default: True)
         detection (bool): Whether to evaluate detection metrics (default: False)
+        skip_image_metrics (bool): Whether to skip computing image quality metrics (default: False)
     """
     all_metrics = []
     validation_augs = get_validation_augs(is_video, only_identity)
     timer = Timer()
 
     # create lpips
-    lpips_loss = LPIPS(net="alex").eval()
+    lpips_loss = LPIPS(net="alex").eval() if not skip_image_metrics else None
 
     # save the metrics as csv
     metrics_path = os.path.join(output_dir, "metrics.csv")
@@ -104,6 +106,7 @@ def evaluate(
 
             # forward embedder, at any resolution
             # does cpu -> gpu -> cpu when gpu is available
+            print(f"embedding")
             timer.start()
             if lowres_attenuation:
                 outputs = model.embed_lowres_attenuation(imgs, is_video=is_video, interpolation=interpolation)
@@ -120,40 +123,42 @@ def evaluate(
             masks = masks[:num_frames]  # f 1 h w
 
             # compute qualitative metrics
-            metrics['psnr'] = psnr(
-                imgs_w[:num_frames], 
-                imgs[:num_frames],
-                is_video).mean().item()
-            metrics['ssim'] = ssim(
-                imgs_w[:num_frames], 
-                imgs[:num_frames]).mean().item()
-            metrics['msssim'] = msssim(
-                imgs_w[:num_frames], 
-                imgs[:num_frames]).mean().item()
-            metrics['lpips'] = lpips_loss(
-                2*imgs_w[:num_frames]-1, 
-                2*imgs[:num_frames]-1).mean().item()
-            if is_video:
-                timer.start()
-                metrics['vmaf'] = vmaf_on_tensor(
-                    imgs_w[:num_frames], imgs[:num_frames])
-                metrics['vmaf_time'] = timer.end()
+            if not skip_image_metrics:
+                print(f"Computing img metrics for iteration {it}")
+                metrics['psnr'] = psnr(
+                    imgs_w[:num_frames], 
+                    imgs[:num_frames],
+                    is_video).mean().item()
+                metrics['ssim'] = ssim(
+                    imgs_w[:num_frames], 
+                    imgs[:num_frames]).mean().item()
+                metrics['msssim'] = msssim(
+                    imgs_w[:num_frames], 
+                    imgs[:num_frames]).mean().item()
+                metrics['lpips'] = lpips_loss(
+                    2*imgs_w[:num_frames]-1, 
+                    2*imgs[:num_frames]-1).mean().item()
+                if is_video:
+                    timer.start()
+                    metrics['vmaf'] = vmaf_on_tensor(
+                        imgs_w[:num_frames], imgs[:num_frames])
+                    metrics['vmaf_time'] = timer.end()
 
-            # bdrate
-            if bdrate and is_video:
-                r1, vmaf1, r2, vmaf2 = [], [], [], []
-                for crf in [28, 34, 40, 46]:
-                    vmaf_score, aux = vmaf_on_tensor(imgs, return_aux=True, crf=crf)
-                    r1.append(aux['bps2'])
-                    vmaf1.append(vmaf_score)
-                    vmaf_score, aux = vmaf_on_tensor(imgs_w, return_aux=True, crf=crf)
-                    r2.append(aux['bps2'])
-                    vmaf2.append(vmaf_score)
-                metrics['r1'] = '_'.join(str(x) for x in r1)
-                metrics['vmaf1'] = '_'.join(str(x) for x in vmaf1)
-                metrics['r2'] = '_'.join(str(x) for x in r2)
-                metrics['vmaf2'] = '_'.join(str(x) for x in vmaf2)
-                metrics['bd_rate'] = bd_rate(r1, vmaf1, r2, vmaf2) 
+                # bdrate
+                if bdrate and is_video:
+                    r1, vmaf1, r2, vmaf2 = [], [], [], []
+                    for crf in [28, 34, 40, 46]:
+                        vmaf_score, aux = vmaf_on_tensor(imgs, return_aux=True, crf=crf)
+                        r1.append(aux['bps2'])
+                        vmaf1.append(vmaf_score)
+                        vmaf_score, aux = vmaf_on_tensor(imgs_w, return_aux=True, crf=crf)
+                        r2.append(aux['bps2'])
+                        vmaf2.append(vmaf_score)
+                    metrics['r1'] = '_'.join(str(x) for x in r1)
+                    metrics['vmaf1'] = '_'.join(str(x) for x in vmaf1)
+                    metrics['r2'] = '_'.join(str(x) for x in r2)
+                    metrics['vmaf2'] = '_'.join(str(x) for x in vmaf2)
+                    metrics['bd_rate'] = bd_rate(r1, vmaf1, r2, vmaf2)
 
             # save images and videos
             if it < save_first:
@@ -281,6 +286,7 @@ def main():
     group.add_argument('--bdrate', type=bool_inst, default=False, help='Whether to compute BD-rate')
     group.add_argument('--decoding', type=bool_inst, default=True, help='Whether to evaluate decoding metrics')
     group.add_argument('--detection', type=bool_inst, default=False, help='Whether to evaluate detection metrics')
+    group.add_argument('--skip_image_metrics', type=bool_inst, default=False, help='Whether to skip computing image quality metrics')
 
     group = parser.add_argument_group('Interpolation')
     group.add_argument('--interpolation_mode', type=str, default='bilinear',
@@ -352,6 +358,7 @@ def main():
         detection = args.detection,
         interpolation = interpolation,
         lowres_attenuation = args.lowres_attenuation,
+        skip_image_metrics = args.skip_image_metrics,
     )
 
     # Print mean
@@ -362,4 +369,4 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    main() 

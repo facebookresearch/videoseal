@@ -43,7 +43,7 @@ def get_validation_augs(
         augs = [
             (Identity(),          [0]),  # No parameters needed for identity
         ]
-    if is_video:
+    elif is_video:
         # less augs for videos because more expensive
         augs = [
             (Identity(),          [0]),  # No parameters needed for identity
