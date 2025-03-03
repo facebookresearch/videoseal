@@ -1,6 +1,6 @@
 from .sequential import Sequential
 from .geometric import Crop, HorizontalFlip, Identity, Perspective, Resize, Rotate
-from .valuemetric import JPEG, Brightness, Contrast, GaussianBlur, Hue, MedianFilter, Saturation
+from .valuemetric import JPEG, Brightness, Contrast, GaussianBlur, Grayscale, Hue, MedianFilter, Saturation
 from .video import H264, H264rgb, H265, VP9, AV1
 
 
@@ -56,6 +56,7 @@ def get_validation_augs(
             (Contrast(),          [0.5, 1.5]),
             (Saturation(),        [0.5, 1.5]),
             (Hue(),               [0.25]),
+            (Grayscale(),         [-1]),  # No parameters needed for grayscale
             (JPEG(),              [40]),
             (GaussianBlur(),      [9]),
             # (MedianFilter(),      [9]),
@@ -79,6 +80,7 @@ def get_validation_augs(
             (Brightness(),        [0.1, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0]),
             (Contrast(),          [0.1, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0]),
             (Hue(),               [-0.4, -0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3, 0.4, 0.5]),
+            (Grayscale(),         [-1]),  # No parameters needed for grayscale
             (JPEG(),              [40, 50, 60, 70, 80, 90]),
             (GaussianBlur(),      [3, 5, 9, 13, 17]),
             # (MedianFilter(),      [3, 5, 9, 13, 17]),
