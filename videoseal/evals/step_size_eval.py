@@ -1,7 +1,7 @@
 """
 python -m videoseal.evals.step_size_eval \
     --checkpoint /checkpoint/pfz/2025_logs/0226_vseal_ydisc_mult1_bis/_scaling_w_schedule=1_scaling_w=1.0_attenuation=jnd_1_1_hidden_size_multiplier=1/checkpoint600.pth  --lowres_attenuation true \
-    --dataset sa-v --is_video true --num_samples 10 --save_first -1 --skip_image_metrics true  --only_combined \
+    --dataset sa-v --is_video true --num_samples 10 --save_first -1 --skip_image_metrics true  --only_combined true \
     --step_sizes 1 2 4 8 16 \
     --output_dir output/step_size_eval_combined
 """
