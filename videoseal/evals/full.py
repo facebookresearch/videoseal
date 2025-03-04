@@ -57,6 +57,7 @@ def evaluate(
     num_frames: int = 24*3,
     video_aggregation: str = "avg",
     only_identity: bool = False,
+    only_combined: bool = False,
     bdrate: bool = True,
     decoding: bool = True,
     detection: bool = False,
@@ -72,12 +73,15 @@ def evaluate(
         is_video (bool): Whether the data is video
         output_dir (str): Directory to save the output images
         num_frames (int): Number of frames to evaluate for video quality and extraction (default: 24*3 i.e. 3seconds)
+        video_aggregation (str): Aggregation method for detection of video frames
+        only_identity (bool): Whether to only evaluate the identity augmentation
+        only_combined (bool): Whether to only evaluate combined augmentations
         decoding (bool): Whether to evaluate decoding metrics (default: True)
         detection (bool): Whether to evaluate detection metrics (default: False)
         skip_image_metrics (bool): Whether to skip computing image quality metrics (default: False)
     """
     all_metrics = []
-    validation_augs = get_validation_augs(is_video, only_identity)
+    validation_augs = get_validation_augs(is_video, only_identity, only_combined)
     timer = Timer()
 
     # create lpips
@@ -181,6 +185,7 @@ def evaluate(
                     # metrics['save_vid_time'] = timer.end()
 
             # extract watermark and evaluate robustness
+            print(f"extracting")
             if detection or decoding:
                 # masks, for now, are all ones
                 masks = torch.ones_like(imgs[:, :1])  # b 1 h w
@@ -283,6 +288,7 @@ def main():
     group.add_argument("--output_dir", type=str, default="output/", help="Output directory for logs and images (Default: /output)")
     group.add_argument('--save_first', type=int, default=-1, help='Number of images/videos to save')
     group.add_argument('--only_identity', type=bool_inst, default=False, help='Whether to only evaluate the identity augmentation')
+    group.add_argument('--only_combined', type=bool_inst, default=False, help='Whether to only evaluate combined augmentations')
     group.add_argument('--bdrate', type=bool_inst, default=False, help='Whether to compute BD-rate')
     group.add_argument('--decoding', type=bool_inst, default=True, help='Whether to evaluate decoding metrics')
     group.add_argument('--detection', type=bool_inst, default=False, help='Whether to evaluate detection metrics')
@@ -353,6 +359,7 @@ def main():
         num_frames = args.num_frames,
         video_aggregation = args.video_aggregation,
         only_identity = args.only_identity,
+        only_combined = args.only_combined,
         bdrate = args.bdrate,
         decoding = args.decoding,
         detection = args.detection,
@@ -369,4 +376,4 @@ def main():
 
 
 if __name__ == '__main__':
-    main() 
+    main()

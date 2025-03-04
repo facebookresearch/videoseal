@@ -32,17 +32,42 @@ def get_validation_augs_subset(
     return augs
 
 
+def get_combined_augs(is_video: bool = False) -> list:
+    """
+    Get only the combined augmentations for validation.
+    """
+    if is_video:
+        augs = [
+            (Identity(),          [0]),  # Always include identity for baseline
+            (Sequential(H264(), Crop(), Brightness()), [(30, 0.71, 0.5)]),
+            (Sequential(H264(), Crop(), Brightness()), [(40, 0.71, 0.5)]),
+        ]
+    else:
+        augs = [
+            (Identity(),          [0]),  # Always include identity for baseline
+            (Sequential(JPEG(), Crop(), Brightness()), [(40, 0.71, 0.5)]),
+        ]
+    return augs
+
+
 def get_validation_augs(
     is_video: bool = False,
-    only_identity: bool = False
+    only_identity: bool = False,
+    only_combined: bool = False
 ) -> list:
     """
     Get the validation augmentations.
+    Args:
+        is_video (bool): Whether the data is video
+        only_identity (bool): Whether to only use identity augmentation
+        only_combined (bool): Whether to only use combined augmentations
     """
     if only_identity:
         augs = [
             (Identity(),          [0]),  # No parameters needed for identity
         ]
+    elif only_combined:
+        augs = get_combined_augs(is_video)
     elif is_video:
         # less augs for videos because more expensive
         augs = [
