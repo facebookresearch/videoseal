@@ -9,37 +9,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import random
-
-
-class DropFrameAugmenter(nn.Module):
-    """
-    It randomly replaces random frames with the adjacent ones.
-
-    Attributes:
-        drop_frame_prob (float): Probability that a frame is replaced by its neighbour.
-    """
-
-    def __init__(self, drop_frame_prob=0.125):
-        super(DropFrameAugmenter, self).__init__()
-        self.drop_frame_prob = drop_frame_prob
-
-    def forward(self, frames, mask=None, *args, **kwargs) -> torch.Tensor:
-        """
-        Parameters:
-            frames (torch.Tensor): Video frames as a tensor with shape (T, C, H, W).
-            mask (torch.Tensor): Optional mask for the video frames.
-        Returns:
-            torch.Tensor: Video frames as a tensor with shape (T, C, H, W).
-        """
-        output = frames.clone()
-        for i in range(len(frames)):
-            if random.random() >= self.drop_frame_prob:
-                continue
-
-            diff_ = -1 if random.random() < 0.5 else 1
-            new_i = (i + diff_) % len(frames)
-            output[i] = frames[new_i]
-        return output, mask
+import torch.nn.functional as F
 
 
 class VideoCompression(nn.Module):
@@ -284,6 +254,358 @@ def compress_decompress(frames, codec='libx264', crf=28, fps=24) -> torch.Tensor
     return compressor(frames)
 
 
+class SpeedChange(nn.Module):
+    """
+    Changes the speed of the video by duplicating or dropping frames.
+    
+    Attributes:
+        min_speed (float): Minimum speed factor (values < 1 slow down the video).
+        max_speed (float): Maximum speed factor (values > 1 speed up the video).
+    """
+    
+    def __init__(self, min_speed=0.5, max_speed=1.5):
+        super(SpeedChange, self).__init__()
+        self.min_speed = min_speed
+        self.max_speed = max_speed
+    
+    def get_random_speed(self):
+        """Randomly select a speed factor within the specified range."""
+        if self.min_speed is None or self.max_speed is None:
+            raise ValueError("min_speed and max_speed must be provided")
+        return random.uniform(self.min_speed, self.max_speed)
+    
+    def forward(self, frames, mask=None, speed_factor=None, *args, **kwargs):
+        """
+        Parameters:
+            frames (torch.Tensor): Video frames as a tensor with shape (T, C, H, W).
+            mask (torch.Tensor): Optional mask for the video frames.
+            speed_factor (float): Specific speed factor to use. If None, a random one is selected.
+        
+        Returns:
+            torch.Tensor: Video frames with adjusted speed, with shape (T, C, H, W).
+        """
+        num_frames = frames.shape[0]
+        
+        # Use provided speed factor or get a random one
+        speed_factor = speed_factor if speed_factor is not None else self.get_random_speed()
+        
+        if speed_factor == 1.0:
+            # No change
+            return frames, mask
+        
+        # Calculate new indices
+        if speed_factor < 1.0:  # Slow down (duplicate frames)
+            indices = torch.linspace(0, num_frames - 1, int(num_frames / speed_factor))
+            indices = indices.round().long().clamp(0, num_frames - 1)
+        else:  # Speed up (skip frames)
+            indices = torch.linspace(0, num_frames - 1, int(num_frames * speed_factor))
+            indices = indices[:num_frames].round().long().clamp(0, num_frames - 1)
+            
+        # Use the indices to create the new frames
+        new_frames = frames[indices]
+        new_mask = mask[indices] if mask is not None else None
+        
+        return new_frames, new_mask
+
+    def __repr__(self) -> str:
+        return f"SpeedChange(min_speed={self.min_speed}, max_speed={self.max_speed})"
+
+
+class Resampling(nn.Module):
+    """
+    Resamples video frames by downscaling and then upscaling, simulating quality loss.
+    
+    Attributes:
+        min_scale (float): Minimum scale factor for downsampling.
+        max_scale (float): Maximum scale factor for downsampling.
+        interpolation_modes (list): List of interpolation modes to randomly select from.
+    """
+    
+    def __init__(self, min_scale=0.25, max_scale=0.75, 
+                 interpolation_modes=['nearest', 'bilinear', 'bicubic']):
+        super(Resampling, self).__init__()
+        self.min_scale = min_scale
+        self.max_scale = max_scale
+        self.interpolation_modes = interpolation_modes
+    
+    def get_random_scale(self):
+        """Randomly select a scale factor within the specified range."""
+        if self.min_scale is None or self.max_scale is None:
+            raise ValueError("min_scale and max_scale must be provided")
+        return random.uniform(self.min_scale, self.max_scale)
+    
+    def get_random_modes(self):
+        """Randomly select downsampling and upsampling interpolation modes."""
+        down_mode = random.choice(self.interpolation_modes)
+        up_mode = random.choice(self.interpolation_modes)
+        return down_mode, up_mode
+    
+    def forward(self, frames, mask=None, scale_factor=None, down_mode=None, up_mode=None, *args, **kwargs):
+        """
+        Parameters:
+            frames (torch.Tensor): Video frames as a tensor with shape (T, C, H, W).
+            mask (torch.Tensor): Optional mask for the video frames.
+            scale_factor (float): Specific scale factor to use. If None, a random one is selected.
+            down_mode (str): Specific downsampling interpolation mode. If None, a random one is selected.
+            up_mode (str): Specific upsampling interpolation mode. If None, a random one is selected.
+        
+        Returns:
+            torch.Tensor: Resampled video frames as a tensor with shape (T, C, H, W).
+        """
+        # Use provided parameters or get random ones
+        scale_factor = scale_factor if scale_factor is not None else self.get_random_scale()
+        
+        if down_mode is None or up_mode is None:
+            down_mode_sel, up_mode_sel = self.get_random_modes()
+            down_mode = down_mode if down_mode is not None else down_mode_sel
+            up_mode = up_mode if up_mode is not None else up_mode_sel
+        
+        T, C, H, W = frames.shape
+        
+        # Calculate new dimensions
+        new_h, new_w = int(H * scale_factor), int(W * scale_factor)
+        
+        # Downscale frames
+        frames_down = F.interpolate(
+            frames, size=(new_h, new_w), mode=down_mode, 
+            align_corners=False if down_mode != 'nearest' else None
+        )
+        
+        # Upscale frames back to original size
+        frames_up = F.interpolate(
+            frames_down, size=(H, W), mode=up_mode, 
+            align_corners=False if up_mode != 'nearest' else None
+        )
+        
+        # If mask is provided, apply the same transformation
+        if mask is not None:
+            mask_down = F.interpolate(
+                mask, size=(new_h, new_w), mode='nearest'
+            )
+            mask_up = F.interpolate(
+                mask_down, size=(H, W), mode='nearest'
+            )
+            return frames_up, mask_up
+        
+        return frames_up, mask
+
+    def __repr__(self) -> str:
+        return f"Resampling(min_scale={self.min_scale}, max_scale={self.max_scale})"
+
+
+class TemporalReorder(nn.Module):
+    """
+    Randomly reorders small chunks of frames to create temporal discontinuities.
+    
+    Attributes:
+        min_chunk_size (int): Minimum size of frame chunks to reorder.
+        max_chunk_size (int): Maximum size of frame chunks to reorder.
+        reorder_prob (float): Probability of reordering chunks.
+    """
+    
+    def __init__(self, min_chunk_size=2, max_chunk_size=5, reorder_prob=0.5):
+        super(TemporalReorder, self).__init__()
+        self.min_chunk_size = min_chunk_size
+        self.max_chunk_size = max_chunk_size
+        self.reorder_prob = reorder_prob
+    
+    def get_random_chunk_size(self):
+        """Randomly select a chunk size within the specified range."""
+        if self.min_chunk_size is None or self.max_chunk_size is None:
+            raise ValueError("min_chunk_size and max_chunk_size must be provided")
+        return random.randint(self.min_chunk_size, self.max_chunk_size)
+    
+    def forward(self, frames, mask=None, chunk_size=None, swap_probability=None, *args, **kwargs):
+        """
+        Parameters:
+            frames (torch.Tensor): Video frames as a tensor with shape (T, C, H, W).
+            mask (torch.Tensor): Optional mask for the video frames.
+            chunk_size (int): Specific chunk size to use. If None, a random one is selected.
+            swap_probability (float): Specific swap probability. If None, the preset reorder_prob is used.
+        
+        Returns:
+            torch.Tensor: Video frames with reordered chunks, shape (T, C, H, W).
+        """
+        num_frames = frames.shape[0]
+        
+        # Use provided chunk size or get a random one
+        chunk_size = chunk_size if chunk_size is not None else self.get_random_chunk_size()
+        swap_probability = swap_probability if swap_probability is not None else self.reorder_prob
+        
+        # If video is too short, return original
+        if num_frames < chunk_size * 2:
+            return frames, mask
+        
+        # Calculate number of chunks
+        num_chunks = num_frames // chunk_size
+        
+        # Only use complete chunks
+        usable_frames = num_chunks * chunk_size
+        
+        # Reshape into chunks
+        frame_chunks = frames[:usable_frames].view(num_chunks, chunk_size, *frames.shape[1:])
+        
+        # Create reordering indices for chunks
+        chunk_indices = list(range(num_chunks))
+        
+        # Decide which chunks to reorder
+        chunks_to_reorder = []
+        for i in range(0, num_chunks-1, 2):
+            if random.random() < swap_probability and i+1 < num_chunks:
+                chunks_to_reorder.append(i)
+        
+        # Reorder selected chunk pairs
+        for i in chunks_to_reorder:
+            chunk_indices[i], chunk_indices[i+1] = chunk_indices[i+1], chunk_indices[i]
+        
+        # Apply reordering
+        reordered_chunks = frame_chunks[chunk_indices]
+        
+        # Combine chunks back into a sequence
+        reordered_frames = reordered_chunks.reshape(-1, *frames.shape[1:])
+        
+        # Add back any remaining frames
+        if usable_frames < num_frames:
+            reordered_frames = torch.cat([reordered_frames, frames[usable_frames:]], dim=0)
+        
+        # Handle mask if provided
+        if mask is not None:
+            if usable_frames < num_frames:
+                mask_chunks = mask[:usable_frames].view(num_chunks, chunk_size, *mask.shape[1:])
+                reordered_mask = mask_chunks[chunk_indices].reshape(-1, *mask.shape[1:])
+                reordered_mask = torch.cat([reordered_mask, mask[usable_frames:]], dim=0)
+            else:
+                mask_chunks = mask.view(num_chunks, chunk_size, *mask.shape[1:])
+                reordered_mask = mask_chunks[chunk_indices].reshape(-1, *mask.shape[1:])
+            return reordered_frames, reordered_mask
+        
+        return reordered_frames, mask
+
+    def __repr__(self) -> str:
+        return f"TemporalReorder(min_chunk_size={self.min_chunk_size}, max_chunk_size={self.max_chunk_size}, reorder_prob={self.reorder_prob})"
+
+
+class WindowAveraging(nn.Module):
+    """
+    Applies temporal averaging over a sliding window of frames.
+    
+    This simulates motion blur or interpolated frames often seen in 
+    lower quality video processing.
+    
+    Attributes:
+        min_window_size (int): Minimum size of the averaging window.
+        max_window_size (int): Maximum size of the averaging window.
+        min_alpha (float): Minimum blend strength.
+        max_alpha (float): Maximum blend strength.
+    """
+    
+    def __init__(self, min_window_size=2, max_window_size=5, min_alpha=0.3, max_alpha=0.7):
+        super(WindowAveraging, self).__init__()
+        self.min_window_size = min_window_size
+        self.max_window_size = max_window_size
+        self.min_alpha = min_alpha
+        self.max_alpha = max_alpha
+    
+    def get_random_window_size(self):
+        """Randomly select a window size within the specified range."""
+        if self.min_window_size is None or self.max_window_size is None:
+            raise ValueError("min_window_size and max_window_size must be provided")
+        return random.randint(self.min_window_size, self.max_window_size)
+    
+    def get_random_alpha(self):
+        """Randomly select an alpha blend value within the specified range."""
+        if self.min_alpha is None or self.max_alpha is None:
+            raise ValueError("min_alpha and max_alpha must be provided")
+        return random.uniform(self.min_alpha, self.max_alpha)
+    
+    def forward(self, frames, mask=None, window_size=None, alpha=None, *args, **kwargs):
+        """
+        Parameters:
+            frames (torch.Tensor): Video frames as a tensor with shape (T, C, H, W).
+            mask (torch.Tensor): Optional mask for the video frames.
+            window_size (int): Specific window size to use. If None, a random one is selected.
+            alpha (float): Specific alpha blend value to use. If None, a random one is selected.
+        
+        Returns:
+            torch.Tensor: Averaged video frames as a tensor with shape (T, C, H, W).
+        """
+        num_frames = frames.shape[0]
+        
+        # If the video is too short, return the original
+        if num_frames <= self.min_window_size:
+            return frames, mask
+        
+        # Use provided parameters or get random ones
+        window_size = window_size if window_size is not None else self.get_random_window_size()
+        window_size = min(window_size, num_frames)  # Ensure window size is not larger than video
+        alpha = alpha if alpha is not None else self.get_random_alpha()
+        
+        # Create output frames with the same size as input
+        output_frames = frames.clone()
+        
+        # Apply sliding window averaging
+        for i in range(num_frames):
+            # Calculate window start and end, handling boundary conditions
+            half_window = window_size // 2
+            window_start = max(0, i - half_window)
+            window_end = min(num_frames, i + half_window + 1)
+            
+            # Extract window frames
+            window_frames = frames[window_start:window_end]
+            
+            # Compute average of window frames
+            window_avg = torch.mean(window_frames, dim=0, keepdim=True).squeeze(0)
+            
+            # Blend original frame with window average
+            output_frames[i] = (1 - alpha) * frames[i] + alpha * window_avg
+        
+        return output_frames, mask
+
+    def __repr__(self) -> str:
+        return f"WindowAveraging(min_window={self.min_window_size}, max_window={self.max_window_size})"
+
+
+class DropFrame(nn.Module):
+    """
+    It randomly replaces random frames with the adjacent ones.
+
+    Attributes:
+        drop_frame_prob (float): Probability that a frame is replaced by its neighbour.
+    """
+
+    def __init__(self, drop_frame_prob=0.125):
+        super(DropFrame, self).__init__()
+        self.drop_frame_prob = drop_frame_prob
+
+    def get_random_drop_prob(self):
+        """Return the drop frame probability."""
+        return self.drop_frame_prob
+
+    def forward(self, frames, mask=None, drop_prob=None, *args, **kwargs) -> torch.Tensor:
+        """
+        Parameters:
+            frames (torch.Tensor): Video frames as a tensor with shape (T, C, H, W).
+            mask (torch.Tensor): Optional mask for the video frames.
+            drop_prob (float): Specific drop probability. If None, the preset drop_frame_prob is used.
+        Returns:
+            torch.Tensor: Video frames as a tensor with shape (T, C, H, W).
+        """
+        drop_prob = drop_prob if drop_prob is not None else self.drop_frame_prob
+        
+        output = frames.clone()
+        for i in range(len(frames)):
+            if random.random() >= drop_prob:
+                continue
+
+            diff_ = -1 if random.random() < 0.5 else 1
+            new_i = (i + diff_) % len(frames)
+            output[i] = frames[new_i]
+        return output, mask
+
+    def __repr__(self) -> str:
+        return f"DropFrame(prob={self.drop_frame_prob})"
+
+
 if __name__ == "__main__":    
     import os
     import time
@@ -326,3 +648,100 @@ if __name__ == "__main__":
 
             except Exception as e:
                 print(f":warning: An error occurred with {codec}: {str(e)}")
+
+    # Test the new augmentations
+    print("\n> Testing new augmentations")
+    
+    # Create instances of the augmenters
+    augmenters = {
+        "SpeedChange": SpeedChange(min_speed=0.7, max_speed=1.3),
+        "Resampling": Resampling(min_scale=0.3, max_scale=0.7),
+        "TemporalReorder": TemporalReorder(min_chunk_size=3, max_chunk_size=6, reorder_prob=0.7),
+        "ColorAdjustment": ColorAdjustment(
+            min_brightness=0.8, max_brightness=1.2,
+            min_contrast=0.8, max_contrast=1.2),
+        "DropFrame": DropFrame(drop_frame_prob=0.2),
+        "WindowAveraging": WindowAveraging(min_window_size=2, max_window_size=5, min_alpha=0.3, max_alpha=0.7)
+    }
+    
+    # Test each augmenter with both random and specific parameters
+    for name, augmenter in augmenters.items():
+        try:
+            # Test with random parameters
+            start = time.time()
+            augmented_frames_random, _ = augmenter(vid_o.clone())
+            end = time.time()
+            
+            print(f"Augmenter: {name} (random params) - Time: {end - start:.2f}s")
+            
+            # Test with specific parameters
+            specific_params = {}
+            if name == "SpeedChange":
+                specific_params = {"speed_factor": 0.8}
+            elif name == "Resampling":
+                specific_params = {"scale_factor": 0.5, "down_mode": "bilinear", "up_mode": "bicubic"}
+            elif name == "TemporalReorder":
+                specific_params = {"chunk_size": 4, "swap_probability": 0.8}
+            elif name == "ColorAdjustment":
+                specific_params = {"brightness": 1.1, "contrast": 0.9, "saturation": 1.2, "hue": 0.05}
+            elif name == "DropFrame":
+                specific_params = {"drop_prob": 0.3}
+            elif name == "WindowAveraging":
+                specific_params = {"window_size": 3, "alpha": 0.5}
+                
+            start = time.time()
+            augmented_frames_specific, _ = augmenter(vid_o.clone(), **specific_params)
+            end = time.time()
+            
+            print(f"Augmenter: {name} (specific params: {specific_params}) - Time: {end - start:.2f}s")
+            
+            # Save comparison frames for both random and specific parameters
+            indices = [0, len(vid_o)//2, -1]
+            for idx in indices:
+                if idx < len(augmented_frames_random):
+                    # Random parameters
+                    filename = f"{name}_random_frame_{idx}.png"
+                    comparison = torch.cat([vid_o[idx], augmented_frames_random[idx]], dim=2)
+                    save_image(comparison.clamp(0, 1), os.path.join(output_dir, filename))
+                    
+                    # Specific parameters
+                    filename = f"{name}_specific_frame_{idx}.png"
+                    comparison = torch.cat([vid_o[idx], augmented_frames_specific[idx]], dim=2)
+                    save_image(comparison.clamp(0, 1), os.path.join(output_dir, filename))
+                    
+                    print(f"Saved comparison frames {idx} for {name}")
+        
+        except Exception as e:
+            print(f":warning: An error occurred with {name}: {str(e)}")
+    
+    # Test combinations of augmentations with specific parameters
+    print("\n> Testing combinations of augmentations with specific parameters")
+    combined_frames = vid_o.clone()
+    
+    # Define specific parameters for each augmentation
+    specific_params_dict = {
+        "SpeedChange": {"speed_factor": 0.85},
+        "Resampling": {"scale_factor": 0.6},
+        "TemporalReorder": {"chunk_size": 5},
+        "ColorAdjustment": {"brightness": 1.1, "contrast": 0.9},
+        "DropFrame": {"drop_prob": 0.15},
+        "WindowAveraging": {"window_size": 4, "alpha": 0.4}
+    }
+    
+    # Apply augmentations sequentially with specific parameters
+    for name, augmenter in augmenters.items():
+        try:
+            params = specific_params_dict.get(name, {})
+            combined_frames, _ = augmenter(combined_frames, **params)
+            print(f"Applied {name} with parameters: {params}")
+        except Exception as e:
+            print(f":warning: Failed to apply {name}: {str(e)}")
+    
+    # Save combined result
+    indices = [0, len(vid_o)//2, -1]
+    for idx in indices:
+        if idx < len(combined_frames):
+            filename = f"combined_specific_augmentations_frame_{idx}.png"
+            comparison = torch.cat([vid_o[idx], combined_frames[idx]], dim=2)
+            save_image(comparison.clamp(0, 1), os.path.join(output_dir, filename))
+            print(f"Saved combined specific augmentation frame {idx} to:", os.path.join(output_dir, filename))

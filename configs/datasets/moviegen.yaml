@@ -1,0 +1,4 @@
+train_dir: /large_experiments/omniseal/moviegen-full/
+val_dir: /large_experiments/omniseal/moviegen-full/
+train_annotation_file: null
+val_annotation_file: null
