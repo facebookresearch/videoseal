@@ -40,6 +40,12 @@ class Rotate(nn.Module):
 
     def forward(self, image, mask=None, angle=None):
         angle = angle or self.get_random_angle()
+        base_angle = angle // 90 * 90
+        angle = angle - base_angle
+        # rotate base_angle first with expand=True to avoid cropping
+        image = F.rotate(image, base_angle, expand=True)
+        mask = F.rotate(mask, base_angle, expand=True) if mask is not None else mask
+        # rotate the rest with expand=False
         image = F.rotate(image, angle)
         mask = F.rotate(mask, angle) if mask is not None else mask
         return image, mask

@@ -90,13 +90,20 @@ def setup_model(config: VideoWamConfig, ckpt_path: Path) -> VideoWam:
     VideoWam: Loaded model.
     """
     args = config.args
+
+    # prepare some args for backward compatibility
     if "img_size_proc" in args:
         args.img_size = args.img_size_proc
     else:
         args.img_size = args.img_size_extractor
 
+    if "hidden_size_multiplier" in args:
+        args.hidden_size_multiplier = args.hidden_size_multiplier
+    else:
+        args.hidden_size_multiplier = 2
+
     # Build models
-    embedder = build_embedder(config.embedder.model, config.embedder.params, args.nbits)
+    embedder = build_embedder(config.embedder.model, config.embedder.params, args.nbits, args.hidden_size_multiplier)
     extractor = build_extractor(config.extractor.model, config.extractor.params, args.img_size, args.nbits)
     augmenter = get_dummy_augmenter()  # does nothing
 

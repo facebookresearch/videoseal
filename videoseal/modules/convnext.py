@@ -1,10 +1,14 @@
-
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 
 # All rights reserved.
 
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
+
+"""
+Test with:
+    python -m videoseal.modules.convnext
+"""
 
 import torch
 import torch.nn as nn
@@ -38,7 +42,7 @@ class Block(nn.Module):
     def forward(self, x):
         input = x
         x = self.dwconv(x)
-        x = x.permute(0, 2, 3, 1) # (N, C, H, W) -> (N, H, W, C)
+        x = x.permute(0, 2, 3, 1).contiguous() # (N, C, H, W) -> (N, H, W, C)
         x = self.norm(x)
         x = self.pwconv1(x)
         x = self.act(x)
@@ -48,7 +52,7 @@ class Block(nn.Module):
         if self.temp_block is not None:
             x = self.temp_block(x)
 
-        x = x.permute(0, 3, 1, 2) # (N, H, W, C) -> (N, C, H, W)
+        x = x.permute(0, 3, 1, 2).contiguous() # (N, H, W, C) -> (N, C, H, W)
 
         x = input + self.drop_path(x)
         return x
@@ -183,3 +187,12 @@ def convnextv2_large(**kwargs):
 def convnextv2_huge(**kwargs):
     model = ConvNeXtV2(depths=[3, 3, 27, 3], dims=[352, 704, 1408, 2816], **kwargs)
     return model
+
+
+if __name__ == '__main__':
+    model = convnextv2_tiny()
+    x = torch.randn(1, 3, 256, 256)
+    y = model(x)
+    print(y.shape)
+    print(model)
+    print("ConvNeXtV2 model created successfully.")

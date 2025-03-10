@@ -189,6 +189,24 @@ class GaussianNoise(nn.Module):
         return f"GaussianNoise"
 
 
+class Grayscale(nn.Module):
+    def __init__(self):
+        super(Grayscale, self).__init__()
+        
+    def forward(self, image, mask, *args, **kwargs):
+        """
+        Convert image to grayscale. The strength parameter is ignored.
+        """
+        # Convert to grayscale using the ITU-R BT.601 standard (luma component)
+        # Y = 0.299 R + 0.587 G + 0.114 B
+        grayscale = 0.299 * image[:, 0:1] + 0.587 * image[:, 1:2] + 0.114 * image[:, 2:3]
+        grayscale = grayscale.expand_as(image)
+        return grayscale, mask
+
+    def __repr__(self):
+        return f"Grayscale"
+
+
 if __name__ == "__main__":
     import os
 
@@ -209,6 +227,7 @@ if __name__ == "__main__":
         (GaussianBlur, [3, 5, 9, 17]),
         (MedianFilter, [3, 5, 9, 17]),
         (GaussianNoise, [0.05, 0.1, 0.15, 0.2]),
+        (Grayscale, [-1]),  # Grayscale doesn't need a strength parameter
         # (bmshj2018, [2, 4, 6, 8])
     ]
 

@@ -1,7 +1,7 @@
 from .sequential import Sequential
 from .geometric import Crop, HorizontalFlip, Identity, Perspective, Resize, Rotate
-from .valuemetric import JPEG, Brightness, Contrast, GaussianBlur, Hue, MedianFilter, Saturation
-from .video import H264, H264rgb, H265
+from .valuemetric import JPEG, Brightness, Contrast, GaussianBlur, Grayscale, Hue, MedianFilter, Saturation
+from .video import H264, H264rgb, H265, VP9, AV1, SpeedChange, WindowAveraging, DropFrame, TemporalReorder
 
 
 def get_validation_augs_subset(
@@ -32,18 +32,43 @@ def get_validation_augs_subset(
     return augs
 
 
+def get_combined_augs(is_video: bool = False) -> list:
+    """
+    Get only the combined augmentations for validation.
+    """
+    if is_video:
+        augs = [
+            (Identity(),          [0]),  # Always include identity for baseline
+            (Sequential(H264(), Crop(), Brightness()), [(30, 0.71, 0.5)]),
+            (Sequential(H264(), Crop(), Brightness()), [(40, 0.71, 0.5)]),
+        ]
+    else:
+        augs = [
+            (Identity(),          [0]),  # Always include identity for baseline
+            (Sequential(JPEG(), Crop(), Brightness()), [(40, 0.71, 0.5)]),
+        ]
+    return augs
+
+
 def get_validation_augs(
     is_video: bool = False,
-    only_identity: bool = False
+    only_identity: bool = False,
+    only_combined: bool = False
 ) -> list:
     """
     Get the validation augmentations.
+    Args:
+        is_video (bool): Whether the data is video
+        only_identity (bool): Whether to only use identity augmentation
+        only_combined (bool): Whether to only use combined augmentations
     """
     if only_identity:
         augs = [
             (Identity(),          [0]),  # No parameters needed for identity
         ]
-    if is_video:
+    elif only_combined:
+        augs = get_combined_augs(is_video)
+    elif is_video:
         # less augs for videos because more expensive
         augs = [
             (Identity(),          [0]),  # No parameters needed for identity
@@ -56,15 +81,23 @@ def get_validation_augs(
             (Contrast(),          [0.5, 1.5]),
             (Saturation(),        [0.5, 1.5]),
             (Hue(),               [0.25]),
+            (Grayscale(),         [-1]),  # No parameters needed for grayscale
             (JPEG(),              [40]),
             (GaussianBlur(),      [9]),
             # (MedianFilter(),      [9]),
-            (H264(),              [30, 40, 50, 60]),
-            (H264rgb(),           [30, 40, 50, 60]),
-            (H265(),              [30, 40, 50]),  # crf > 50 is not valid
+            (H264(),              [23, 30, 40, 50]),
+            (H264rgb(),           [23, 30, 40, 50]),
+            (H265(),              [23, 30, 40, 50]),  # crf > 50 is not valid
+            (VP9(),               [-1]),
+            (Sequential(H264(), Crop(), Brightness()), [(23, 0.71, 0.5)]),
             (Sequential(H264(), Crop(), Brightness()), [(30, 0.71, 0.5)]),
             (Sequential(H264(), Crop(), Brightness()), [(40, 0.71, 0.5)]),
-            (Sequential(H264(), Crop(), Brightness()), [(50, 0.71, 0.5)]),
+            (Sequential(H264(), Crop(), Brightness()), [(50, 0.71, 0.5)])
+            # # New video specific augmentations
+            # (SpeedChange(),       [0.5, 2.0]),  # speed factors
+            # (WindowAveraging(),   [(3, 1.0)]),  # (window_size, alpha)
+            # (DropFrame(),         [0.2, 0.5]),  # drop probabilities
+            # (TemporalReorder(),   [(4, 0.7)]),  # (chunk_size, swap_probability)
         ]
     else:
         augs = [
@@ -77,6 +110,7 @@ def get_validation_augs(
             (Brightness(),        [0.1, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0]),
             (Contrast(),          [0.1, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0]),
             (Hue(),               [-0.4, -0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3, 0.4, 0.5]),
+            (Grayscale(),         [-1]),  # No parameters needed for grayscale
             (JPEG(),              [40, 50, 60, 70, 80, 90]),
             (GaussianBlur(),      [3, 5, 9, 13, 17]),
             # (MedianFilter(),      [3, 5, 9, 13, 17]),

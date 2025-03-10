@@ -21,7 +21,13 @@ With video compression aug:
     OMP_NUM_THREADS=40 torchrun --nproc_per_node=2 train.py --local_rank 0 --attenuation jnd_1_1 --balanced False --total_gnorm 1.0 --scaling_w_schedule Cosine,scaling_min=0.016,start_epoch=50,epochs=100 --scaling_w 0.25 --scaling_i 1.0 --nbits 96 --lambda_dec 1.0 --lambda_det 0.0 --lambda_d 0.1 --lambda_i 0.0 --perceptual_loss mse --seed 444 --optimizer AdamW,lr=1e-5 --resume_from /checkpoint/pfz/2025_logs/0214_vseal_rgb_96bits_scalingw_schedule/_scaling_w_schedule=0_scaling_w=0.2_perceptual_loss=yuv/checkpoint.pth --saveimg_freq 50 --eval_freq 10 --full_eval_freq 50 --batch_size_video_eval 1 --batch_size_video 1 --batch_size_eval 8 --batch_size 16 --workers 0 --iter_per_valid 10 --videowam_step_size 4 --resume_disc True --finetune_detector_start 0 --video_start 0 --prop_img_vid 0.0 --epochs 201 --iter_per_epoch 1000 --img_size_proc 256 --img_size_val 768 --img_size 768 --extractor_model sam_small --embedder_model unet_small2_quant --augmentation_config configs/all_augs_nomed.yaml --video_dataset sa-v --image_dataset none
     OMP_NUM_THREADS=40 torchrun --nproc_per_node=2 train.py --local_rank 0 --balanced False --attenuation None --total_gnorm 1.0 --scaling_w 0.2 --scaling_i 1.0 --nbits 96 --lambda_dec 1.0 --lambda_det 0.0 --lambda_d 0.1 --lambda_i 0.2 --perceptual_loss yuv+focal --seed 444 --scheduler None --optimizer AdamW,lr=1e-5 --saveimg_freq 1 --eval_freq 10 --full_eval_freq 50 --batch_size_video_eval 1 --batch_size_video 1 --batch_size_eval 8 --batch_size 4 --workers 0 --iter_per_valid 10 --videowam_step_size 8 --finetune_detector_start 2000 --video_start 0 --prop_img_vid 0.0 --epochs 100 --iter_per_epoch 1000 --img_size_proc 256 --img_size_val 256 --img_size 256 --extractor_model convnext_small --embedder_model unet_small2_yuv_quant --augmentation_config configs/all_augs_v2.yaml --video_dataset none --image_dataset sa-1b-full-resized
     
-    torchrun --nproc_per_node=2 train.py --balanced False --attenuatpion None --total_gnorm 1.0 --scaling_w 0.025 --scaling_i 1.0 --nbits 64 --lambda_dec 1.0 --lambda_det 0.0 --lambda_d 0.1 --lambda_i 0.0 --perceptual_loss mse --seed 444 --scheduler None --optimizer AdamW,lr=1e-5 --resume_from /checkpoint/pfz/2025_logs/0207_vseal_y_64bits_scalingw_schedule/_scaling_w_schedule=0_scaling_w=0.1/checkpoint700.pth --saveimg_freq 50 --eval_freq 10 --full_eval_freq 50 --batch_size_video_eval 1 --batch_size_video 1 --batch_size_eval 32 --batch_size 16 --workers 0 --iter_per_valid 10 --videowam_step_size 8 --finetune_detector_start 2000 --video_start 0 --prop_img_vid 0.0 --epochs 100 --iter_per_epoch 1000 --img_size_proc 256 --img_size_val 1024 --img_size 1024 --extractor_model sam_small --embedder_model unet_small2_yuv_quant --augmentation_config configs/all_augs.yaml --video_dataset sa-v --image_dataset none
+    OMP_NUM_THREADS=40 torchrun --nproc_per_node=2 train.py --local_rank 0    --balanced False --total_gnorm 1.0 --scaling_i 1.0 --scaling_w 0.016 --attenuation None --nbits 128 --lambda_dec 1.0 --lambda_det 0.0 --lambda_d 0.2 --lambda_i 0.1 --perceptual_loss yuv --seed 0 --scheduler None --optimizer AdamW,lr=1e-5 --saveimg_freq 50 --resume_from /checkpoint/pfz/2025_logs/0219_vseal_convnextextractor/_nbits=128_lambda_i=0.1_embedder_model=1/checkpoint600.pth --eval_freq 10 --full_eval_freq 50 --batch_size_video_eval 1 --batch_size_video 1 --batch_size_eval 16 --batch_size 16 --workers 0 --iter_per_valid 10 --frames_per_clip 16 --videowam_step_size 1 --resume_disc True --resume_optimizer_state True --finetune_detector_start 2000 --video_start 0 --prop_img_vid 0.0 --epochs 201 --iter_per_epoch 100 --img_size_proc 256 --img_size_val 768 --img_size 768 --num_augs 2 --extractor_model convnext_tiny --embedder_model unet_small2_yuv_quant --augmentation_config configs/all_augs_v3_novid.yaml --video_dataset sa-v --image_dataset none
+
+OMP_NUM_THREADS=40 torchrun --nproc_per_node=2 train.py --local_rank 0  --balanced True --total_gnorm 1.0 --scaling_i 1.0 --scaling_w 0.2 --attenuation jnd_1_1 --nbits 128 --lambda_dec 0.5 --lambda_det 0.0 --lambda_d 0.1 --lambda_i 0.1 --perceptual_loss yuv --seed 0 --scheduler None --optimizer AdamW,lr=1e-5 --saveimg_freq 50 --resume_from /checkpoint/pfz/2025_logs/0226_vseal_ydisc_mult1_bis/_scaling_w_schedule=1_scaling_w=1.0_attenuation=jnd_1_1_hidden_size_multiplier=1/checkpoint500.pth --eval_freq 10 --full_eval_freq 50 --batch_size_video_eval 1 --batch_size_video 1 --batch_size_eval 16 --batch_size 16 --workers 0 --iter_per_valid 10 --frames_per_clip 16 --videowam_step_size 4 --lowres_attenuation True --resume_optimizer_state True --resume_disc True --disc_in_channels 1 --finetune_detector_start 2000 --video_start 0 --prop_img_vid 0.0 --epochs 201 --iter_per_epoch 100 --img_size_proc 256 --img_size_val 768 --img_size 768 --num_augs 2 --hidden_size_multiplier 1 --extractor_model convnext_tiny --embedder_model unet_small2_yuv_quant --augmentation_config configs/all_augs_v3.yaml --video_dataset sa-v --image_dataset none --output_dir /checkpoint/pfz/2025_logs/0301_vseal_ep500_ftvid_complete_morepercep/_finetune_detector_start=2000_augmentation_config=0 
+    
+OMP_NUM_THREADS=40 torchrun --nproc_per_node=2 train.py --local_rank 0  --balanced True --total_gnorm 1.0 --scaling_w 0.2 --attenuation jnd_1_1 --scaling_i 1.0 --nbits 128 --lambda_dec 1.0 --lambda_det 0.0 --lambda_d 0.1 --lambda_i 0.1 --perceptual_loss yuv --seed 0 --scheduler None --optimizer AdamW,lr=1e-5 --resume_from /private/home/soucek/videoseal/0226_vseal_ydisc_mult1_bis_inflated.pth --num_augs 2 --saveimg_freq 50 --eval_freq 10 --full_eval_freq 50 --batch_size_video_eval 1 --batch_size_video 1 --batch_size_eval 16 --batch_size 16 --workers 0 --iter_per_valid 10 --videowam_step_size 1 --finetune_detector_start 2000 --video_start 0 --prop_img_vid 0.0 --epochs 201 --iter_per_epoch 1000 --img_size_proc 256 --img_size_val 768 --img_size 768 --disc_in_channels 1 --frames_per_clip 16 --resume_optimizer_state True --resume_disc True --extractor_model convnext_tiny_temporal --hidden_size_multiplier 1 --embedder_model unet_small2_yuv_quant_conv3d --augmentation_config configs/all_augs_v3.yaml --video_dataset sa-v --image_dataset none 
+
+
 
 Args inventory:
     --scheduler CosineLRScheduler,lr_min=1e-6,t_initial=100,warmup_lr_init=1e-6,warmup_t=5
@@ -121,6 +127,8 @@ def get_parser():
     group = parser.add_argument_group('Image and watermark parameters')
     aa("--nbits", type=int, default=32,
        help="Number of bits used to generate the message. If 0, no message is used.")
+    aa("--hidden_size_multiplier", type=float, default=2,
+         help="Hidden size multiplier for the message processor")
     aa("--img_size", type=int, default=256,
        help="Size of the input images for data preprocessing, used at loading time for training.")
     aa("--img_size_val", type=int, default=256,
@@ -143,6 +151,8 @@ def get_parser():
        help="The number of frames to encode at a time.")
     aa("--videowam_step_size", type=int, default=4,
        help="The number of frames to propagate the watermark to.")
+    aa("--lowres_attenuation", type=utils.bool_inst, default=False,
+       help="Apply attenuation at low resolution for high-res images (more memory efficient)")
 
     group = parser.add_argument_group('Optimizer parameters')
     aa("--optimizer", type=str, default="AdamW,lr=1e-4",
@@ -163,6 +173,8 @@ def get_parser():
        help='Path to the checkpoint to resume from')
     aa('--resume_disc', type=utils.bool_inst, default=False,
        help='If True, also load discriminator weights when resuming from checkpoint')
+    aa('--resume_optimizer_state', type=utils.bool_inst, default=False,
+       help='If True, also load optimizer state when resuming from checkpoint')
 
     group = parser.add_argument_group('Losses parameters')
     aa('--temperature', default=1.0, type=float,
@@ -235,8 +247,8 @@ def main(params):
     udist.init_distributed_mode(params)
 
     # Set seeds for reproductibility
-    # seed = params.seed + udist.get_rank()
-    seed = params.seed
+    seed = params.seed + udist.get_rank()
+    # seed = params.seed
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
     np.random.seed(seed)
@@ -261,7 +273,7 @@ def main(params):
     embedder_cfg = omegaconf.OmegaConf.load(params.embedder_config)
     params.embedder_model = params.embedder_model or embedder_cfg.model
     embedder_params = embedder_cfg[params.embedder_model]
-    embedder = build_embedder(params.embedder_model, embedder_params, params.nbits)
+    embedder = build_embedder(params.embedder_model, embedder_params, params.nbits, params.hidden_size_multiplier)
     print(embedder)
     print(f'embedder: {sum(p.numel() for p in embedder.parameters() if p.requires_grad) / 1e6:.1f}M parameters')
 
@@ -301,7 +313,8 @@ def main(params):
                    img_size=params.img_size_proc,
                    chunk_size=params.videowam_chunk_size,
                    step_size=params.videowam_step_size,
-                   blending_method=params.blending_method)
+                   blending_method=params.blending_method,
+                   lowres_attenuation=params.lowres_attenuation)
     wam = wam.to(device)
     # print(wam)
 
@@ -406,6 +419,9 @@ def main(params):
         components_to_load = {'model': wam}
         if params.resume_disc:
             components_to_load['discriminator'] = image_detection_loss.discriminator
+        if params.resume_optimizer_state:
+            components_to_load['optimizer'] = optimizer
+            components_to_load['optimizer_d'] = optimizer_d
         uoptim.restart_from_checkpoint(
             params.resume_from,
             **components_to_load
@@ -774,7 +790,10 @@ def eval_one_epoch(
 
             # forward embedder
             embed_time = time.time()
-            outputs = wam.embed(imgs, is_video=is_video)
+            if params.lowres_attenuation:
+                outputs = wam.embed(imgs, is_video=is_video)
+            else:
+                outputs = wam.embed_lowres_attenuation(imgs, is_video=is_video)
             embed_time = (time.time() - embed_time) / imgs.shape[0]
             msgs = outputs["msgs"].to(device)  # b k
             imgs_w = outputs["imgs_w"]  # b c h w
