@@ -311,88 +311,6 @@ class SpeedChange(nn.Module):
         return f"SpeedChange(min_speed={self.min_speed}, max_speed={self.max_speed})"
 
 
-class Resampling(nn.Module):
-    """
-    Resamples video frames by downscaling and then upscaling, simulating quality loss.
-    
-    Attributes:
-        min_scale (float): Minimum scale factor for downsampling.
-        max_scale (float): Maximum scale factor for downsampling.
-        interpolation_modes (list): List of interpolation modes to randomly select from.
-    """
-    
-    def __init__(self, min_scale=0.25, max_scale=0.75, 
-                 interpolation_modes=['nearest', 'bilinear', 'bicubic']):
-        super(Resampling, self).__init__()
-        self.min_scale = min_scale
-        self.max_scale = max_scale
-        self.interpolation_modes = interpolation_modes
-    
-    def get_random_scale(self):
-        """Randomly select a scale factor within the specified range."""
-        if self.min_scale is None or self.max_scale is None:
-            raise ValueError("min_scale and max_scale must be provided")
-        return random.uniform(self.min_scale, self.max_scale)
-    
-    def get_random_modes(self):
-        """Randomly select downsampling and upsampling interpolation modes."""
-        down_mode = random.choice(self.interpolation_modes)
-        up_mode = random.choice(self.interpolation_modes)
-        return down_mode, up_mode
-    
-    def forward(self, frames, mask=None, scale_factor=None, down_mode=None, up_mode=None, *args, **kwargs):
-        """
-        Parameters:
-            frames (torch.Tensor): Video frames as a tensor with shape (T, C, H, W).
-            mask (torch.Tensor): Optional mask for the video frames.
-            scale_factor (float): Specific scale factor to use. If None, a random one is selected.
-            down_mode (str): Specific downsampling interpolation mode. If None, a random one is selected.
-            up_mode (str): Specific upsampling interpolation mode. If None, a random one is selected.
-        
-        Returns:
-            torch.Tensor: Resampled video frames as a tensor with shape (T, C, H, W).
-        """
-        # Use provided parameters or get random ones
-        scale_factor = scale_factor if scale_factor is not None else self.get_random_scale()
-        
-        if down_mode is None or up_mode is None:
-            down_mode_sel, up_mode_sel = self.get_random_modes()
-            down_mode = down_mode if down_mode is not None else down_mode_sel
-            up_mode = up_mode if up_mode is not None else up_mode_sel
-        
-        T, C, H, W = frames.shape
-        
-        # Calculate new dimensions
-        new_h, new_w = int(H * scale_factor), int(W * scale_factor)
-        
-        # Downscale frames
-        frames_down = F.interpolate(
-            frames, size=(new_h, new_w), mode=down_mode, 
-            align_corners=False if down_mode != 'nearest' else None
-        )
-        
-        # Upscale frames back to original size
-        frames_up = F.interpolate(
-            frames_down, size=(H, W), mode=up_mode, 
-            align_corners=False if up_mode != 'nearest' else None
-        )
-        
-        # If mask is provided, apply the same transformation
-        if mask is not None:
-            mask_down = F.interpolate(
-                mask, size=(new_h, new_w), mode='nearest'
-            )
-            mask_up = F.interpolate(
-                mask_down, size=(H, W), mode='nearest'
-            )
-            return frames_up, mask_up
-        
-        return frames_up, mask
-
-    def __repr__(self) -> str:
-        return f"Resampling(min_scale={self.min_scale}, max_scale={self.max_scale})"
-
-
 class TemporalReorder(nn.Module):
     """
     Randomly reorders small chunks of frames to create temporal discontinuities.
@@ -611,6 +529,7 @@ if __name__ == "__main__":
     import time
     from videoseal.data.loader import load_video
     from torchvision.utils import save_image
+    import torchvision
 
     vid_o = 'assets/videos/sa-v/sav_013754.mp4'
     print("> test compression")
@@ -622,32 +541,45 @@ if __name__ == "__main__":
     output_dir = "outputs"
     os.makedirs(output_dir, exist_ok=True)
 
-    # h264, h264rgb, h265, vp9, av1 (slow)
-    # for codec in ['libx264', 'libx264rgb', 'libx265', 'libvpx-vp9', 'libaom-av1']:
-    for codec in ['libx264', 'libx264rgb', 'libx265', 'libvpx-vp9']:
-        crfs = [28, 34, 40, 46] if codec not in ['libvpx-vp9'] else [-1]
-        for crf in crfs:
-            try:
-                compressor = VideoCompression(codec=codec, crf=crf)
-                start = time.time()
-                compressed_frames, _ = compressor(vid_o)
-                end = time.time()
-                mse = torch.nn.functional.mse_loss(vid_o, compressed_frames)
-                print(f"Codec: {codec}, CRF: {crf} - MSE: {mse:.2e} - Time: {end - start:.2f}s")
+    # # h264, h264rgb, h265, vp9, av1 (slow)
+    # # for codec in ['libx264', 'libx264rgb', 'libx265', 'libvpx-vp9', 'libaom-av1']:
+    # for codec in ['libx264', 'libx264rgb', 'libx265', 'libvpx-vp9']:
+    #     crfs = [28, 34, 40, 46] if codec not in ['libvpx-vp9'] else [-1]
+    #     for crf in crfs:
+    #         try:
+    #             compressor = VideoCompression(codec=codec, crf=crf)
+    #             start = time.time()
+    #             compressed_frames, _ = compressor(vid_o)
+    #             end = time.time()
+    #             mse = torch.nn.functional.mse_loss(vid_o, compressed_frames)
+    #             print(f"Codec: {codec}, CRF: {crf} - MSE: {mse:.2e} - Time: {end - start:.2f}s")
 
-                # Save first, middle and last frame of both original and compressed video
-                indices = [0, len(vid_o)//2, -1]
-                for idx in indices:
-                    # Create filename
-                    filename = f"{codec.replace('lib', '')}_crf_{crf}_frame_{idx}.png"
-                    # Stack original and compressed frame side by side
-                    comparison = torch.cat([vid_o[idx], compressed_frames[idx]], dim=2)
-                    # Save the comparison image
-                    save_image(comparison.clamp(0, 1), os.path.join(output_dir, filename))
-                    print(f"Saved comparison frame {idx} to:", os.path.join(output_dir, filename))
+    #             # Save first, middle and last frame of both original and compressed video
+    #             indices = [0, len(vid_o)//2, -1]
+    #             for idx in indices:
+    #                 # Create filename
+    #                 filename = f"{codec.replace('lib', '')}_crf_{crf}_frame_{idx}.png"
+    #                 # Stack original and compressed frame side by side
+    #                 comparison = torch.cat([vid_o[idx], compressed_frames[idx]], dim=2)
+    #                 # Save the comparison image
+    #                 save_image(comparison.clamp(0, 1), os.path.join(output_dir, filename))
+    #                 print(f"Saved comparison frame {idx} to:", os.path.join(output_dir, filename))
 
-            except Exception as e:
-                print(f":warning: An error occurred with {codec}: {str(e)}")
+    #         except Exception as e:
+    #             print(f":warning: An error occurred with {codec}: {str(e)}")
+
+    # Function to save video tensor as MP4
+    def save_video(frames, path):
+        # Convert tensor to numpy array of uint8 (0-255)
+        frames_np = (frames.clamp(0, 1) * 255).to(torch.uint8)
+        frames_np = frames_np.permute(0, 2, 3, 1)  # T,C,H,W -> T,H,W,C
+        
+        # Save using torchvision's write_video
+        torchvision.io.write_video(path, frames_np.cpu(), fps=24, video_codec='h264')
+        print(f"Saved video to: {path}")
+
+    # Save the original video
+    save_video(vid_o, os.path.join(output_dir, "original.mp4"))
 
     # Test the new augmentations
     print("\n> Testing new augmentations")
@@ -655,11 +587,7 @@ if __name__ == "__main__":
     # Create instances of the augmenters
     augmenters = {
         "SpeedChange": SpeedChange(min_speed=0.7, max_speed=1.3),
-        "Resampling": Resampling(min_scale=0.3, max_scale=0.7),
         "TemporalReorder": TemporalReorder(min_chunk_size=3, max_chunk_size=6, reorder_prob=0.7),
-        "ColorAdjustment": ColorAdjustment(
-            min_brightness=0.8, max_brightness=1.2,
-            min_contrast=0.8, max_contrast=1.2),
         "DropFrame": DropFrame(drop_frame_prob=0.2),
         "WindowAveraging": WindowAveraging(min_window_size=2, max_window_size=5, min_alpha=0.3, max_alpha=0.7)
     }
@@ -674,26 +602,28 @@ if __name__ == "__main__":
             
             print(f"Augmenter: {name} (random params) - Time: {end - start:.2f}s")
             
+            # Save the randomly augmented video
+            save_video(augmented_frames_random, os.path.join(output_dir, f"{name}_random.mp4"))
+            
             # Test with specific parameters
             specific_params = {}
             if name == "SpeedChange":
-                specific_params = {"speed_factor": 0.8}
-            elif name == "Resampling":
-                specific_params = {"scale_factor": 0.5, "down_mode": "bilinear", "up_mode": "bicubic"}
+                specific_params = {"speed_factor": 2.0}
             elif name == "TemporalReorder":
                 specific_params = {"chunk_size": 4, "swap_probability": 0.8}
-            elif name == "ColorAdjustment":
-                specific_params = {"brightness": 1.1, "contrast": 0.9, "saturation": 1.2, "hue": 0.05}
             elif name == "DropFrame":
                 specific_params = {"drop_prob": 0.3}
             elif name == "WindowAveraging":
-                specific_params = {"window_size": 3, "alpha": 0.5}
+                specific_params = {"window_size": 3, "alpha": 1.0}
                 
             start = time.time()
             augmented_frames_specific, _ = augmenter(vid_o.clone(), **specific_params)
             end = time.time()
             
             print(f"Augmenter: {name} (specific params: {specific_params}) - Time: {end - start:.2f}s")
+            
+            # Save the specifically augmented video
+            save_video(augmented_frames_specific, os.path.join(output_dir, f"{name}_specific.mp4"))
             
             # Save comparison frames for both random and specific parameters
             indices = [0, len(vid_o)//2, -1]
@@ -720,12 +650,10 @@ if __name__ == "__main__":
     
     # Define specific parameters for each augmentation
     specific_params_dict = {
-        "SpeedChange": {"speed_factor": 0.85},
-        "Resampling": {"scale_factor": 0.6},
+        "SpeedChange": {"speed_factor": [2.0]},
         "TemporalReorder": {"chunk_size": 5},
-        "ColorAdjustment": {"brightness": 1.1, "contrast": 0.9},
-        "DropFrame": {"drop_prob": 0.15},
-        "WindowAveraging": {"window_size": 4, "alpha": 0.4}
+        "DropFrame": {"drop_prob": 0.4},
+        "WindowAveraging": {"window_size": 4, "alpha": 1.0}
     }
     
     # Apply augmentations sequentially with specific parameters
@@ -737,7 +665,10 @@ if __name__ == "__main__":
         except Exception as e:
             print(f":warning: Failed to apply {name}: {str(e)}")
     
-    # Save combined result
+    # Save the combined augmented video
+    save_video(combined_frames, os.path.join(output_dir, "combined_augmentations.mp4"))
+    
+    # Save combined result frames
     indices = [0, len(vid_o)//2, -1]
     for idx in indices:
         if idx < len(combined_frames):

@@ -1,7 +1,7 @@
 from .sequential import Sequential
 from .geometric import Crop, HorizontalFlip, Identity, Perspective, Resize, Rotate
 from .valuemetric import JPEG, Brightness, Contrast, GaussianBlur, Grayscale, Hue, MedianFilter, Saturation
-from .video import H264, H264rgb, H265, VP9, AV1
+from .video import H264, H264rgb, H265, VP9, AV1, SpeedChange, WindowAveraging, DropFrame, TemporalReorder
 
 
 def get_validation_augs_subset(
@@ -92,7 +92,12 @@ def get_validation_augs(
             (Sequential(H264(), Crop(), Brightness()), [(23, 0.71, 0.5)]),
             (Sequential(H264(), Crop(), Brightness()), [(30, 0.71, 0.5)]),
             (Sequential(H264(), Crop(), Brightness()), [(40, 0.71, 0.5)]),
-            (Sequential(H264(), Crop(), Brightness()), [(50, 0.71, 0.5)]),
+            (Sequential(H264(), Crop(), Brightness()), [(50, 0.71, 0.5)])
+            # # New video specific augmentations
+            # (SpeedChange(),       [0.5, 2.0]),  # speed factors
+            # (WindowAveraging(),   [(3, 1.0)]),  # (window_size, alpha)
+            # (DropFrame(),         [0.2, 0.5]),  # drop probabilities
+            # (TemporalReorder(),   [(4, 0.7)]),  # (chunk_size, swap_probability)
         ]
     else:
         augs = [

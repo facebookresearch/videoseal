@@ -1,6 +1,7 @@
 """
 python -m videoseal.evals.full \
     --checkpoint /checkpoint/pfz/2024_logs/1203_vseal_04_rgb_96bits_posttraining_video_ft_fast_lessh264/expe/checkpoint281.pth \
+    --checkpoint /checkpoint/soucek/2025_logs/0303_vseal_ydisc_mult1_bis_ft-fixed-lr5e6/expe/checkpoint.pth \
     --checkpoint baseline/wam
     
     --dataset coco --is_video false \
@@ -16,6 +17,9 @@ python -m videoseal.evals.full \
     --dataset sa-1b-full-resized --is_video false --num_samples 10 --save_first 10 --attenuation simplified_jnd_variance_clamp --scaling_w 0.025
     --checkpoint /checkpoint/pfz/2025_logs/0207_vseal_y_64bits_scalingw_schedule/_scaling_w_schedule=0_scaling_w=0.1/checkpoint900.pth \
     
+python -m videoseal.evals.full \
+    --dataset sa-1b-full-resized --is_video false --num_samples 10 --save_first 10 --checkpoint /checkpoint/soucek/2025_logs/0303_vseal_ydisc_mult1_bis_ft-fixed-lr5e6/expe/checkpoint.pth --lowres_attenuation True
+
 python -m videoseal.evals.full \
     --checkpoint /checkpoint/pfz/2025_logs/0219_vseal_convnextextractor/_nbits=128_lambda_i=0.1_embedder_model=1/checkpoint600.pth \
     --dataset sa-v --is_video true --num_samples 10 --save_first 10 --attenuation None --scaling_w 0.016 \
@@ -40,7 +44,7 @@ from torchvision.utils import save_image
 from .metrics import vmaf_on_tensor, bit_accuracy, iou, accuracy, pvalue, capacity, psnr, ssim, msssim, bd_rate
 from ..augmentation import get_validation_augs
 from ..models import VideoWam
-from ..modules.jnd import JND, VarianceBasedJND
+from ..modules.jnd import JND, VarianceBasedJND, JNDSimplified
 from ..utils import Timer, bool_inst
 from ..utils.display import save_vid
 from ..utils.image import create_diff_img
@@ -330,7 +334,11 @@ def main():
         # should be on CPU to operate on high resolution videos
         if args.attenuation.lower().startswith("jnd"):
             attenuation_cfg = omegaconf.OmegaConf.load(args.attenuation_config)
-            attenuation = JND(**attenuation_cfg[args.attenuation])
+            attenuation = JNDSimplified(**attenuation_cfg[args.attenuation])
+        elif args.attenuation.lower().startswith("simplified_jnd"):
+            args.attenuation = args.attenuation.replace("simplified_jnd", "jnd")
+            attenuation_cfg = omegaconf.OmegaConf.load(args.attenuation_config)
+            attenuation = JNDSimplified(**attenuation_cfg[args.attenuation])
         elif args.attenuation.lower().startswith("simplified"):
             attenuation_cfg = omegaconf.OmegaConf.load(args.attenuation_config)
             attenuation = VarianceBasedJND(**attenuation_cfg[args.attenuation])

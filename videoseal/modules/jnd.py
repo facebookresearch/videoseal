@@ -217,7 +217,7 @@ class JNDSimplified(nn.Module):
             #     dim=1, keepdim=True
             # )  # b c h w * 1 c -> b 1 h w
             hmaps = torch.sum(hmaps / 3, dim=1, keepdim=True)  # b 1 h w
-        return hmaps
+        return hmaps / 255
 
     def forward(self, imgs: torch.Tensor, imgs_w: torch.Tensor, alpha: float = 1.0) -> torch.Tensor:
         """ imgs and deltas must be in [0,1] after preprocess """
