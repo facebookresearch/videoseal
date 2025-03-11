@@ -51,9 +51,13 @@ It should output the path to the ffmpeg binary, the version of ffmpeg and the vm
 
 ## Quick start for inference
 
+Download the model at:
 ```
 wget https://dl.fbaipublicfiles.com/videoseal/y_128b_img.pth -P checkpoints/
 ```
+
+Then use the notebook in `notebooks/demos/video_inference.ipynb`. 
+By default, it will load the model card `videoseal_1.0`, which contains the config for the model `y_128b_img.pth`.
 
 
 ## Running experiments
