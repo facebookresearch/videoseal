@@ -6,7 +6,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from .common import ChanRMSNorm, Upsample, Downsample, get_activation, get_normalization, get_conv_layer
+from .common import AvgPool3dWrapper, ChanRMSNorm, Upsample, Downsample, get_activation, get_normalization, get_conv_layer
 
 # https://github.com/lucidrains/imagen-pytorch/blob/main/imagen_pytorch/imagen_pytorch.py
 # https://github.com/milesial/Pytorch-UNet/blob/master/train.py
@@ -120,7 +120,8 @@ class UNetMsg(nn.Module):
         last_tanh: bool = True,
         zero_init: bool = False,
         id_init: bool = False,
-        conv_layer: str = "conv2d"
+        conv_layer: str = "conv2d",
+        time_pooling: dict = None,
     ):
         super(UNetMsg, self).__init__()
         self.msg_processor = msg_processor
@@ -131,6 +132,7 @@ class UNetMsg(nn.Module):
         self.z_channels_mults = z_channels_mults
         self.last_tanh = last_tanh
         self.connect_scale = 2 ** -0.5
+        self.time_pooling = time_pooling
 
         norm_layer = get_normalization(normalization)
         act_layer = get_activation(activation)
@@ -169,13 +171,32 @@ class UNetMsg(nn.Module):
                 imgs: torch.Tensor,
                 msgs: torch.Tensor
                 ):
+        nb_imgs = len(imgs)
         # Initial convolution
         x1 = self.inc(imgs)
         hiddens = [x1]
 
+        if self.time_pooling:
+            time_pooling_depth = self.time_pooling["depth"]
+            time_pooling_kernel_size = self.time_pooling["kernel_size"]
+            time_pooling_stride = self.time_pooling.get("stride", None)
+            temporal_pool = AvgPool3dWrapper(
+                (time_pooling_kernel_size, 1, 1), 
+                stride=(time_pooling_stride, 1, 1) if time_pooling_stride else None, 
+                padding=0, 
+                ceil_mode=True, 
+                count_include_pad=False,
+            )
+        else:
+            time_pooling_depth = -1
+
         # Downward path
-        for dblock in self.downs:
-            hiddens.append(dblock(hiddens[-1]))  # b d h w -> b d' h/2 w/2
+        for i, dblock in enumerate(self.downs):
+            if i == time_pooling_depth:
+                temp_downscale = temporal_pool(hiddens[-1])  # b d h w -> b/k d h w
+                hiddens.append(dblock(temp_downscale))
+            else:
+                hiddens.append(dblock(hiddens[-1]))  # b d h w -> b d' h/2 w/2
 
         # Middle path
         hiddens.append(self.msg_processor(hiddens.pop(), msgs))  # b c+c' h w
@@ -185,8 +206,17 @@ class UNetMsg(nn.Module):
         def concat_skip_connect(x): return torch.cat(
             (x, hiddens.pop() * self.connect_scale), dim=1)
         for ublock in self.ups:
+            # Recover the original number of frames for temporal pooling.
+            if len(x) != len(hiddens[-1]):
+                x = torch.repeat_interleave(x, repeats=time_pooling_kernel_size, dim=0)  # b/k d h w -> b d h w
+                x = x[:nb_imgs]
             x = concat_skip_connect(x)  # b d h w -> b 2d h w
             x = ublock(x)  # b d h w
+
+        # Recover the original number of frames for temporal pooling.
+            if len(x) != len(hiddens[-1]):
+                x = torch.repeat_interleave(x, repeats=time_pooling_kernel_size, dim=0)  # b/k d h w -> b d h w
+                x = x[:nb_imgs]
 
         # Output layer
         logits = self.outc(x)

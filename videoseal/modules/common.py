@@ -262,3 +262,22 @@ def get_conv_layer(name: str):
         return Conv2p1dWrapper
     else:
         raise NotImplementedError
+
+
+class AvgPool3dWrapper(nn.Module):
+    def __init__(self, *args, **kwargs):
+        """
+        Wrapper for 3D average pooling to handle 4D input tensors.
+        Args:
+            *args: Arguments for nn.AvgPool3d.
+            **kwargs: Keyword arguments for nn.AvgPool3d.
+        """
+        super().__init__()
+        self.avgpool = nn.AvgPool3d(*args, **kwargs)
+
+    def forward(self, x):
+        assert len(x.shape) == 4
+        x = x.unsqueeze(0).permute(0, 2, 1, 3, 4) # change [B, C, H, W] to [1, C, T, H, W]
+        x = self.avgpool(x)
+        x = x.permute(0, 2, 1, 3, 4).squeeze(0)
+        return x
