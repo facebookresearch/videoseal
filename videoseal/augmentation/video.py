@@ -25,7 +25,7 @@ class VideoCompression(nn.Module):
         super(VideoCompression, self).__init__()
         self.codec = codec  # values [28, 34, 40, 46]
         self.pix_fmt = 'yuv420p' if codec != 'libx264rgb' else 'rgb24'
-        self.threads = 1  # limit the number of threads to avoid memory issues
+        self.threads = 10  # limit the number of threads to avoid memory issues
         self.crf = crf
         self.fps = fps
 

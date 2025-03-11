@@ -17,7 +17,7 @@ conda install pytorch==2.4.0 torchvision==0.19.0 torchaudio==2.4.0 pytorch-cuda=
 
 Other dependencies:
 ```
-pip install -e . 
+pip install -r requirements.txt
 ```
 
 
@@ -38,7 +38,6 @@ ffmpeg -filters | grep vmaf
 It should output the path to the ffmpeg binary, the version of ffmpeg and the vmaf filter.
 
 
-
 ### Envs
 
 - H2
@@ -47,6 +46,15 @@ It should output the path to the ffmpeg binary, the version of ffmpeg and the vm
 
     Path to ffmpeg binary: `/private/home/pfz/09-videoseal/vmaf-dev/ffmpeg-git-20240629-amd64-static/ffmpeg`.
     To load the good binary, run  `export PATH=$PATH:/private/home/pfz/09-videoseal/vmaf-dev/ffmpeg-git-20240629-amd64-static/ffmpeg`
+
+
+
+## Quick start for inference
+
+```
+wget https://dl.fbaipublicfiles.com/videoseal/y_128b_img.pth -P checkpoints/
+```
+
 
 ## Running experiments
 

@@ -20,8 +20,8 @@ from videoseal.modules.jnd import JND, VarianceBasedJND
 #   msg_processor:
 #     nbits: 16
 #     hidden_size: ${mul:${vae.msg_processor.nbits},2}
-omegaconf.OmegaConf.register_new_resolver("mul", lambda x, y: x * y)
-omegaconf.OmegaConf.register_new_resolver("add", lambda x, y: x + y)
+# omegaconf.OmegaConf.register_new_resolver("mul", lambda x, y: x * y)
+# omegaconf.OmegaConf.register_new_resolver("add", lambda x, y: x + y)
 
 @dataclass
 class SubModelConfig:
@@ -171,12 +171,7 @@ def setup_model_from_model_card(model_card: Path | str) -> VideoWam:
     Returns:
         VideoWam: Loaded model.
     """
-
-    # Get the path of the videoseal package
-    videoseal_path = Path(importlib.util.find_spec('videoseal').origin).parent
-
-    # Define the cards directory as a subdirectory of the videoseal package
-    cards_dir = videoseal_path / 'cards'
+    cards_dir = Path("videoseal/cards")
 
     if isinstance(model_card, str):
         available_cards = [card.stem for card in cards_dir.glob('*.yaml')]
