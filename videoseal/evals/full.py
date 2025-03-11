@@ -1,31 +1,29 @@
 """
+
+Example:
+
+1/ Evaluate a checkpoint on images
+
 python -m videoseal.evals.full \
-    --checkpoint /checkpoint/pfz/2024_logs/1203_vseal_04_rgb_96bits_posttraining_video_ft_fast_lessh264/expe/checkpoint281.pth \
-    --checkpoint /checkpoint/soucek/2025_logs/0303_vseal_ydisc_mult1_bis_ft-fixed-lr5e6/expe/checkpoint.pth \
-    --checkpoint baseline/wam
-    
+    --checkpoint /checkpoint/pfz/2025_logs/0306_vseal_ydisc_release/_nbits=128/checkpoint600.pth \
+    --lowres_attenuation True --scaling_w 0.2 \
+    --dataset sa-1b-full-resized --is_video false --num_samples 10 --save_first 10 
+
+2/ Evaluate a checkpoint on videos
+
+python -m videoseal.evals.full \
+    --checkpoint /checkpoint/pfz/2025_logs/0306_vseal_ydisc_release/_nbits=128/checkpoint600.pth \
+    --lowres_attenuation True --scaling_w 0.2 \
+    --dataset sa-v --is_video true --num_samples 1 --save_first 1
+
+3/ Evaluate a baseline. Use the checkpoint path as the method name
+
+--checkpoint baseline/wam
+
+
+Arguments invertory:
     --dataset coco --is_video false \
-    --dataset sa-v --is_video true --num_samples 1 \
-
-python -m videoseal.evals.full \
-    --scaling_w none --checkpoint baselines/cin --lowres_attenuation True --videowam_mode repeat --save_first 10 --bdrate False --videowam_step_size 4 --num_samples 100 --dataset sa-1b-full-resized --is_video false
-    
-python -m videoseal.evals.full \
-    --dataset sa-1b-full-resized --is_video false --num_samples 10 --save_first 10 --attenuation none --scaling_w 0.025 \
-    --checkpoint  /checkpoint/pfz/2025_logs/0226_vseal_128bits_ftvid_complete_bis/_optimizer=AdamW,lr=1e-6_finetune_detector_start=2000_augmentation_config=0/checkpoint200.pth 
-
-    --dataset sa-1b-full-resized --is_video false --num_samples 10 --save_first 10 --attenuation simplified_jnd_variance_clamp --scaling_w 0.025
-    --checkpoint /checkpoint/pfz/2025_logs/0207_vseal_y_64bits_scalingw_schedule/_scaling_w_schedule=0_scaling_w=0.1/checkpoint900.pth \
-    
-python -m videoseal.evals.full \
-    --dataset sa-1b-full-resized --is_video false --num_samples 10 --save_first 10 --checkpoint /checkpoint/soucek/2025_logs/0303_vseal_ydisc_mult1_bis_ft-fixed-lr5e6/expe/checkpoint.pth --lowres_attenuation True
-
-python -m videoseal.evals.full \
-    --checkpoint /checkpoint/pfz/2025_logs/0219_vseal_convnextextractor/_nbits=128_lambda_i=0.1_embedder_model=1/checkpoint600.pth \
-    --dataset sa-v --is_video true --num_samples 10 --save_first 10 --attenuation None --scaling_w 0.016 \
-    --dataset sa-1b-full-resized --is_video false --num_samples 10 --save_first 10 --attenuation None --scaling_w 0.016 \
-    --img_size_proc 448
-    
+    --dataset sa-v --is_video true --num_samples 1 \   
 """
     
 import argparse
