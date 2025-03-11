@@ -21,8 +21,51 @@ pip install -r requirements.txt
 ```
 
 
-#### VMAF
+### FFmpeg and VMAF
 
+#### FFmpeg
+
+Install FFmpeg based on your platform:
+
+<details>
+<summary>Mac</summary>
+
+Install with [Homebrew](https://brew.sh/):
+```
+brew install ffmpeg
+```
+Then update the PATH:
+```
+export PATH=$PATH:/opt/homebrew/bin
+```
+Test the installation:
+```
+which ffmpeg
+ffmpeg -version
+```
+It should output the path to the ffmpeg binary and the version of ffmpeg.
+
+</details>
+
+<details>
+<summary>Linux</summary>
+
+Install with apt:
+```
+sudo apt install ffmpeg
+```
+Test the installation:
+```
+which ffmpeg
+ffmpeg -version
+```
+It should output the path to the ffmpeg binary and the version of ffmpeg.
+
+</details>
+
+
+
+#### VMAF
 For VMAF score, install latest git build from [here](https://johnvansickle.com/ffmpeg/builds), then update the PATH:
 ```
 wget https://johnvansickle.com/ffmpeg/builds/ffmpeg-git-amd64-static.tar.xz
@@ -54,6 +97,12 @@ It should output the path to the ffmpeg binary, the version of ffmpeg and the vm
 Download the model at:
 ```
 wget https://dl.fbaipublicfiles.com/videoseal/y_128b_img.pth -P checkpoints/
+```
+
+or on Mac:
+```
+mkdir checkpoints
+curl -o checkpoints/y_128b_img.pth https://dl.fbaipublicfiles.com/videoseal/y_128b_img.pth
 ```
 
 Then use the notebook in `notebooks/demos/video_inference.ipynb`. 
