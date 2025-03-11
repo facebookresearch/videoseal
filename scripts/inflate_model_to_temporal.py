@@ -151,7 +151,7 @@ def add_temporal_attention_into_convnext_inplace(state_dict):
     # add all temp blocks into the state dict
     sd = convnext_.state_dict()
     for k in sd.keys():
-        if k.startswith("stages"):
+        if k.startswith("stages") and ".temp_block." in k:
             new_k = f"detector.convnext.{k}"
             state_dict[new_k] = sd[k]
 
