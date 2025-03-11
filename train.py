@@ -6,43 +6,29 @@ Example usage (cluster 1 gpu):
     For eval full only:
         torchrun train.py --debug_slurm --only_eval True --output_dir output/
 
-Example:  decoding only, hidden like
-    OMP_NUM_THREADS=40 torchrun --nproc_per_node=2 train.py --local_rank 0 --embedder_model hidden --extractor_model hidden
-    OMP_NUM_THREADS=40 torchrun --nproc_per_node=2 train.py --local_rank 0 --embedder_model hidden --extractor_model hidden --video_dataset none --image_dataset sa-1b-full-resized --workers 8
+Put OMP_NUM_THREADS such that OMP_NUM_THREADS=(number of CPU threads)/(nproc per node) to remove warning messages
+        
+Examples:
 
-With video compression aug:
-    torchrun --nproc_per_node=2 train.py --local_rank 0  --image_dataset coco --video_dataset sa-v --augmentation_config configs/video_compression.yaml --extractor_model sam_tiny --embedder_model vae_small_bw --img_size 256 --img_size_proc 256 --batch_size 16 --batch_size_eval 32 --epochs 100 --optimizer AdamW,lr=1e-4 --scheduler CosineLRScheduler,lr_min=1e-6,t_initial=100,warmup_lr_init=1e-6,warmup_t=5 --seed 0 --perceptual_loss mse --lambda_i 0.0 --lambda_d 0.0 --lambda_det 0.0 --lambda_dec 1.0 --nbits 32 --scaling_i 1.0 --scaling_w 0.2 --balanced  false --iter_per_epoch 5
+    1/ image training
 
+    OMP_NUM_THREADS=40 torchrun --nproc_per_node=2 train.py --local_rank 0 \
+        --video_dataset none --image_dataset sa-1b-full-resized --workers 8 \
+        --extractor_model convnext_tiny --embedder_model unet_small2_yuv_quant --hidden_size_multiplier 1 --nbits 128 \
+        --scaling_w_schedule Cosine,scaling_min=0.2,start_epoch=200,epochs=200 --scaling_w 1.0 --scaling_i 1.0 --attenuation jnd_1_1 \
+        --epochs 601 --iter_per_epoch 1000 --scheduler CosineLRScheduler,lr_min=1e-6,t_initial=601,warmup_lr_init=1e-8,warmup_t=20 --optimizer AdamW,lr=5e-4 \
+        --lambda_dec 1.0 --lambda_d 0.1 --lambda_i 0.1 --perceptual_loss yuv  --num_augs 2 --augmentation_config configs/all_augs_v3.yaml --disc_in_channels 1 --disc_start 50 
 
-    torchrun --nproc_per_node=2 train.py --balanced False --attenuation None --total_gnorm 1.0 --scaling_w 0.025 --scaling_i 1.0 --nbits 64 --lambda_dec 1.0 --lambda_det 0.0 --lambda_d 0.1 --lambda_i 0.0 --perceptual_loss mse --seed 444 --scheduler None --optimizer AdamW,lr=1e-5 --resume_from /checkpoint/pfz/2025_logs/0207_vseal_y_64bits_scalingw_schedule/_scaling_w_schedule=0_scaling_w=0.1/checkpoint.pth --saveimg_freq 50 --eval_freq 10 --full_eval_freq 50 --batch_size_video_eval 1 --batch_size_video 1 --batch_size_eval 32 --batch_size 16 --workers 0 --iter_per_valid 10 --videowam_step_size 8 --finetune_detector_start 2000 --video_start 0 --prop_img_vid 0.0 --epochs 100 --iter_per_epoch 1000 --img_size_proc 256 --img_size_val 1024 --img_size 1024 --extractor_model sam_small --embedder_model unet_small2_yuv_quant --augmentation_config configs/all_augs.yaml --video_dataset sa-v --image_dataset none
-    torchrun --nproc_per_node=2 train.py --balanced False --attenuation None --total_gnorm 1.0 --scaling_w 0.025 --scaling_i 1.0 --nbits 64 --lambda_dec 1.0 --lambda_det 0.0 --lambda_d 0.1 --lambda_i 0.0 --perceptual_loss mse --seed 444 --scheduler None --optimizer AdamW,lr=1e-5 --resume_from /checkpoint/pfz/2025_logs/0207_vseal_y_64bits_scalingw_schedule/_scaling_w_schedule=0_scaling_w=0.1/checkpoint.pth --saveimg_freq 50 --eval_freq 10 --full_eval_freq 50 --batch_size_video_eval 1 --batch_size_video 1 --batch_size_eval 8 --batch_size 4 --workers 0 --iter_per_valid 10 --videowam_step_size 8 --finetune_detector_start 2000 --video_start 0 --prop_img_vid 0.0 --epochs 100 --iter_per_epoch 1000 --img_size_proc 256 --img_size_val 1024 --img_size 1024 --extractor_model sam_small --embedder_model unet_small2_yuv_quant --augmentation_config configs/all_augs.yaml --video_dataset none --image_dataset sa-1b-full-resized
-    torchrun --nproc_per_node=2 train.py --balanced False --attenuation None --total_gnorm 1.0 --scaling_w_schedule Cosine,scaling_min=0.016,start_epoch=50,epochs=100 --scaling_w 0.025 --scaling_i 1.0 --nbits 96 --lambda_dec 1.0 --lambda_det 0.0 --lambda_d 0.1 --lambda_i 0.0 --perceptual_loss mse --seed 444 --scheduler CosineLRScheduler,lr_min=1e-6,t_initial=201,warmup_lr_init=1e-8,warmup_t=30 --optimizer AdamW,lr=1e-5 --resume_from /checkpoint/pfz/2025_logs/0207_vseal_y_96bits_scalingw_schedule/_scaling_w_schedule=0_scaling_w=0.2/checkpoint.pth --saveimg_freq 50 --eval_freq 10 --full_eval_freq 50 --batch_size_video_eval 1 --batch_size_video 1 --batch_size_eval 16 --batch_size 16 --workers 0 --iter_per_valid 10 --videowam_chunk_size 8 --videowam_step_size 4 --resume_disc True --finetune_detector_start 0 --video_start 0 --prop_img_vid 0.0 --epochs 201 --iter_per_epoch 1000 --img_size_proc 256 --img_size_val 768 --img_size 768 --extractor_model sam_small --embedder_model unet_small2_yuv_quant --augmentation_config configs/all_augs_nomed.yaml --video_dataset sa-v --image_dataset none
-    OMP_NUM_THREADS=40 torchrun --nproc_per_node=2 train.py --local_rank 0 --attenuation jnd_1_1 --balanced False --total_gnorm 1.0 --scaling_w_schedule Cosine,scaling_min=0.016,start_epoch=50,epochs=100 --scaling_w 0.025 --scaling_i 1.0 --nbits 96 --lambda_dec 1.0 --lambda_det 0.0 --lambda_d 0.1 --lambda_i 0.0 --perceptual_loss mse --seed 444 --scheduler CosineLRScheduler,lr_min=1e-6,t_initial=201,warmup_lr_init=1e-8,warmup_t=30 --optimizer AdamW,lr=1e-5 --resume_from /checkpoint/pfz/2025_logs/0214_vseal_rgb_96bits_scalingw_schedule/_scaling_w_schedule=0_scaling_w=0.2_perceptual_loss=yuv/checkpoint.pth --saveimg_freq 50 --eval_freq 10 --full_eval_freq 50 --batch_size_video_eval 1 --batch_size_video 1 --batch_size_eval 8 --batch_size 16 --workers 0 --iter_per_valid 10 --videowam_step_size 4 --resume_disc True --finetune_detector_start 0 --video_start 0 --prop_img_vid 0.0 --epochs 201 --iter_per_epoch 1000 --img_size_proc 256 --img_size_val 768 --img_size 768 --extractor_model sam_small --embedder_model unet_small2_quant --augmentation_config configs/all_augs_nomed.yaml --video_dataset sa-v --image_dataset none
-    OMP_NUM_THREADS=40 torchrun --nproc_per_node=2 train.py --local_rank 0 --attenuation jnd_1_1 --balanced False --total_gnorm 1.0 --scaling_w_schedule Cosine,scaling_min=0.016,start_epoch=50,epochs=100 --scaling_w 0.25 --scaling_i 1.0 --nbits 96 --lambda_dec 1.0 --lambda_det 0.0 --lambda_d 0.1 --lambda_i 0.0 --perceptual_loss mse --seed 444 --optimizer AdamW,lr=1e-5 --resume_from /checkpoint/pfz/2025_logs/0214_vseal_rgb_96bits_scalingw_schedule/_scaling_w_schedule=0_scaling_w=0.2_perceptual_loss=yuv/checkpoint.pth --saveimg_freq 50 --eval_freq 10 --full_eval_freq 50 --batch_size_video_eval 1 --batch_size_video 1 --batch_size_eval 8 --batch_size 16 --workers 0 --iter_per_valid 10 --videowam_step_size 4 --resume_disc True --finetune_detector_start 0 --video_start 0 --prop_img_vid 0.0 --epochs 201 --iter_per_epoch 1000 --img_size_proc 256 --img_size_val 768 --img_size 768 --extractor_model sam_small --embedder_model unet_small2_quant --augmentation_config configs/all_augs_nomed.yaml --video_dataset sa-v --image_dataset none
-    OMP_NUM_THREADS=40 torchrun --nproc_per_node=2 train.py --local_rank 0 --balanced False --attenuation None --total_gnorm 1.0 --scaling_w 0.2 --scaling_i 1.0 --nbits 96 --lambda_dec 1.0 --lambda_det 0.0 --lambda_d 0.1 --lambda_i 0.2 --perceptual_loss yuv+focal --seed 444 --scheduler None --optimizer AdamW,lr=1e-5 --saveimg_freq 1 --eval_freq 10 --full_eval_freq 50 --batch_size_video_eval 1 --batch_size_video 1 --batch_size_eval 8 --batch_size 4 --workers 0 --iter_per_valid 10 --videowam_step_size 8 --finetune_detector_start 2000 --video_start 0 --prop_img_vid 0.0 --epochs 100 --iter_per_epoch 1000 --img_size_proc 256 --img_size_val 256 --img_size 256 --extractor_model convnext_small --embedder_model unet_small2_yuv_quant --augmentation_config configs/all_augs_v2.yaml --video_dataset none --image_dataset sa-1b-full-resized
+    2/ video finetuning
     
-    OMP_NUM_THREADS=40 torchrun --nproc_per_node=2 train.py --local_rank 0    --balanced False --total_gnorm 1.0 --scaling_i 1.0 --scaling_w 0.016 --attenuation None --nbits 128 --lambda_dec 1.0 --lambda_det 0.0 --lambda_d 0.2 --lambda_i 0.1 --perceptual_loss yuv --seed 0 --scheduler None --optimizer AdamW,lr=1e-5 --saveimg_freq 50 --resume_from /checkpoint/pfz/2025_logs/0219_vseal_convnextextractor/_nbits=128_lambda_i=0.1_embedder_model=1/checkpoint600.pth --eval_freq 10 --full_eval_freq 50 --batch_size_video_eval 1 --batch_size_video 1 --batch_size_eval 16 --batch_size 16 --workers 0 --iter_per_valid 10 --frames_per_clip 16 --videowam_step_size 1 --resume_disc True --resume_optimizer_state True --finetune_detector_start 2000 --video_start 0 --prop_img_vid 0.0 --epochs 201 --iter_per_epoch 100 --img_size_proc 256 --img_size_val 768 --img_size 768 --num_augs 2 --extractor_model convnext_tiny --embedder_model unet_small2_yuv_quant --augmentation_config configs/all_augs_v3_novid.yaml --video_dataset sa-v --image_dataset none
-
-OMP_NUM_THREADS=40 torchrun --nproc_per_node=2 train.py --local_rank 0  --balanced True --total_gnorm 1.0 --scaling_i 1.0 --scaling_w 0.2 --attenuation jnd_1_1 --nbits 128 --lambda_dec 0.5 --lambda_det 0.0 --lambda_d 0.1 --lambda_i 0.1 --perceptual_loss yuv --seed 0 --scheduler None --optimizer AdamW,lr=1e-5 --saveimg_freq 50 --resume_from /checkpoint/pfz/2025_logs/0226_vseal_ydisc_mult1_bis/_scaling_w_schedule=1_scaling_w=1.0_attenuation=jnd_1_1_hidden_size_multiplier=1/checkpoint500.pth --eval_freq 10 --full_eval_freq 50 --batch_size_video_eval 1 --batch_size_video 1 --batch_size_eval 16 --batch_size 16 --workers 0 --iter_per_valid 10 --frames_per_clip 16 --videowam_step_size 4 --lowres_attenuation True --resume_optimizer_state True --resume_disc True --disc_in_channels 1 --finetune_detector_start 2000 --video_start 0 --prop_img_vid 0.0 --epochs 201 --iter_per_epoch 100 --img_size_proc 256 --img_size_val 768 --img_size 768 --num_augs 2 --hidden_size_multiplier 1 --extractor_model convnext_tiny --embedder_model unet_small2_yuv_quant --augmentation_config configs/all_augs_v3.yaml --video_dataset sa-v --image_dataset none --output_dir /checkpoint/pfz/2025_logs/0301_vseal_ep500_ftvid_complete_morepercep/_finetune_detector_start=2000_augmentation_config=0 
-    
-OMP_NUM_THREADS=40 torchrun --nproc_per_node=2 train.py --local_rank 0  --balanced True --total_gnorm 1.0 --scaling_w 0.2 --attenuation jnd_1_1 --scaling_i 1.0 --nbits 128 --lambda_dec 1.0 --lambda_det 0.0 --lambda_d 0.1 --lambda_i 0.1 --perceptual_loss yuv --seed 0 --scheduler None --optimizer AdamW,lr=1e-5 --resume_from /private/home/soucek/videoseal/0226_vseal_ydisc_mult1_bis_inflated.pth --num_augs 2 --saveimg_freq 50 --eval_freq 10 --full_eval_freq 50 --batch_size_video_eval 1 --batch_size_video 1 --batch_size_eval 16 --batch_size 16 --workers 0 --iter_per_valid 10 --videowam_step_size 1 --finetune_detector_start 2000 --video_start 0 --prop_img_vid 0.0 --epochs 201 --iter_per_epoch 1000 --img_size_proc 256 --img_size_val 768 --img_size 768 --disc_in_channels 1 --frames_per_clip 16 --resume_optimizer_state True --resume_disc True --extractor_model convnext_tiny_temporal --hidden_size_multiplier 1 --embedder_model unet_small2_yuv_quant_conv3d --augmentation_config configs/all_augs_v3.yaml --video_dataset sa-v --image_dataset none 
-
-
-
-Args inventory:
-    --scheduler CosineLRScheduler,lr_min=1e-6,t_initial=100,warmup_lr_init=1e-6,warmup_t=5
-    --optimizer Lamb,lr=1e-3
-    --train_dir /checkpoint/pfz/projects/watermarking/data/coco_1k_orig
-    --resume_from /checkpoint/pfz/2024_logs/0611_segmark_lpipsmse/_lambda_d=0.25_lambda_i=0.5_scaling_w=0.4/checkpoint050.pth
-    --extractor_model dino2s_indices=11_upscale=1_14 --img_size 336 --batch_size 8 --extractor_config configs/extractor_dinos.yaml
-    --embedder_model vae_sd --embedder_config configs/embedder_sd.yaml
-    --local_rank 0  --only_eval True --scaling_w 0.4 --embedder_model vae_small --extractor_model sam_small --augmentation_config configs/all_augs.yaml --resume_from /checkpoint/pfz/2024_logs/0708_segmark_bigger_vae/_scaling_w=0.4_embedder_model=vae_small_extractor_model=sam_small/checkpoint.pth
-    --local_rank 0  --only_eval True --scaling_w 2.0 --scaling_i 1.0 --nbits 16 --lambda_dec 6.0 --lambda_det 1.0 --lambda_d 0.0 --lambda_i 0.0 --perceptual_loss none --seed 0 --scheduler none --optimizer AdamW,lr=1e-5 --epochs 50 --batch_size_eval 32 --batch_size 16 --img_size 256 --attenuation jnd_1_3 --resume_from /checkpoint/pfz/2024_logs/0708_segmark_bigger_vae/_scaling_w=0.4_embedder_model=vae_small_extractor_model=sam_small/checkpoint.pth --embedder_model vae_small --extractor_model sam_small --augmentation_config configs/all_augs.yaml
-    --video_dataset sa-v
-    --image_dataset coco
-
-Put OMP_NUM_THREADS such that OMP_NUM_THREADS=(number of CPU threads)/(nproc per node)
-
+    OMP_NUM_THREADS=40 torchrun --nproc_per_node=2 train.py --local_rank 0 \
+        --video_dataset sa-v --image_dataset none --workers 0 --frames_per_clip 16 \
+        --resume_from /checkpoint/pfz/2025_logs/0306_vseal_ydisc_release/_nbits=128/checkpoint600.pth --resume_optimizer_state True --resume_disc True  \
+        --videowam_step_size 4 --lowres_attenuation True --img_size_proc 256 --img_size_val 768 --img_size 768 \
+        --extractor_model convnext_tiny --embedder_model unet_small2_yuv_quant --hidden_size_multiplier 1 --nbits 128 \
+        --scaling_w_schedule None --scaling_w 0.2 --scaling_i 1.0 --attenuation jnd_1_1 \
+        --epochs 601 --iter_per_epoch 100 --scheduler None --optimizer AdamW,lr=1e-5 \
+        --lambda_dec 1.0 --lambda_d 0.5 --lambda_i 0.1 --perceptual_loss yuv  --num_augs 2 --augmentation_config configs/all_augs_v3.yaml --disc_in_channels 1 --disc_start 50
 
 """
 
@@ -99,7 +85,7 @@ def get_parser():
         help="Percentage of images in the hybrid dataset 0.5 means for each 5 epochs of images 5 video epoch is made. Only applicable if both --image_dataset and --video_dataset are provided.")
     aa("--video_start", type=int, default=500,
         help="Number of epochs before starting video training")
-    aa("--finetune_detector_start", type=int, default=600,
+    aa("--finetune_detector_start", type=int, default=1e6,
        help="Number of epochs afterwhich the generator is frozen and detector is finetuned")
 
     group = parser.add_argument_group('Experiments parameters')
@@ -186,7 +172,7 @@ def get_parser():
     aa('--lambda_i', default=0.0, type=float, help='Weight for the image loss')
     aa('--lambda_d', default=0.1, type=float,
        help='Weight for the discriminator loss')
-    aa('--balanced', type=utils.bool_inst, default=True,
+    aa('--balanced', type=utils.bool_inst, default=False,
        help='If True, the weights of the losses are balanced')
     aa('--total_gnorm', default=0.0, type=float,
        help='Total norm for the adaptive weights. If 0, uses the norm of the biggest weight.')

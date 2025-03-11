@@ -1,6 +1,6 @@
 """
 from root directory:
-    python -m videoseal.evals.flops --device cuda --nbits 128 --hiden_size_multiplier 1
+    python -m videoseal.evals.flops --device cuda --nbits 128 --hidden_size_multiplier 1
 """
 
 import argparse
