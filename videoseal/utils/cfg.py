@@ -9,9 +9,11 @@ from urllib.parse import urlparse
 
 import omegaconf
 import torch
+import torch.distributed as dist
 import torchvision.transforms as transforms
 from omegaconf import DictConfig, OmegaConf
 
+import videoseal.utils.dist as udist
 from videoseal.augmentation.augmenter import get_dummy_augmenter
 from videoseal.data.datasets import CocoImageIDWrapper, ImageFolder, VideoDataset, SimpleVideoDataset
 from videoseal.models import VideoWam, build_embedder, build_extractor, build_baseline
@@ -253,6 +255,12 @@ def setup_model_from_model_card(model_card: Path | str) -> VideoWam:
         )
 
     elif is_url(config.checkpoint_path):
+        if udist.is_dist_avail_and_initialized():
+            # download only on the main process
+            if udist.is_main_process():
+                ckpt_path = maybe_download_checkpoint(config.checkpoint_path)
+            dist.barrier()
+
         ckpt_path = maybe_download_checkpoint(config.checkpoint_path)
     else:
         raise RuntimeError(f"Path or uri {config.checkpoint_path} is unknown or does not exist")
