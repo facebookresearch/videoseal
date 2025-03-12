@@ -1,4 +1,4 @@
-checkpoint_path: checkpoints/y_128b_img.pth
+checkpoint_path: https://dl.fbaipublicfiles.com/videoseal/y_128b_img.pth
 args:
   attenuation_config: configs/attenuation.yaml
   attenuation: jnd_1_1

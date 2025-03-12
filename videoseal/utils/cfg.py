@@ -1,9 +1,11 @@
 import importlib.util
 import json
 import os
+import requests
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Union
+from urllib.parse import urlparse
 
 import omegaconf
 import torch
@@ -22,6 +24,36 @@ from videoseal.modules.jnd import JND, VarianceBasedJND
 #     hidden_size: ${mul:${vae.msg_processor.nbits},2}
 # omegaconf.OmegaConf.register_new_resolver("mul", lambda x, y: x * y)
 # omegaconf.OmegaConf.register_new_resolver("add", lambda x, y: x + y)
+
+
+def is_url(string):
+    try:
+        result = urlparse(string)
+        return all([result.scheme, result.netloc])
+    except ValueError:
+        return False
+
+
+def maybe_download_checkpoint(url):
+    try:
+        basename = urlparse(url).path.split("/")[-1]
+        os.makedirs("checkpoints", exist_ok=True)
+        filename = os.path.abspath(os.path.join("checkpoints", basename))
+
+        if os.path.exists(filename):
+            print(f"File {filename} exists, skipping download")
+            return filename
+
+        response = requests.get(url)
+        response.raise_for_status()  # Raise an exception for HTTP errors
+        with open(filename, 'wb') as file:
+            file.write(response.content)
+        print(f"File {url} downloaded successfully to {filename}")
+    except requests.exceptions.RequestException as e:
+        print(f"Error downloading file: {e}")
+
+    return filename
+
 
 @dataclass
 class SubModelConfig:
@@ -219,7 +251,9 @@ def setup_model_from_model_card(model_card: Path | str) -> VideoWam:
             repo_id="facebook/video_seal",  # The repository ID
             filename=fname  # Dynamically determined filename
         )
-        
+
+    elif is_url(config.checkpoint_path):
+        ckpt_path = maybe_download_checkpoint(config.checkpoint_path)
     else:
         raise RuntimeError(f"Path or uri {config.checkpoint_path} is unknown or does not exist")
 
