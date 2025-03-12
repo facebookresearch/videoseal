@@ -94,21 +94,29 @@ It should output the path to the ffmpeg binary, the version of ffmpeg and the vm
 
 ## Quick start for inference
 
-Download the model at:
-```
+### Download pre-trained model
+
+For Linux:
+```bash
 wget https://dl.fbaipublicfiles.com/videoseal/y_128b_img.pth -P checkpoints/
 ```
 
-or on Mac:
-```
+For Mac:
+```bash
 mkdir checkpoints
 curl -o checkpoints/y_128b_img.pth https://dl.fbaipublicfiles.com/videoseal/y_128b_img.pth
 ```
 
-Then use the notebook in `notebooks/demos/video_inference.ipynb`. 
-By default, it will load the model card `videoseal_1.0`, which contains the config for the model `y_128b_img.pth`.
+### Run inference
 
-The model was trained with this grid: https://github.com/fairinternal/videoseal/blob/main/expes/videoseal/img_train.json
+- On the cluster: Use the notebook [`notebooks/demos/video_inference.ipynb`](notebooks/demos/video_inference.ipynb)
+- For Mac (local): Use [`notebooks/demos/video_inference_streaming.ipynb`](notebooks/demos/video_inference_streaming.ipynb) (optimized for lower RAM usage)
+
+### Model details
+
+- Default configuration: Uses model card `videoseal_1.0` with config for `y_128b_img.pth`
+- Training configuration: See training grid at [img_train.json](https://github.com/fairinternal/videoseal/blob/main/expes/videoseal/img_train.json)
+
 
 ## Running experiments
 
