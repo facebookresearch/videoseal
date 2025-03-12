@@ -1,0 +1,62 @@
+{
+    "cmd": "/private/home/pfz/miniconda3/envs/img/bin/python train.py",
+    "git": "git@github.com:fairinternal/videoseal.git",
+    "preload": "MKL_THREADING_LAYER=GNU",
+    "commit": "archs",
+    "precmd": [],
+    "params": {
+        "resume_from":          "/checkpoint/pfz/2024_logs/1028_vseal_long/_seed=3_optimizer=AdamW,lr=1e-4_embedder_model=unet_small2_yuv/checkpoint550.pth",
+        "video_dataset":        "sa-v",
+        "augmentation_config":  "configs/all_augs_morecodec.yaml",
+        "embedder_model":       "unet_small2_yuv",
+        "extractor_model":      "sam_small",
+        "video_start":          0,
+        "img_size":             256,
+        "img_size_val":         256,
+        "img_size_extractor":   256,
+        "num_augs":             2,
+        "num_clips":            1,
+        "frame_step":           1,
+        "frames_per_clip":      32,  
+        "iter_per_epoch":       1000,
+        "batch_size":           32,
+        "batch_size_eval":      32,
+        "batch_size_video":     1,
+        "batch_size_video_eval":1,
+        "iter_per_valid":       20,
+        "epochs":               51,
+        "optimizer":            ["AdamW,lr=1e-4", "AdamW,lr=5e-5", "AdamW,lr=1e-5"],
+        "scheduler":            "None",
+        "seed":                 0,
+        "perceptual_loss":      "mse",
+        "lambda_i":             0.0,
+        "lambda_d":             0.0,
+        "lambda_det":           0.0,
+        "lambda_dec":           1.0,
+        "nbits":                128,
+        "scaling_i":            1.0,
+        "attenuation":          {
+            "jnd_1_1":  {"scaling_w": [0.8, 0.4, 0.2]},
+            "none":     {"scaling_w": [0.04, 0.02, 0.01]}
+        },
+        "balanced":             true,
+        "workers":              0,
+        "master_port":          "__SAMPLE__(10000, 20000)"
+    },
+    "machine": {
+        "constraint":       "volta32gb",
+        "gres":             "gpu:8",
+        "nodes":            "1",
+        "tasks-per-node":   "8",
+        "partition":        "learnfair",
+        "cpus-per-task":    "10",
+        "time":             4320,
+        "mem-per-cpu":      "10G"
+    },
+    "meta": {
+        "group": "",
+        "name": "1105_vseal_long_resumevideo_bis",
+        "dest-arg": "yes",
+        "dest-name": "output_dir"
+    }
+}

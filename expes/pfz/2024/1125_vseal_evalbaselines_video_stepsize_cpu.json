@@ -1,0 +1,34 @@
+{
+    "cmd": "/private/home/pfz/miniconda3/envs/img/bin/python -m videoseal.evals.full",
+    "git": "git@github.com:fairinternal/videoseal.git",
+    "preload": "MKL_THREADING_LAYER=GNU",
+    "commit": "baselines-2",
+    "precmd": [],
+    "params": {
+        "is_video":        {
+            "true":  {"dataset":    "sa-v-5s"}
+        },
+        "videowam_step_size":   [1,2,4,8,16,32],
+        "bdrate":               true,
+        "num_samples":          100,
+        "save_first":           1,
+        "device":               "cpu",
+        "checkpoint": [
+            "/large_experiments/meres/hadyelsahar/2024_logs/1120-videoseal0.4/_scaling_w=0.5_sleepwake=False_videowam_step_size=4_extractor_model=sam_tiny/checkpoint.pth"
+        ]
+    },
+    "machine": {
+        "nodes": "1",
+        "tasks-per-node": "1",
+        "partition": "learnfair",
+        "cpus-per-task": "40",
+        "time": 4320,
+        "mem-per-cpu": "6G"
+    },
+    "meta": {
+        "group": "",
+        "name": "1125_vseal_evalbaselines_video_stepsize_cpu",
+        "dest-arg": "yes",
+        "dest-name": "output_dir"
+    }
+}

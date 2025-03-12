@@ -1,0 +1,49 @@
+
+{
+    "cmd": "/private/home/pfz/miniconda3/envs/img/bin/python -m videoseal.evals.full",
+    "git": "git@github.com:fairinternal/videoseal.git",
+    "preload": "MKL_THREADING_LAYER=GNU",
+    "commit": "pfz/ftvideo",
+    "precmd": [],
+    "params": {
+        "is_video":        {
+            "false":  {
+                "dataset":              "sa-1b-full-resized",
+                "num_samples":          100
+            },
+            "true":  {
+                "dataset":              "sa-v-3s",
+                "num_samples":          100
+            } 
+        },
+        "videowam_step_size":   4,
+        "bdrate":               false,
+        "save_first":           10,
+        "short_edge_size":      1024,
+        "videowam_mode":        "repeat",
+        "attenuation":  {
+            "none":{
+                "checkpoint":{
+                    "/checkpoint/pfz/2025_logs/0219_vseal_convnextextractor/_nbits=96_lambda_i=0.1_embedder_model=1/checkpoint600.pth":{
+                        "scaling_w":    [0.012, 0.016, 0.020, 0.025]
+                    }
+                }
+            }
+        }
+    },
+    "machine": {
+        "gres": "gpu:1",
+        "nodes": "1",
+        "tasks-per-node": "1",
+        "partition": "learnfair",
+        "cpus-per-task": "10",
+        "time": 4320,
+        "mem-per-cpu": "6G"
+    },
+    "meta": {
+        "group": "",
+        "name": "0224_vseal_eval_convnextextractor_96b",
+        "dest-arg": "yes",
+        "dest-name": "output_dir"
+    }
+}

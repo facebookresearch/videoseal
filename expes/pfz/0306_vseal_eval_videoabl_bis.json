@@ -1,0 +1,49 @@
+
+{
+    "cmd": "/private/home/pfz/miniconda3/envs/img/bin/python -m videoseal.evals.full",
+    "git": "git@github.com:fairinternal/videoseal.git",
+    "preload": "MKL_THREADING_LAYER=GNU",
+    "commit": "pfz/ftvideo",
+    "precmd": [],
+    "params": {
+        "is_video":        {
+            "false":  {
+                "dataset":              "sa-1b-full-resized",
+                "num_samples":          100
+            },
+            "true":  {
+                "dataset":              "sa-v-3s",
+                "num_samples":          100
+            } 
+        },
+        "short_edge_size":      [-1, 256],
+        "videowam_step_size":   1,
+        "videowam_chunk_size":  16,
+        "bdrate":               false,
+        "save_first":           10,
+        "videowam_mode":        "repeat",
+        "lowres_attenuation":   true,
+        "scaling_w":            0.2,
+        "checkpoint": [
+            "/checkpoint/pfz/2025_logs/0227_vseal_video_abl_bis/_balanced=True_lambda_i=0.1_workers=0_extractor_model=0_embedder_model=0_video_dataset=sa-v_image_dataset=none/checkpoint050.pth",
+            "/checkpoint/pfz/2025_logs/0227_vseal_video_abl_bis/_balanced=True_lambda_i=0.1_workers=0_extractor_model=1_embedder_model=1_video_dataset=sa-v_image_dataset=none/checkpoint050.pth",
+            "/checkpoint/pfz/2025_logs/0227_vseal_video_abl_bis/_balanced=True_lambda_i=0.1_workers=8_extractor_model=1_embedder_model=1_video_dataset=none_image_dataset=sa-1b-full-resized/checkpoint050.pth",
+            "/checkpoint/pfz/2025_logs/0227_vseal_video_abl_bis/_balanced=True_lambda_i=0.1_workers=8_extractor_model=1_embedder_model=1_video_dataset=none_image_dataset=sa-1b-full-resized/checkpoint250.pth"
+        ]
+    },
+    "machine": {
+        "gres": "gpu:1",
+        "nodes": "1",
+        "tasks-per-node": "1",
+        "partition": "learnfair",
+        "cpus-per-task": "20",
+        "time": 4320,
+        "mem-per-cpu": "6G"
+    },
+    "meta": {
+        "group": "",
+        "name": "0306_vseal_eval_videoabl_bis",
+        "dest-arg": "yes",
+        "dest-name": "output_dir"
+    }
+}

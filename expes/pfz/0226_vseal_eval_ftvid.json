@@ -1,0 +1,60 @@
+
+{
+    "cmd": "/private/home/pfz/miniconda3/envs/img/bin/python -m videoseal.evals.full",
+    "git": "git@github.com:fairinternal/videoseal.git",
+    "preload": "MKL_THREADING_LAYER=GNU",
+    "commit": "pfz/ftvideo",
+    "precmd": [],
+    "params": {
+        "is_video":        {
+            "false":  {
+                "dataset":              "sa-1b-full-resized",
+                "num_samples":          100
+            },
+            "true":  {
+                "dataset":              "sa-v-3s",
+                "num_samples":          100
+            } 
+        },
+        "videowam_step_size":   4,
+        "bdrate":               false,
+        "save_first":           10,
+        "videowam_mode":        "repeat",
+        "checkpoint": {
+            "/checkpoint/pfz/2025_logs/0219_vseal_convnextextractor/_nbits=128_lambda_i=0.1_embedder_model=1/checkpoint600.pth":{
+                "scaling_w":    0.016
+            },
+            "/checkpoint/pfz/2025_logs/0224_vseal_128bits_convnext_ftvid/_scaling_w=0.016_attenuation=None_augmentation_config=0/checkpoint200.pth":{
+                "scaling_w":    0.016
+            },
+            "/checkpoint/pfz/2025_logs/0224_vseal_128bits_convnext_ftvid/_scaling_w=0.016_attenuation=None_augmentation_config=1/checkpoint200.pth":{
+                "scaling_w":    0.016
+            },
+            "/checkpoint/pfz/2025_logs/0224_vseal_128bits_convnext_ftvid/_scaling_w=0.016_attenuation=None_augmentation_config=2/checkpoint200.pth":{
+                "scaling_w":    0.016
+            },
+            "/checkpoint/pfz/2025_logs/0225_vseal_128bits_convnext_ftvid_256_morevid/_scaling_w=0.016_attenuation=None_lambda_dec=0.5/checkpoint100.pth":{
+                "scaling_w":    0.016
+            },
+            "/checkpoint/pfz/2025_logs/0225_vseal_128bits_convnext_ftvid_256_morevid/_scaling_w=0.016_attenuation=None_lambda_dec=1.0/checkpoint100.pth":{
+                "scaling_w":    0.016
+            }
+        }
+        
+    },
+    "machine": {
+        "gres": "gpu:1",
+        "nodes": "1",
+        "tasks-per-node": "1",
+        "partition": "learnfair",
+        "cpus-per-task": "10",
+        "time": 4320,
+        "mem-per-cpu": "6G"
+    },
+    "meta": {
+        "group": "",
+        "name": "0226_vseal_eval_ftvid",
+        "dest-arg": "yes",
+        "dest-name": "output_dir"
+    }
+}

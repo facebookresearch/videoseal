@@ -1,0 +1,46 @@
+{
+    "cmd": "/private/home/pfz/miniconda3/envs/img/bin/python -m videoseal.evals.full",
+    "git": "git@github.com:fairinternal/videoseal.git",
+    "preload": "MKL_THREADING_LAYER=GNU",
+    "commit": "baselines-2",
+    "precmd": [],
+    "params": {
+        "is_video":        {
+            "false": {"dataset":    "sa-1b"},
+            "true":  {"dataset":    "sa-v"}
+        },
+        "bdrate":               false,
+        "num_samples":          100,
+        "save_first":           5,
+        "videowam_step_size":   4,
+        "checkpoint":{
+            "/checkpoint/pfz/2024_logs/1128_vseal_04_rgb_96bits_posttraining/_scaling_w=1.5_total_gnorm=1.0/checkpoint750.pth":{
+                "scaling_w":    [5.0, 4.5, 4.0, 3.5, 3.0, 2.5, 2.0, 1.5, 1.0]
+            },
+            "/checkpoint/pfz/2024_logs/1128_vseal_04_rgb_96bits_posttraining/_scaling_w=1.0_total_gnorm=1.0/checkpoint750.pth":{
+                "scaling_w":    [5.0, 4.5, 4.0, 3.5, 3.0, 2.5, 2.0, 1.5, 1.0]
+            },
+            "/checkpoint/pfz/2024_logs/1128_vseal_04_rgb_96bits_posttraining_v2/_scaling_w=2.0_total_gnorm=1.0/checkpoint740.pth":{
+                "scaling_w":    [5.0, 4.5, 4.0, 3.5, 3.0, 2.5, 2.0, 1.5, 1.0]
+            },
+            "/checkpoint/pfz/2024_logs/1128_vseal_04_rgb_96bits_posttraining/_scaling_w=0.02_total_gnorm=0.0/checkpoint800.pth":{
+                "scaling_w":    [0.2, 0.1, 0.05, 0.02, 0.01, 0.005, 0.002, 0.001]
+            }
+        }
+    },
+    "machine": {
+        "gres": "gpu:1",
+        "nodes": "1",
+        "tasks-per-node": "1",
+        "partition": "learnfair",
+        "cpus-per-task": "40",
+        "time": 180,
+        "mem-per-cpu": "6G"
+    },
+    "meta": {
+        "group": "",
+        "name": "1202_vseal_eval96b_bis",
+        "dest-arg": "yes",
+        "dest-name": "output_dir"
+    }
+}

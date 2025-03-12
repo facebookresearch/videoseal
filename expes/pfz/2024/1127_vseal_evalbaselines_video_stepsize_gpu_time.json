@@ -1,0 +1,44 @@
+{
+    "cmd": "/private/home/pfz/miniconda3/envs/img/bin/python -m videoseal.evals.full",
+    "git": "git@github.com:fairinternal/videoseal.git",
+    "preload": "MKL_THREADING_LAYER=GNU",
+    "commit": "baselines-2",
+    "precmd": [],
+    "params": {
+        "is_video":        {
+            "true":  {"dataset":    "sa-v-5s"}
+        },
+        "videowam_step_size":   [1,2,4,8,16,32],
+        "num_frames":           128,
+        "videowam_chunk_size":  16,
+        "bdrate":               false,
+        "only_identity":        true,
+        "num_samples":          100,
+        "save_first":           -1,
+        "device":               "cuda",
+        "checkpoint": [
+            "baselines/trustmark",
+            "baselines/hidden",
+            "baselines/mbrs",
+            "baselines/cin",
+            "baselines/wam",
+            "/private/home/hadyelsahar/work/code/videoseal/2024_logs/1016-hybrid-vs-ours/_lambda_d=0.5_lambda_i=0.5_optimizer=AdamW,lr=1e-4_videowam_step_size=4_video_start=500_embedder_model=unet_small2/checkpoint.pth",
+            "/large_experiments/meres/hadyelsahar/2024_logs/1120-videoseal0.4/_scaling_w=0.5_sleepwake=False_videowam_step_size=4_extractor_model=sam_tiny/checkpoint750.pth"
+        ]
+    },
+    "machine": {
+        "gres": "gpu:1",
+        "nodes": "1",
+        "tasks-per-node": "1",
+        "partition": "learnfair",
+        "cpus-per-task": "40",
+        "time": 4320,
+        "mem-per-cpu": "6G"
+    },
+    "meta": {
+        "group": "",
+        "name": "1127_vseal_evalbaselines_video_stepsize_gpu_time",
+        "dest-arg": "yes",
+        "dest-name": "output_dir"
+    }
+}

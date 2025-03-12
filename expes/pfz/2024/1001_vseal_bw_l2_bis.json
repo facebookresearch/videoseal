@@ -1,0 +1,46 @@
+{
+    "cmd": "/private/home/pfz/miniconda3/envs/img/bin/python train.py",
+    "git": "git@github.com:fairinternal/videoseal.git",
+    "preload": "MKL_THREADING_LAYER=GNU",
+    "precmd": [],
+    "commit": "gray",
+    "params": {
+        "augmentation_config":  "configs/simple_augs.yaml",
+        "embedder_model":       "vae_small_bw",
+        "extractor_model":      "sam_tiny",
+        "img_size":             256,
+        "img_size_extractor":   256,
+        "batch_size":           16,
+        "batch_size_eval":      32,
+        "epochs":               100,
+        "optimizer":            "AdamW,lr=1e-4",
+        "scheduler":            "CosineLRScheduler,lr_min=1e-6,t_initial=100,warmup_lr_init=1e-6,warmup_t=5",
+        "seed":                 0,
+        "perceptual_loss":      "mse",
+        "lambda_i":             [0.2, 0.4, 0.6, 0.8],
+        "lambda_d":             0.0,
+        "lambda_det":           0.0,
+        "lambda_dec":           1.0,
+        "nbits":                32,
+        "scaling_i":            1.0,
+        "scaling_w":            0.4,
+        "balanced":             true,
+        "master_port":          "__SAMPLE__(10000, 20000)"
+    },
+    "machine": {
+        "constraint":       "volta32gb",
+        "gres":             "gpu:8",
+        "nodes":            "1",
+        "tasks-per-node":   "8",
+        "partition":        "devlab",
+        "cpus-per-task":    "10",
+        "time":             4320,
+        "mem-per-cpu":      "10G"
+    },
+    "meta": {
+        "group":     "", 
+        "name":      "1001_vseal_bw_l2_bis",
+        "dest-arg":  "yes",
+        "dest-name": "output_dir"
+   }
+}

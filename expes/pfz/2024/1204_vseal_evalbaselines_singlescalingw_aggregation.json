@@ -1,0 +1,39 @@
+{
+    "cmd": "/private/home/pfz/miniconda3/envs/img/bin/python -m videoseal.evals.full",
+    "git": "git@github.com:fairinternal/videoseal.git",
+    "preload": "MKL_THREADING_LAYER=GNU",
+    "commit": "baselines-2",
+    "precmd": [],
+    "params": {
+        "is_video":        {
+            "true":  {
+                "dataset":    "sa-v-3s",
+                "num_samples":  100
+            }
+        },
+        "num_frames":           72,
+        "video_aggregation":    ["avg", "squared_avg", "l1norm_avg", "l2norm_avg"],
+        "videowam_step_size":   4,
+        "videowam_chunk_size":  200,
+        "save_first":           -1,
+        "bdrate":               false,
+        "checkpoint":[
+            "/checkpoint/pfz/2024_logs/1203_vseal_04_rgb_96bits_posttraining_video_ft_fast_lessh264/expe/checkpoint281.pth"
+        ]
+    },
+    "machine": {
+        "gres": "gpu:1",
+        "nodes": "1",
+        "tasks-per-node": "1",
+        "partition": "learnfair",
+        "cpus-per-task": "40",
+        "time": 4320,
+        "mem-per-cpu": "10G"
+    },
+    "meta": {
+        "group": "",
+        "name": "1204_vseal_evalbaselines_singlescalingw_aggregation",
+        "dest-arg": "yes",
+        "dest-name": "output_dir"
+    }
+}

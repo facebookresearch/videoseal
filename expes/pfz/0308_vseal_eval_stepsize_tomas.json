@@ -1,0 +1,43 @@
+
+{
+    "cmd": "/private/home/pfz/miniconda3/envs/img/bin/python -m videoseal.evals.full",
+    "git": "git@github.com:fairinternal/videoseal.git",
+    "preload": "MKL_THREADING_LAYER=GNU",
+    "commit": "pfz/ftvideo",
+    "precmd": [],
+    "params": {
+        "is_video":        {
+            "true":  {
+                "dataset":              "sa-v-3s",
+                "num_samples":          100
+            } 
+        },
+        "videowam_chunk_size":  200,
+        "bdrate":               false,
+        "save_first":           10,
+        "num_frames":           64,
+        "videowam_mode":        "repeat",
+        "videowam_step_size":   [1,2,4,8,16,32],
+        "device":               "cuda",
+        "lowres_attenuation":   true,
+        "scaling_w":            0.2,
+        "checkpoint": [
+            "/checkpoint/soucek/2025_logs/0228_vseal_128bits_jnd_ftvid_complete/_optimizer=AdamW,lr=1e-5_videowam_step_size=1/checkpoint200.pth"
+        ]
+    },
+    "machine": {
+        "gres": "gpu:1",
+        "nodes": "1",
+        "tasks-per-node": "1",
+        "partition": "learnfair",
+        "cpus-per-task": "40",
+        "time": 4320,
+        "mem-per-cpu": "6G"
+    },
+    "meta": {
+        "group": "",
+        "name": "0308_vseal_eval_stepsize_tomas",
+        "dest-arg": "yes",
+        "dest-name": "output_dir"
+    }
+}

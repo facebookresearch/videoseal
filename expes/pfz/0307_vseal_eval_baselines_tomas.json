@@ -1,0 +1,49 @@
+
+{
+    "cmd": "/private/home/pfz/miniconda3/envs/img/bin/python -m videoseal.evals.full",
+    "git": "git@github.com:fairinternal/videoseal.git",
+    "preload": "MKL_THREADING_LAYER=GNU",
+    "commit": "pfz/ftvideo",
+    "precmd": [],
+    "params": {
+        "is_video":        {
+            "false":  {
+                "dataset":              ["sa-1b-full-resized", "coco"],
+                "num_samples":          1000
+            },
+            "true":  {
+                "dataset":              ["sa-v-3s", "moviegen"],
+                "num_samples":          100
+            } 
+        },
+        "videowam_step_size":   4,
+        "bdrate":               false,
+        "save_first":           10,
+        "videowam_mode":        "repeat",
+        "videowam_chunk_size":  96,
+        "lowres_attenuation":   true,
+        "checkpoint": {
+            "/checkpoint/pfz/2025_logs/0225_vseal_ydisc_with_jnd/_balanced=False_scaling_w=1.0/checkpoint450.pth":{
+                "scaling_w":    [0.2]
+            },
+            "/checkpoint/soucek/2025_logs/0228_vseal_128bits_jnd_ftvid_complete/_optimizer=AdamW,lr=1e-5_videowam_step_size=1/checkpoint200.pth":{
+                "scaling_w":    [0.2]
+            }
+        }
+    },
+    "machine": {
+        "gres": "gpu:1",
+        "nodes": "1",
+        "tasks-per-node": "1",
+        "partition": "learnlab",
+        "cpus-per-task": "40",
+        "time": 4320,
+        "mem-per-cpu": "6G"
+    },
+    "meta": {
+        "group": "",
+        "name": "0307_vseal_eval_baselines_tomas",
+        "dest-arg": "yes",
+        "dest-name": "output_dir"
+    }
+}

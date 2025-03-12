@@ -1,0 +1,71 @@
+{
+    "cmd": "/private/home/pfz/miniconda3/envs/img/bin/python train.py",
+    "git": "git@github.com:fairinternal/videoseal.git",
+    "preload": "MKL_THREADING_LAYER=GNU",
+    "commit": "pfz/ftvideo",
+    "precmd": [],
+    "params": {
+        "image_dataset":            "none",
+        "video_dataset":            "sa-v",
+        "augmentation_config":      ["configs/all_augs_v3.yaml", "configs/all_augs_v3_novid.yaml"],
+        "embedder_model":           "unet_small2_yuv_quant",
+        "extractor_model":          "convnext_tiny",
+        "num_augs":                 2,
+        "img_size":                 768,
+        "img_size_val":             768,
+        "img_size_proc":            256,
+        "iter_per_epoch":           100,
+        "epochs":                   201,
+        "prop_img_vid":             0.0,
+        "video_start":              0,
+        "finetune_detector_start":  [0, 2000],
+        "resume_disc":              true,
+        "resume_optimizer_state":   true,
+        "videowam_step_size":       1,
+        "frames_per_clip":          16,
+        "iter_per_valid":           10,
+        "workers":                  0,
+        "batch_size":               16,
+        "batch_size_eval":          16,
+        "batch_size_video":         1,
+        "batch_size_video_eval":    1,
+        "full_eval_freq":           50,
+        "eval_freq":                10,
+        "resume_from":              "/checkpoint/pfz/2025_logs/0219_vseal_convnextextractor/_nbits=128_lambda_i=0.1_embedder_model=1/checkpoint600.pth",
+        "saveimg_freq":             50,
+        "optimizer":                "AdamW,lr=1e-5",
+        "scheduler":                "None",
+        "seed":                     0,
+        "perceptual_loss":          "yuv",
+        "lambda_i":                 0.1,
+        "lambda_d":                 0.2,
+        "lambda_det":               0.0,
+        "lambda_dec":               1.0,
+        "nbits":                    128,
+        "attenuation":              {
+            "None":{
+                "scaling_w":        0.016
+            }
+        },
+        "scaling_i":                1.0,
+        "total_gnorm":              1.0,
+        "balanced":                 false,
+        "master_port":              "__SAMPLE__(10000, 20000)"
+    },
+    "machine": {
+        "constraint":       "volta32gb",
+        "gres":             "gpu:8",
+        "nodes":            "2",
+        "tasks-per-node":   "8",
+        "partition":        "learnfair",
+        "cpus-per-task":    "10",
+        "time":             4320,
+        "mem-per-cpu":      "6G"
+    },
+    "meta": {
+        "group": "",
+        "name": "0227_vseal_128bits_ftvid_complete_lr1e5",
+        "dest-arg": "yes",
+        "dest-name": "output_dir"
+    }
+}

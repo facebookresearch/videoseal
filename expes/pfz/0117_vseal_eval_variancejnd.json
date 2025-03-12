@@ -1,0 +1,46 @@
+{
+    "cmd": "/private/home/pfz/miniconda3/envs/img/bin/python -m videoseal.evals.full",
+    "git": "git@github.com:fairinternal/videoseal.git",
+    "preload": "MKL_THREADING_LAYER=GNU",
+    "commit": "pfz/ychannel",
+    "precmd": [],
+    "params": {
+        "is_video":        {
+            "true":  {
+                "dataset":              "sa-v-3s",
+                "num_samples":          10
+            },
+            "false":  {
+                "dataset":              "sa-1b",
+                "num_samples":          100
+            } 
+        },
+        "videowam_step_size":   4,
+        "bdrate":               false,
+        "save_first":           5,
+        "checkpoint":   "/checkpoint/pfz/2025_logs/0115_vseal_rgb_96bits_nopercep_yuv/_scaling_w=0.05_lambda_d=0.5_extractor_model=sam_small/checkpoint400.pth",
+        "attenuation":  {
+            "none":{
+                "scaling_w":    [0.05, 0.02, 0.01]
+            },
+            "simplified_jnd_variance":{
+                "scaling_w":    [0.2, 0.1, 0.05]
+            }
+        }
+    },
+    "machine": {
+        "gres": "gpu:1",
+        "nodes": "1",
+        "tasks-per-node": "1",
+        "partition": "learnfair",
+        "cpus-per-task": "40",
+        "time": 4320,
+        "mem-per-cpu": "6G"
+    },
+    "meta": {
+        "group": "",
+        "name": "0117_vseal_eval_variancejnd",
+        "dest-arg": "yes",
+        "dest-name": "output_dir"
+    }
+}
