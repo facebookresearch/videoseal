@@ -328,7 +328,7 @@ def main():
     model.video_mode = args.videowam_mode or model.mode
     model.img_size = args.img_size_proc or model.img_size
     if hasattr(model.embedder, 'unet') and hasattr(model.embedder.unet, 'time_pooling'):
-        if args.time_pooling_depth and args.time_pooling_kernel_size:
+        if args.time_pooling_depth is not None and args.time_pooling_kernel_size is not None:
             model.embedder.unet.time_pooling = {
                 "depth": args.time_pooling_depth,
                 "kernel_size": args.time_pooling_kernel_size
