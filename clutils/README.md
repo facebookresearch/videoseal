@@ -46,6 +46,19 @@ To check the status of jobs submitted by the user, use the following command (sa
 python main.py status
 ```
 
+### Alias
+
+To avoid typing `python main.py` every time, you can create an alias in your `.bashrc` file:
+```bash
+echo "alias clutil='python ~/clutils/main.py'" >> ~/.bashrc && source ~/.bashrc
+```
+
+Then, you can use the following commands:
+```bash
+clutils sweep <path_to_config_file>
+clutils status
+```
+
 ### JSON file example
 
 The configuration file should be in JSON format. Ex:
