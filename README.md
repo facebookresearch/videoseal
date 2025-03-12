@@ -108,6 +108,7 @@ curl -o checkpoints/y_128b_img.pth https://dl.fbaipublicfiles.com/videoseal/y_12
 Then use the notebook in `notebooks/demos/video_inference.ipynb`. 
 By default, it will load the model card `videoseal_1.0`, which contains the config for the model `y_128b_img.pth`.
 
+The model was trained with this grid: https://github.com/fairinternal/videoseal/blob/main/expes/videoseal/img_train.json
 
 ## Running experiments
 
