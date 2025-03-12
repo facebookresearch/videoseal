@@ -1,0 +1,380 @@
+model: sam_small
+
+hidden:
+  num_blocks: 8
+  num_bits: 16
+  in_channels: 3
+  z_channels: 64
+  normalization: 'group'
+  activation: 'gelu'
+
+hidden_orig:
+  num_blocks: 8
+  num_bits: 16
+  in_channels: 3
+  z_channels: 64
+  normalization: 'batch'
+  activation: 'relu'
+
+hidden_pw:
+  num_blocks: 8
+  num_bits: 16
+  in_channels: 3
+  z_channels: 64
+  normalization: 'group'
+  activation: 'gelu'
+  pixelwise: True  # return msg per pixel (k h w)
+
+hidden_bn:
+  num_blocks: 8
+  num_bits: 16
+  in_channels: 3
+  z_channels: 64
+  normalization: 'batch'
+  activation: 'gelu'
+
+hidden_bn_pw:
+  num_blocks: 8
+  num_bits: 16
+  in_channels: 3
+  z_channels: 64
+  normalization: 'batch'
+  activation: 'gelu'
+  pixelwise: True  # return msg per pixel (k h w)
+
+sam_tiny:
+  encoder:
+    img_size: 256
+    embed_dim: 192
+    out_chans: 192
+    depth: 12
+    num_heads: 3
+    patch_size: 16
+    global_attn_indexes: [2, 5, 8, 11]
+    window_size: 8
+    mlp_ratio: 4
+    qkv_bias: True
+    use_rel_pos: True
+  pixel_decoder:
+    pixelwise: False  # return msg per pixel (k h w)
+    upscale_stages: [1]  # 4*2*2 = x16 (patch size)
+    embed_dim: 192  # = encoder.out_chans
+    nbits: 16
+    sigmoid_output: False
+    upscale_type: 'bilinear'  # 'pixelshuffle', 'nearest', 'conv',  'bilinear'
+
+sam_tiny_pw:
+  encoder:
+    img_size: 256
+    embed_dim: 192
+    out_chans: 192
+    depth: 12
+    num_heads: 3
+    patch_size: 16
+    global_attn_indexes: [2, 5, 8, 11]
+    window_size: 8
+    mlp_ratio: 4
+    qkv_bias: True
+    use_rel_pos: True
+  pixel_decoder:
+    pixelwise: True  # return msg per pixel (k h w)
+    upscale_stages: [4, 2, 2]  # 4*2*2 = x16 (patch size)
+    embed_dim: 192  # = encoder.out_chans
+    nbits: 16
+    sigmoid_output: False
+    upscale_type: 'bilinear'  # 'pixelshuffle', 'nearest', 'conv',  'bilinear'
+
+sam_small:
+  encoder:
+    img_size: 256
+    embed_dim: 384
+    out_chans: 384
+    depth: 12
+    num_heads: 6
+    patch_size: 16
+    global_attn_indexes: [2, 5, 8, 11]
+    window_size: 8
+    mlp_ratio: 4
+    qkv_bias: True
+    use_rel_pos: True
+  pixel_decoder:
+    pixelwise: False  # return msg per pixel (k h w)
+    upscale_stages: [1]  # 4*2*2 = x16 (patch size)
+    embed_dim: 384  # = encoder.out_chans
+    nbits: 16
+    sigmoid_output: False
+    upscale_type: 'bilinear'  # 'pixelshuffle', 'nearest', 'conv',  'bilinear'
+
+sam_small_temporal:
+  encoder:
+    img_size: 256
+    embed_dim: 384
+    out_chans: 384
+    depth: 12
+    num_heads: 6
+    patch_size: 16
+    global_attn_indexes: [2, 5, 8, 11]
+    window_size: 8
+    mlp_ratio: 4
+    qkv_bias: True
+    use_rel_pos: True
+    temporal_attention: True
+    max_temporal_length: 32
+  pixel_decoder:
+    pixelwise: False  # return msg per pixel (k h w)
+    upscale_stages: [1]  # 4*2*2 = x16 (patch size)
+    embed_dim: 384  # = encoder.out_chans
+    nbits: 16
+    sigmoid_output: False
+    upscale_type: 'bilinear'  # 'pixelshuffle', 'nearest', 'conv',  'bilinear'
+
+sam_small_pw:
+  encoder:
+    img_size: 256
+    embed_dim: 384
+    out_chans: 384
+    depth: 12
+    num_heads: 6
+    patch_size: 16
+    global_attn_indexes: [2, 5, 8, 11]
+    window_size: 8
+    mlp_ratio: 4
+    qkv_bias: True
+    use_rel_pos: True
+  pixel_decoder:
+    pixelwise: True  # return msg per pixel (k h w)
+    upscale_stages: [4, 2, 2]  # 4*2*2 = x16 (patch size)
+    embed_dim: 384  # = encoder.out_chans
+    nbits: 16
+    sigmoid_output: False
+    upscale_type: 'bilinear'  # 'pixelshuffle', 'nearest', 'conv',  'bilinear'
+
+
+sam_base:
+  encoder:
+    img_size: 256
+    embed_dim: 768
+    out_chans: 768
+    depth: 12
+    num_heads: 12
+    patch_size: 16
+    global_attn_indexes: [2, 5, 8, 11]
+    window_size: 8
+    mlp_ratio: 4
+    qkv_bias: True
+    use_rel_pos: True
+  pixel_decoder:
+    upscale_stages: [4, 2, 2]  # 4*2*2 = x16 (patch size)
+    embed_dim: 768  # = encoder.out_chans
+    nbits: 16
+    sigmoid_output: False
+    upscale_type: 'bilinear'  # 'pixelshuffle', 'nearest', 'conv',  'bilinear'
+
+sam_small_conv:
+  encoder:
+    img_size: 256
+    embed_dim: 192
+    out_chans: 192
+    depth: 12
+    num_heads: 3
+    patch_size: 16
+    global_attn_indexes: [2, 5, 8, 11]
+    window_size: 8
+    mlp_ratio: 4
+    qkv_bias: True
+    use_rel_pos: True
+  pixel_decoder:
+    upscale_stages: [4, 2, 2]  # 4*2*2 = x16 (patch size)
+    embed_dim: 192  # = encoder.out_chans
+    nbits: 16
+    sigmoid_output: False
+    upscale_type: 'conv' 
+
+sam_small_unshuffle:
+  encoder:
+    img_size: 256
+    embed_dim: 192
+    out_chans: 192
+    depth: 12
+    num_heads: 3
+    patch_size: 16
+    global_attn_indexes: [2, 5, 8, 11]
+    window_size: 8
+    mlp_ratio: 4
+    qkv_bias: True
+    use_rel_pos: True
+  pixel_decoder:
+    upscale_stages: [4, 2, 2]  # 4*2*2 = x16 (patch size)
+    embed_dim: 192  # = encoder.out_chans
+    nbits: 16
+    sigmoid_output: False
+    upscale_type: 'pixelshuffle'
+
+sam_small_nearest:
+  encoder:
+    img_size: 256
+    embed_dim: 192
+    out_chans: 192
+    depth: 12
+    num_heads: 3
+    patch_size: 16
+    global_attn_indexes: [2, 5, 8, 11]
+    window_size: 8
+    mlp_ratio: 4
+    qkv_bias: True
+    use_rel_pos: True
+  pixel_decoder:
+    upscale_stages: [4, 2, 2]  # 4*2*2 = x16 (patch size)
+    embed_dim: 192  # = encoder.out_chans
+    nbits: 16
+    sigmoid_output: False
+    upscale_type: 'nearest'  
+
+convnext_atto:
+  encoder:
+    depths: [2, 2, 6, 2]
+    dims: [40, 80, 160, 320]
+  pixel_decoder:
+    pixelwise: False  # return msg per pixel (k h w)
+    upscale_stages: [1]
+    embed_dim: 320  # = encoder.out_chans
+    nbits: 16
+    sigmoid_output: False
+    upscale_type: 'bilinear'
+
+convnext_femto:
+  encoder:
+    depths: [2, 2, 6, 2]
+    dims: [48, 96, 192, 384]
+  pixel_decoder:
+    pixelwise: False  # return msg per pixel (k h w)
+    upscale_stages: [1]
+    embed_dim: 384  # = encoder.out_chans
+    nbits: 16
+    sigmoid_output: False
+
+convnext_pico:
+  encoder:
+    depths: [2, 2, 6, 2]
+    dims: [64, 128, 256, 512]
+  pixel_decoder:
+    pixelwise: False  # return msg per pixel (k h w)
+    upscale_stages: [1]
+    embed_dim: 512  # = encoder.out_chans
+    nbits: 16
+    sigmoid_output: False
+
+convnext_nano:
+  encoder:
+    depths: [2, 2, 8, 2]
+    dims: [80, 160, 320, 640]
+  pixel_decoder:
+    pixelwise: False  # return msg per pixel (k h w)
+    upscale_stages: [1]
+    embed_dim: 640  # = encoder.out_chans
+    nbits: 16
+    sigmoid_output: False
+
+convnext_tiny:
+  encoder:
+    depths: [3, 3, 9, 3]
+    dims: [96, 192, 384, 768]
+  pixel_decoder:
+    pixelwise: False  # return msg per pixel (k h w)
+    upscale_stages: [1]
+    embed_dim: 768  # = encoder.out_chans
+    nbits: 16
+    sigmoid_output: False
+
+convnext_base:
+  encoder:
+    depths: [3, 3, 27, 3]
+    dims: [128, 256, 512, 1024]
+  pixel_decoder:
+    pixelwise: False  # return msg per pixel (k h w)
+    upscale_stages: [1]
+    embed_dim: 1024  # = encoder.out_chans
+    nbits: 16
+    sigmoid_output: False
+
+convnext_atto_pw:
+  encoder:
+    depths: [2, 2, 6, 2]
+    dims: [40, 80, 160, 320]
+  pixel_decoder:
+    upscale_stages: [4, 4, 2]  # 4*2*2 = x16 (patch size)
+    embed_dim: 320  # = encoder.out_chans
+    nbits: 16
+    sigmoid_output: False
+    upscale_type: 'bilinear'
+
+convnext_femto_pw:
+  encoder:
+    depths: [2, 2, 6, 2]
+    dims: [48, 96, 192, 384]
+  pixel_decoder:
+    upscale_stages: [4, 4, 2]  # 4*2*2 = x16 (patch size)
+    embed_dim: 384  # = encoder.out_chans
+    nbits: 16
+    sigmoid_output: False
+    pixelwise: True
+
+convnext_pico_pw:
+  encoder:
+    depths: [2, 2, 6, 2]
+    dims: [64, 128, 256, 512]
+  pixel_decoder:
+    upscale_stages: [4, 4, 2]  # 4*2*2 = x16 (patch size)
+    embed_dim: 512  # = encoder.out_chans
+    nbits: 16
+    sigmoid_output: False
+    pixelwise: True
+
+convnext_nano_pw:
+  encoder:
+    depths: [2, 2, 8, 2]
+    dims: [80, 160, 320, 640]
+  pixel_decoder:
+    upscale_stages: [4, 4, 2]  # 4*2*2 = x16 (patch size)
+    embed_dim: 640  # = encoder.out_chans
+    nbits: 16
+    sigmoid_output: False
+    pixelwise: True
+
+convnext_tiny_pw:
+  encoder:
+    depths: [3, 3, 9, 3]
+    dims: [96, 192, 384, 768]
+  pixel_decoder:
+    upscale_stages: [4, 4, 2]  # 4*2*2 = x16 (patch size)
+    embed_dim: 768  # = encoder.out_chans
+    nbits: 16
+    sigmoid_output: False
+    pixelwise: True
+
+convnext_base_pw:
+  encoder:
+    depths: [3, 3, 27, 3]
+    dims: [128, 256, 512, 1024]
+  pixel_decoder:
+    upscale_stages: [4, 4, 2]  # 4*2*2 = x16 (patch size)
+    embed_dim: 1024  # = encoder.out_chans
+    nbits: 16
+    sigmoid_output: False
+    pixelwise: True
+  
+convnext_tiny_temporal:
+  encoder:
+    depths: [3, 3, 9, 3]
+    dims: [96, 192, 384, 768]
+    temporal_convs: True
+    temporal_attention: True
+  pixel_decoder:
+    pixelwise: False  # return msg per pixel (k h w)
+    upscale_stages: [1]
+    embed_dim: 768  # = encoder.out_chans
+    nbits: 16
+    sigmoid_output: False
+
+dvmark:
+  params: []

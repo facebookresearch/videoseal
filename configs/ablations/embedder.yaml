@@ -1,0 +1,722 @@
+model: unet
+
+hidden:
+  num_blocks: 4
+  num_bits: 16
+  in_channels: 3
+  out_channels: 3
+  z_channels: 64
+  normalization: 'group'
+  activation: 'gelu'
+  last_tanh: True
+
+hidden_orig:
+  num_blocks: 4
+  num_bits: 16
+  in_channels: 3
+  out_channels: 3
+  z_channels: 64
+  normalization: 'batch'
+  activation: 'relu'
+  last_tanh: False
+
+unet_small2_quant: # quantization friendly unet2
+  msg_processor:
+    nbits: 16
+    hidden_size: 32     # nbits * 2
+    msg_processor_type: 'binary+concat'
+  unet:
+    in_channels: 3
+    out_channels: 3
+    z_channels: 16
+    num_blocks: 8
+    activation: 'relu'
+    normalization: 'batch'
+    z_channels_mults: [1, 2, 4, 8]
+    last_tanh: True
+
+unet_small2_quant_conv3d: # quantization friendly unet2
+  msg_processor:
+    nbits: 16
+    hidden_size: 32     # nbits * 2
+    msg_processor_type: 'binary+concat'
+  unet:
+    in_channels: 3
+    out_channels: 3
+    z_channels: 16
+    num_blocks: 8
+    activation: 'relu'
+    normalization: 'batch'
+    z_channels_mults: [1, 2, 4, 8]
+    last_tanh: True
+    conv_layer: 'conv3d'
+
+unet_medium2_quant: # quantization friendly unet2
+  msg_processor:
+    nbits: 16
+    hidden_size: 32     # nbits * 2
+    msg_processor_type: 'binary+concat'
+  unet:
+    in_channels: 3
+    out_channels: 3
+    z_channels: 32
+    num_blocks: 4
+    activation: 'relu'
+    normalization: 'batch'
+    z_channels_mults: [1, 2, 4, 8]
+    last_tanh: True
+
+unet_medium_deep2_quant: # quantization friendly unet2
+  msg_processor:
+    nbits: 16
+    hidden_size: 32     # nbits * 2
+    msg_processor_type: 'binary+concat'
+  unet:
+    in_channels: 3
+    out_channels: 3
+    z_channels: 32
+    num_blocks: 8
+    activation: 'relu'
+    normalization: 'batch'
+    z_channels_mults: [1, 2, 4, 8]
+    last_tanh: True
+
+unet_large2_quant: # quantization friendly unet2
+  msg_processor:
+    nbits: 16
+    hidden_size: 32     # nbits * 2
+    msg_processor_type: 'binary+concat'
+  unet:
+    in_channels: 3
+    out_channels: 3
+    z_channels: 64
+    num_blocks: 4
+    activation: 'relu'
+    normalization: 'batch'
+    z_channels_mults: [1, 2, 4, 8]
+    last_tanh: True
+
+
+unet_very_tiny:
+  msg_processor:
+    nbits: 16
+    hidden_size: 32     # nbits * 2
+    msg_processor_type: 'binary+concat'
+  unet:
+    in_channels: 3
+    out_channels: 3
+    z_channels: 8
+    num_blocks: 3
+    activation: 'silu'
+    normalization: 'rms'
+    z_channels_mults: [1, 2, 4, 4]
+    last_tanh: True
+
+unet_very_tiny_bw:
+  msg_processor:
+    nbits: 16
+    hidden_size: 32     # nbits * 2
+    msg_processor_type: 'binary+concat'
+  unet:
+    in_channels: 3
+    out_channels: 1
+    z_channels: 16
+    num_blocks: 3
+    activation: 'silu'
+    normalization: 'rms'
+    z_channels_mults: [1, 2, 4]
+    last_tanh: True
+    zero_init: True
+
+unet_small_notanh:
+  msg_processor:
+    nbits: 16
+    hidden_size: 32     # nbits * 2
+    msg_processor_type: 'binary+concat'
+  unet:
+    in_channels: 3
+    out_channels: 3
+    z_channels: 16
+    num_blocks: 3
+    activation: 'silu'
+    normalization: 'rms'
+    z_channels_mults: [1, 2, 4]
+    last_tanh: False
+
+unet:
+  msg_processor:
+    nbits: 16
+    hidden_size: 32     # nbits * 2
+    msg_processor_type: 'binary+concat'
+  unet:
+    in_channels: 3
+    out_channels: 3
+    z_channels: 32
+    num_blocks: 4
+    activation: 'silu'
+    normalization: 'rms'
+    z_channels_mults: [1, 2, 4, 8]
+    last_tanh: True
+
+unet_small2:
+  msg_processor:
+    nbits: 16
+    hidden_size: 32     # nbits * 2
+    msg_processor_type: 'binary+concat'
+  unet:
+    in_channels: 3
+    out_channels: 3
+    z_channels: 16
+    num_blocks: 8
+    activation: 'silu'
+    normalization: 'rms'
+    z_channels_mults: [1, 2, 4, 8]
+    last_tanh: True
+
+unet_small2_conv3d:
+  msg_processor:
+    nbits: 16
+    hidden_size: 32     # nbits * 2
+    msg_processor_type: 'binary+concat'
+  unet:
+    in_channels: 3
+    out_channels: 3
+    z_channels: 16
+    num_blocks: 8
+    activation: 'silu'
+    normalization: 'rms'
+    z_channels_mults: [1, 2, 4, 8]
+    last_tanh: True
+    conv_layer: 'conv3d'
+
+unet_small2_conv2p1d:
+  msg_processor:
+    nbits: 16
+    hidden_size: 32     # nbits * 2
+    msg_processor_type: 'binary+concat'
+  unet:
+    in_channels: 3
+    out_channels: 3
+    z_channels: 16
+    num_blocks: 8
+    activation: 'silu'
+    normalization: 'rms'
+    z_channels_mults: [1, 2, 4, 8]
+    last_tanh: True
+    conv_layer: 'conv2p1d'
+
+unet_small2_yuv:
+  msg_processor:
+    nbits: 16
+    hidden_size: 32     # nbits * 2
+    msg_processor_type: 'binary+concat'
+  unet:
+    in_channels: 1
+    out_channels: 1
+    z_channels: 16
+    num_blocks: 8
+    activation: 'silu'
+    normalization: 'rms'
+    z_channels_mults: [1, 2, 4, 8]
+    last_tanh: True
+
+unet_small2_bw_quant:
+  msg_processor:
+    nbits: 16
+    hidden_size: 32     # nbits * 2
+    msg_processor_type: 'binary+concat'
+  unet:
+    in_channels: 3
+    out_channels: 1
+    z_channels: 16
+    num_blocks: 8
+    activation: 'relu'
+    normalization: 'batch'
+    z_channels_mults: [1, 2, 4, 8]
+    last_tanh: True
+
+unet_small2_bw_quant_conv3d:
+  msg_processor:
+    nbits: 16
+    hidden_size: 32     # nbits * 2
+    msg_processor_type: 'binary+concat'
+  unet:
+    in_channels: 3
+    out_channels: 1
+    z_channels: 16
+    num_blocks: 8
+    activation: 'relu'
+    normalization: 'batch'
+    z_channels_mults: [1, 2, 4, 8]
+    last_tanh: True
+    conv_layer: 'conv3d'
+
+unet_small2_yuv_quant:
+  msg_processor:
+    nbits: 16
+    hidden_size: 32     # nbits * 2
+    msg_processor_type: 'binary+concat'
+  unet:
+    in_channels: 1
+    out_channels: 1
+    z_channels: 16
+    num_blocks: 8
+    activation: 'relu'
+    normalization: 'batch'
+    z_channels_mults: [1, 2, 4, 8]
+    last_tanh: True
+
+unet_small2_yuv_quant_conv3d:
+  msg_processor:
+    nbits: 16
+    hidden_size: 32     # nbits * 2
+    msg_processor_type: 'binary+concat'
+  unet:
+    in_channels: 1
+    out_channels: 1
+    z_channels: 16
+    num_blocks: 8
+    activation: 'relu'
+    normalization: 'batch'
+    z_channels_mults: [1, 2, 4, 8]
+    last_tanh: True
+    conv_layer: 'conv3d'
+
+unet_small2_yuv_relu_rms:
+  msg_processor:
+    nbits: 16
+    hidden_size: 32     # nbits * 2
+    msg_processor_type: 'binary+concat'
+  unet:
+    in_channels: 1
+    out_channels: 1
+    z_channels: 16
+    num_blocks: 8
+    activation: 'relu'
+    normalization: 'rms'
+    z_channels_mults: [1, 2, 4, 8]
+    last_tanh: True
+
+unet_small2_yuv_silu_group:
+  msg_processor:
+    nbits: 16
+    hidden_size: 32     # nbits * 2
+    msg_processor_type: 'binary+concat'
+  unet:
+    in_channels: 1
+    out_channels: 1
+    z_channels: 16
+    num_blocks: 8
+    activation: 'silu'
+    normalization: 'group'
+    z_channels_mults: [1, 2, 4, 8]
+    last_tanh: True
+
+unet_small2_yuv_silu_batch:
+  msg_processor:
+    nbits: 16
+    hidden_size: 32     # nbits * 2
+    msg_processor_type: 'binary+concat'
+  unet:
+    in_channels: 1
+    out_channels: 1
+    z_channels: 16
+    num_blocks: 8
+    activation: 'silu'
+    normalization: 'batch'
+    z_channels_mults: [1, 2, 4, 8]
+    last_tanh: True
+
+unet_small2_yuv_relu_group:
+  msg_processor:
+    nbits: 16
+    hidden_size: 32     # nbits * 2
+    msg_processor_type: 'binary+concat'
+  unet:
+    in_channels: 1
+    out_channels: 1
+    z_channels: 16
+    num_blocks: 8
+    activation: 'relu'
+    normalization: 'group'
+    z_channels_mults: [1, 2, 4, 8]
+    last_tanh: True
+
+unet_small2_yuv_idinit:
+  msg_processor:
+    nbits: 16
+    hidden_size: 32     # nbits * 2
+    msg_processor_type: 'binary+concat'
+  unet:
+    in_channels: 1
+    out_channels: 1
+    z_channels: 16
+    num_blocks: 8
+    activation: 'silu'
+    normalization: 'rms'
+    z_channels_mults: [1, 2, 4, 8]
+    last_tanh: True
+    id_init: True
+
+unet_small2_bw:
+  msg_processor:
+    nbits: 16
+    hidden_size: 32     # nbits * 2
+    msg_processor_type: 'binary+concat'
+  unet:
+    in_channels: 3
+    out_channels: 1
+    z_channels: 16
+    num_blocks: 8
+    activation: 'silu'
+    normalization: 'rms'
+    z_channels_mults: [1, 2, 4, 8]
+    last_tanh: True
+
+unet_tiny_yuv_quant:
+  msg_processor:
+    nbits: 16
+    hidden_size: 32     # nbits * 2
+    msg_processor_type: 'binary+concat'
+  unet:
+    in_channels: 1
+    out_channels: 1
+    z_channels: 8
+    num_blocks: 6
+    activation: 'relu'
+    normalization: 'batch'
+    z_channels_mults: [1, 1, 2, 4]
+    last_tanh: True
+
+unet_tinier_yuv_quant:
+  msg_processor:
+    nbits: 16
+    hidden_size: 32     # nbits * 2
+    msg_processor_type: 'binary+concat'
+  unet:
+    in_channels: 1
+    out_channels: 1
+    z_channels: 4
+    num_blocks: 4
+    activation: 'relu'
+    normalization: 'batch'
+    z_channels_mults: [1, 1, 2, 2]
+    last_tanh: True
+
+unet_bw:
+  msg_processor:
+    nbits: 16
+    hidden_size: 32     # nbits * 2
+    msg_processor_type: 'binary+concat'
+  unet:
+    in_channels: 3
+    out_channels: 1
+    z_channels: 32
+    num_blocks: 4
+    activation: 'silu'
+    normalization: 'rms'
+    z_channels_mults: [1, 2, 4, 8]
+    last_tanh: True
+
+unet_notanh:
+  msg_processor:
+    nbits: 16
+    hidden_size: 32     # nbits * 2
+    msg_processor_type: 'binary+concat'
+  unet:
+    in_channels: 3
+    out_channels: 3
+    z_channels: 32
+    num_blocks: 4
+    activation: 'silu'
+    normalization: 'rms'
+    z_channels_mults: [1, 2, 4, 8]
+    last_tanh: False
+  
+unet_big:
+  msg_processor:
+    nbits: 16
+    hidden_size: 32     # nbits * 2
+    msg_processor_type: 'binary+concat'
+  unet:
+    in_channels: 3
+    out_channels: 3
+    z_channels: 64
+    num_blocks: 4
+    activation: 'silu'
+    normalization: 'rms'
+    z_channels_mults: [1, 2, 4, 8]
+
+vae_tiny:
+  msg_processor:
+    nbits: 16
+    hidden_size: 32     # nbits * 2
+    msg_processor_type: 'binary+concat'
+  encoder:
+    in_channels: 3
+    z_channels: 4
+    resolution: 256  # only used for attn_resolutions
+    out_ch: 3
+    ch: 16
+    ch_mult: [1, 2, 2, 4]
+    num_res_blocks: 2
+    attn_resolutions: []
+    dropout: 0.0
+    double_z: False
+  decoder:
+    z_channels: 36      # hidden_size + z_channels
+    resolution: 256
+    out_ch: 3
+    ch: 16
+    ch_mult: [1, 2, 2, 4]
+    num_res_blocks: 2
+    attn_resolutions: []
+    dropout: 0.0
+    tanh_out: True
+
+
+vae_tiny_yuv:
+  msg_processor:
+    nbits: 16
+    hidden_size: 32     # nbits * 2
+    msg_processor_type: 'binary+concat'
+  encoder:
+    in_channels: 1
+    z_channels: 4
+    resolution: 256  # only used for attn_resolutions
+    out_ch: 3
+    ch: 16
+    ch_mult: [1, 2, 2, 4]
+    num_res_blocks: 2
+    attn_resolutions: []
+    dropout: 0.0
+    double_z: False
+  decoder:
+    z_channels: 36      # hidden_size + z_channels
+    resolution: 256
+    out_ch: 1
+    ch: 16
+    ch_mult: [1, 2, 2, 4]
+    num_res_blocks: 2
+    attn_resolutions: []
+    dropout: 0.0
+    tanh_out: True
+
+vae_small:
+  msg_processor:
+    nbits: 16
+    hidden_size: 32     # nbits * 2
+    msg_processor_type: 'binary+concat'
+  encoder:
+    in_channels: 3
+    z_channels: 4
+    resolution: 256  # only used for attn_resolutions
+    out_ch: 3
+    ch: 32
+    ch_mult: [1, 2, 2, 4]
+    num_res_blocks: 2
+    attn_resolutions: []
+    dropout: 0.0
+    double_z: False
+  decoder:
+    z_channels: 36      # hidden_size + z_channels
+    resolution: 256
+    out_ch: 3
+    ch: 32
+    ch_mult: [1, 2, 2, 4]
+    num_res_blocks: 2
+    attn_resolutions: []
+    dropout: 0.0
+    tanh_out: True
+
+
+vae_small_yuv:
+  msg_processor:
+    nbits: 16
+    hidden_size: 32     # nbits * 2
+    msg_processor_type: 'binary+concat'
+  encoder:
+    in_channels: 1
+    z_channels: 4
+    resolution: 256  # only used for attn_resolutions
+    out_ch: 3
+    ch: 32
+    ch_mult: [1, 2, 2, 4]
+    num_res_blocks: 2
+    attn_resolutions: []
+    dropout: 0.0
+    double_z: False
+  decoder:
+    z_channels: 36      # hidden_size + z_channels
+    resolution: 256
+    out_ch: 1
+    ch: 32
+    ch_mult: [1, 2, 2, 4]
+    num_res_blocks: 2
+    attn_resolutions: []
+    dropout: 0.0
+    tanh_out: True
+
+vae_small_bw:
+  msg_processor:
+    nbits: 16
+    hidden_size: 32     # nbits * 2
+    msg_processor_type: 'binary+concat'
+  encoder:
+    in_channels: 3
+    z_channels: 4
+    resolution: 256  # only used for attn_resolutions
+    out_ch: 3
+    ch: 32
+    ch_mult: [1, 2, 2, 4]
+    num_res_blocks: 2
+    attn_resolutions: []
+    dropout: 0.0
+    double_z: False
+  decoder:
+    z_channels: 36      # hidden_size + z_channels
+    resolution: 256
+    out_ch: 1
+    ch: 32
+    ch_mult: [1, 2, 2, 4]
+    num_res_blocks: 2
+    attn_resolutions: []
+    dropout: 0.0
+    tanh_out: True
+
+vae_big:
+  msg_processor:
+    nbits: 16
+    hidden_size: 32     # nbits * 2
+    msg_processor_type: 'binary+concat'
+  encoder:
+    in_channels: 3
+    z_channels: 4
+    resolution: 256  # only used for attn_resolutions
+    out_ch: 3
+    ch: 64
+    ch_mult: [1, 1, 2, 2]
+    num_res_blocks: 2
+    attn_resolutions: []
+    dropout: 0.0
+    double_z: False
+  decoder:
+    z_channels: 36      # hidden_size + z_channels
+    resolution: 256
+    out_ch: 3
+    ch: 64
+    ch_mult: [1, 1, 2, 2]
+    num_res_blocks: 2
+    attn_resolutions: []
+    dropout: 0.0
+    tanh_out: True
+
+patchmixer_tiny:
+  msg_processor:
+    nbits: 16
+    hidden_size: 16     # nbits 
+    msg_processor_type: 'binary+concat'
+  patchmixer:
+    in_channels: 3
+    out_channels: 3
+    z_channels: 96
+    num_blocks: 8
+    activation: 'silu'
+    normalization: 'layer'
+    z_channels_mults: [1, 1, 2]
+    last_tanh: True
+
+patchmixer_tiny_bw:
+  msg_processor:
+    nbits: 16
+    hidden_size: 16     # nbits 
+    msg_processor_type: 'binary+concat'
+  patchmixer:
+    in_channels: 3
+    out_channels: 1
+    z_channels: 96
+    num_blocks: 8
+    activation: 'silu'
+    normalization: 'layer'
+    z_channels_mults: [1, 1, 2]
+    last_tanh: True
+
+patchmixer_tiny_yuv:
+  msg_processor:
+    nbits: 16
+    hidden_size: 16     # nbits 
+    msg_processor_type: 'binary+concat'
+  patchmixer:
+    in_channels: 1
+    out_channels: 1
+    z_channels: 96
+    num_blocks: 8
+    activation: 'silu'
+    normalization: 'layer'
+    z_channels_mults: [1, 1, 2]
+    last_tanh: True
+
+patchmixer_small:
+  msg_processor:
+    nbits: 16
+    hidden_size: 16     # nbits 
+    msg_processor_type: 'binary+concat'
+  patchmixer:
+    in_channels: 3
+    out_channels: 3
+    z_channels: 192
+    num_blocks: 8
+    activation: 'silu'
+    normalization: 'layer'
+    z_channels_mults: [1, 1, 2]
+    last_tanh: True
+
+patchmixer_small_bw:
+  msg_processor:
+    nbits: 16
+    hidden_size: 16     # nbits 
+    msg_processor_type: 'binary+concat'
+  patchmixer:
+    in_channels: 3
+    out_channels: 1
+    z_channels: 192
+    num_blocks: 8
+    activation: 'silu'
+    normalization: 'layer'
+    z_channels_mults: [1, 1, 2]
+    last_tanh: True
+
+patchmixer_small_yuv:
+  msg_processor:
+    nbits: 16
+    hidden_size: 16     # nbits 
+    msg_processor_type: 'binary+concat'
+  patchmixer:
+    in_channels: 1
+    out_channels: 1
+    z_channels: 192
+    num_blocks: 8
+    activation: 'silu'
+    normalization: 'layer'
+    z_channels_mults: [1, 1, 2]
+    last_tanh: True
+
+    
+# Config from the VAE of SD is:
+#   double_z: true
+#   z_channels: 4
+#   resolution: 256
+#   in_channels: 3
+#   out_ch: 3
+#   ch: 128
+#   ch_mult:
+#   - 1
+#   - 2
+#   - 4
+#   - 4
+#   num_res_blocks: 2
+#   attn_resolutions: []
+#   dropout: 0.0
+
+dvmark:
+  params: []
