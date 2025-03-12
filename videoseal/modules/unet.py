@@ -214,9 +214,9 @@ class UNetMsg(nn.Module):
             x = ublock(x)  # b d h w
 
         # Recover the original number of frames for temporal pooling.
-            if len(x) != len(hiddens[-1]):
-                x = torch.repeat_interleave(x, repeats=time_pooling_kernel_size, dim=0)  # b/k d h w -> b d h w
-                x = x[:nb_imgs]
+        if len(x) != len(hiddens[-1]):
+            x = torch.repeat_interleave(x, repeats=time_pooling_kernel_size, dim=0)  # b/k d h w -> b d h w
+            x = x[:nb_imgs]
 
         # Output layer
         logits = self.outc(x)
