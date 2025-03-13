@@ -332,7 +332,7 @@ def main():
         # should be on CPU to operate on high resolution videos
         if args.attenuation.lower().startswith("jnd"):
             attenuation_cfg = omegaconf.OmegaConf.load(args.attenuation_config)
-            attenuation = JNDSimplified(**attenuation_cfg[args.attenuation])
+            attenuation = JND(**attenuation_cfg[args.attenuation])
         elif args.attenuation.lower().startswith("simplified_jnd"):
             args.attenuation = args.attenuation.replace("simplified_jnd", "jnd")
             attenuation_cfg = omegaconf.OmegaConf.load(args.attenuation_config)
