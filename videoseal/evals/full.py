@@ -289,8 +289,6 @@ def main():
                         help='The inference mode for videos')
     group.add_argument('--time_pooling_depth', type=int, default=None,
                         help='The depth of the UNet at which applying the temporal pooling')
-    group.add_argument('--time_pooling_kernel_size', type=int, default=None,
-                        help='The kernel size of the temporal pooling')
 
     group = parser.add_argument_group('Experiment')
     group.add_argument("--output_dir", type=str, default="output/", help="Output directory for logs and images (Default: /output)")
@@ -328,11 +326,13 @@ def main():
     model.video_mode = args.videowam_mode or model.mode
     model.img_size = args.img_size_proc or model.img_size
     if hasattr(model.embedder, 'unet') and hasattr(model.embedder.unet, 'time_pooling'):
-        if args.time_pooling_depth is not None and args.time_pooling_kernel_size is not None:
+        if args.time_pooling_depth is not None:
             model.embedder.unet.time_pooling = {
                 "depth": args.time_pooling_depth,
-                "kernel_size": args.time_pooling_kernel_size
+                "kernel_size": model.step_size
             }
+            # When doing time average pooling, the step size should be set to 1.
+            model.step_size = 1
 
     # Setup the device
     avail_device = 'cuda' if torch.cuda.is_available() else 'cpu'
