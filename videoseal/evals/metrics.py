@@ -327,12 +327,12 @@ def vmaf_on_file(
     """
     # Execute the command and capture the output to get the VMAF score
     command = [
-            ffmpeg_bin,
-            '-i', vid_o,
-            '-i', vid_w,
-            '-filter_complex', 'libvmaf',
-            '-f', 'null', '-'
-        ]
+        ffmpeg_bin,
+        '-i', vid_o,
+        '-i', vid_w,
+        '-lavfi', 'libvmaf=\'n_threads=8\'',
+        '-f', 'null', '-'
+    ]
     result = subprocess.run(command, text=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
     vmaf_score = None
     for line in result.stderr.split('\n'):
