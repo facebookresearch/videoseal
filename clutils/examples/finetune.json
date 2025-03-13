@@ -1,0 +1,52 @@
+{
+    "cmd": "python -m examples.finetune",
+    "git": "git@github.com:fairinternal/clutils.git",
+    "preload": "MKL_THREADING_LAYER=GNU",
+    "precmd": [],
+    "branch": "main",
+    "params": {
+        "data_dir":                 "/datasets01/imagenet_full_size/061417",
+        "val_dir":                  "/datasets01/imagenet_full_size/061417/val",
+        "lr":                       [0.01, 0.001],  
+        "model_name": {
+            "resnet50":{
+                "wd": 1e-4
+            },
+            "vit_base_patch16_224":{
+                "wd": 1e-2
+            },
+            "dinov2_vits14":{
+                "wd": 1e-2
+            },
+            "dinov2_vitb14":{
+                "wd": 1e-2
+            }
+        },
+        "num_classes":              1000,
+        "epochs":                   90,
+        "batch_size":               1024,
+        "lr_schedule":              "cosine",
+        "warmup_epochs":            5,
+        "resize_size":              256,
+        "crop_size":                224,
+        "color_jitter":             0.3,
+        "save_freq":                5,
+        "seed":                     42
+    },
+    "machine": {
+        "constraint": "volta32gb",
+        "gres": "gpu:8",
+        "nodes": "1",
+        "tasks-per-node": "8",
+        "partition": "learnlab",
+        "cpus-per-task": "10",
+        "time": 2880,
+        "mem-per-cpu": "8G"
+    },
+    "meta": {
+        "group": "", 
+        "name": "2503_imagenet_finetune", 
+        "dest-arg": "yes",
+        "dest-name": "output_dir"
+    }
+}

@@ -128,3 +128,15 @@ arg1=val2, arg2=val2, arg3=val2
 
 9. **stress**: Check the current resource usage on the cluster.
    - `--partition`: Specify the partition to check.
+
+
+## Users and maintainers
+
+- Pierre Fernandez (pfz)
+- Tom Sander (tomsander)
+
+Users:
+- AV Seal team
+
+Creator:
+- Alex Sablayrolles
