@@ -564,6 +564,7 @@ def main(params):
             'optimizer_d': optimizer_d.state_dict(),
             'scheduler': scheduler.state_dict() if scheduler is not None else None,
             'scheduler_d': scheduler_d.state_dict() if scheduler_d is not None else None,
+            'args': params,
         }
         udist.save_on_master(save_dict, os.path.join(
             params.output_dir, 'checkpoint.pth'))
