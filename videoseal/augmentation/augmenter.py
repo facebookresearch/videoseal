@@ -17,6 +17,7 @@ from .masks import get_mask_embedder
 from .valuemetric import (JPEG, Brightness, Contrast, GaussianBlur, Hue,
                           MedianFilter, Saturation)
 from .video import VideoCompressorAugmenter, DropFrame, H264, H265, H264rgb
+from .neuralcompression import BMSHJ2018Hyperprior, BMSHJ2018Factorized, MBT2018Mean, MBT2018, Cheng2020Anchor, Cheng2020Attn
 
 name2aug = {
     'rotate': Rotate,
@@ -36,10 +37,16 @@ name2aug = {
     'h264': H264,
     'h264rgb': H264rgb,
     'h265': H265,
-    # 'bmshj2018': bmshj2018,
+    'mbt2018_mean': MBT2018Mean,
+    'mbt2018': MBT2018,
+    'bmshj2018_hyperprior': BMSHJ2018Hyperprior,
+    'bmshj2018_factorized': BMSHJ2018Factorized,
+    'cheng2020_anchor': Cheng2020Anchor,
+    'cheng2020_attn': Cheng2020Attn,
     'drop_frame': DropFrame
 }
 video_augs = ['video_compression', 'h264', 'h264rgb', 'h265']
+neural_compression_augs = ['mbt2018_mean', 'mbt2018', 'bmshj2018_hyperprior', 'bmshj2018_factorized', 'cheng2020_anchor', 'cheng2020_attn']
 
 
 def get_dummy_augmenter():
@@ -172,9 +179,11 @@ class Augmenter(nn.Module):
             imgs_aug = imgs_w * mask_targets + imgs * (1 - mask_targets)
             # image augmentations
             selected_augs = []
-            for _ in range(self.num_augs):
-                imgs_aug, mask_targets, selected_aug_ = self.augment(
-                    imgs_aug, mask_targets, is_video, do_resize)
+            for ii in range(self.num_augs):
+                if ii != 0 and selected_aug_ in neural_compression_augs:
+                    # neural compression augmentations cannot be applied on non 256x256 images
+                    break
+                imgs_aug, mask_targets, selected_aug_ = self.augment(imgs_aug, mask_targets, is_video, do_resize)
                 selected_augs.append(selected_aug_)
             selected_aug = "+".join(selected_augs)
             return imgs_aug, mask_targets, selected_aug
