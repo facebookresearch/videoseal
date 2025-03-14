@@ -2,7 +2,12 @@ from .sequential import Sequential
 from .geometric import Crop, HorizontalFlip, Identity, Perspective, Resize, Rotate
 from .valuemetric import JPEG, Brightness, Contrast, GaussianBlur, Grayscale, Hue, MedianFilter, Saturation
 from .video import H264, H264rgb, H265, VP9, AV1, SpeedChange, WindowAveraging, DropFrame, TemporalReorder
+from .vqvae import get_vqvae_augmentation
 
+# Add to the augmentation_registry
+augmentation_registry = {
+    'vqvae': get_vqvae_augmentation,
+}
 
 def get_validation_augs_subset(
     is_video: bool = False

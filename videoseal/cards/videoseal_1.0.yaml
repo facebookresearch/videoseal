@@ -1,8 +1,8 @@
-checkpoint_path: https://dl.fbaipublicfiles.com/videoseal/y_128b_img.pth
+checkpoint_path: https://dl.fbaipublicfiles.com/videoseal/y_256b_img.pth
 args:
   attenuation_config: configs/attenuation.yaml
   attenuation: jnd_1_1
-  nbits: 128
+  nbits: 256
   hidden_size_multiplier: 1  # dim in unet bottleneck is nbits * this
   img_size_proc: 256
   blending_method: additive

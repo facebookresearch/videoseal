@@ -1,0 +1,32 @@
+# VQVAE Augmentation configurations
+
+# Neural Compression Mean-Scale Hyperprior model
+vqvae_mshp:
+  type: vqvae
+  params:
+    model_type: mshp
+    quality: 5
+  strengths: [0.2, 0.5, 0.8]
+
+# VQGAN model (requires taming-transformers)
+vqvae_vqgan:
+  type: vqvae
+  params:
+    model_type: vqgan
+    quality: 7
+    vqgan_config:
+      embed_dim: 256
+      n_embed: 1024
+      ddconfig:
+        double_z: False
+        z_channels: 256
+        resolution: 256
+        in_channels: 3
+        out_ch: 3
+        ch: 128
+        ch_mult: [1, 1, 2, 2, 4]
+        num_res_blocks: 2
+        attn_resolutions: [16]
+        dropout: 0.0
+    pretrained_path: "/checkpoint/VQGAN/model.ckpt"
+  strengths: [0.3, 0.6, 0.9]
