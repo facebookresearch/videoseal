@@ -114,10 +114,7 @@ def evaluate(
             # does cpu -> gpu -> cpu when gpu is available
             print(f"embedding")
             timer.start()
-            if lowres_attenuation:
-                outputs = model.embed_lowres_attenuation(imgs, is_video=is_video, interpolation=interpolation)
-            else:
-                outputs = model.embed(imgs, is_video=is_video, interpolation=interpolation)
+            outputs = model.embed(imgs, is_video=is_video, interpolation=interpolation, lowres_attenuation=lowres_attenuation)
             metrics['embed_time'] = timer.end()
             msgs = outputs["msgs"]  # b k
             imgs_w = outputs["imgs_w"]  # b c h w

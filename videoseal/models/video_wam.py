@@ -1,15 +1,15 @@
-"""
-Test with:
-    python -m videoseal.models.video_wam
-"""
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+# This source code is licensed under the license found in the
+# LICENSE file in the root directory of this source tree.
 
 import torch
 from torch.nn import functional as F
 
 from ..augmentation.augmenter import Augmenter
-from ..models.embedder import Embedder
-from ..models.extractor import Extractor
-from ..models.wam import Wam
+from .embedder import Embedder
+from .extractor import Extractor
+from .wam import Wam
 from ..modules.jnd import JND
 
 
@@ -47,7 +47,7 @@ class VideoWam(Wam):
         lowres_attenuation: bool = False,
     ) -> None:
         """
-        Initializes the VideoWam model.
+        Initializes the Videoseal model.
         Args:
             embedder (Embedder): The watermark embedder.
             detector (Extractor): The watermark detector.
@@ -262,80 +262,19 @@ class VideoWam(Wam):
         msgs: torch.Tensor = None,
         is_video: bool = True,
         interpolation: dict = {"mode": "bilinear", "align_corners": False, "antialias": True},
+        lowres_attenuation: bool = False,
     ) -> dict:
+        """ 
+        Generates watermarked videos from the input images and messages (used for inference).
+        Videos may be arbitrarily sized.
+        """
         """ 
         Generates watermarked videos from the input images and messages (used for inference).
         Videos may be arbitrarily sized.
         """
         if not is_video:
             # fallback on parent class for batch of images
-            return super().embed(imgs, msgs)
-        if msgs is None:
-            msgs = self.get_random_msg()  # 1 x k
-        else:
-            assert msgs.shape[0] == 1, "Message should be unique"
-        msgs = msgs.repeat(self.chunk_size, 1)  # 1 k -> n k
-
-        # encode by chunk of cksz imgs, propagate the wm to spsz next imgs
-        chunk_size = self.chunk_size  # n=cksz
-        step_size = self.step_size  # spsz
-
-        # initialize watermarked imgs
-        imgs_w = torch.zeros_like(imgs)  # f 3 h w
-
-        # chunking is necessary to avoid memory issues (when too many frames)
-        for ii in range(0, len(imgs[::step_size]), chunk_size):
-            nimgs_in_ck = min(chunk_size, len(imgs[::step_size]) - ii)
-            start = ii * step_size
-            end = start + nimgs_in_ck * step_size
-            all_imgs_in_ck = imgs[start: end, ...]  # f 3 h w
-
-            # choose one frame every step_size
-            imgs_in_ck = all_imgs_in_ck[::step_size]  # n 3 h w
-
-            # deal with last chunk that may have less than chunk_size imgs
-            if nimgs_in_ck < chunk_size:
-                msgs = msgs[:nimgs_in_ck]
-
-            # get deltas for the chunk, and repeat them for each frame in the chunk
-            outputs = super().embed(imgs_in_ck, msgs, interpolation)  # n 3 h w
-            deltas_in_ck = outputs["preds_w"]  # n 3 h w
-            
-            # use _apply_video_mode to expand deltas based on video_mode
-            deltas_in_ck = self._apply_video_mode(deltas_in_ck, len(all_imgs_in_ck), step_size, self.video_mode)
-
-            # blend, apply attenuation and clamp
-            all_imgs_in_ck_w = self.blender(all_imgs_in_ck, deltas_in_ck)
-            if self.attenuation is not None:
-                self.attenuation.to(all_imgs_in_ck.device)  # on cpu because high res
-                all_imgs_in_ck_w = self.attenuation(all_imgs_in_ck, all_imgs_in_ck_w)
-            if self.clamp:
-                all_imgs_in_ck_w = torch.clamp(all_imgs_in_ck_w, 0, 1)
-
-            # create watermarked imgs
-            imgs_w[start: end, ...] = all_imgs_in_ck_w  # n 3 h w
-
-        outputs = {
-            "imgs_w": imgs_w,  # watermarked imgs: f 3 h w
-            "msgs": msgs[0:1].repeat(len(imgs), 1),  # original messages: f k
-        }
-        return outputs
-
-    @torch.no_grad()
-    def embed_lowres_attenuation(
-        self,
-        imgs: torch.Tensor,
-        msgs: torch.Tensor = None,
-        is_video: bool = True,
-        interpolation: dict = {"mode": "bilinear", "align_corners": False, "antialias": True},
-    ) -> dict:
-        """ 
-        Generates watermarked videos from the input images and messages (used for inference).
-        Videos may be arbitrarily sized.
-        """
-        if not is_video:
-            # fallback on parent class for batch of images
-            return super().embed_lowres_attenuation(imgs, msgs)
+            return super().embed(imgs, msgs, interpolation, lowres_attenuation)
         if msgs is None:
             msgs = self.get_random_msg()  # 1 x k
         else:
@@ -378,8 +317,8 @@ class VideoWam(Wam):
             # use _apply_video_mode to expand predictions based on video_mode
             preds_w = self._apply_video_mode(preds_w, len(all_imgs_in_ck), step_size, self.video_mode)
 
-            # attenuate 
-            if self.attenuation is not None:
+            # attenuate at low resolution if needed
+            if self.attenuation is not None and lowres_attenuation:
                 self.attenuation.to(all_imgs_res.device)
                 hmaps = self.attenuation.heatmaps(all_imgs_res)
                 preds_w = hmaps * preds_w
@@ -390,18 +329,26 @@ class VideoWam(Wam):
                 preds_w = F.interpolate(preds_w, size=all_imgs_in_ck.shape[-2:],
                                         **interpolation)
 
+            # attenuate at full resolution if needed
+            if self.attenuation is not None and not lowres_attenuation:
+                self.attenuation.to(all_imgs_in_ck.device)
+                hmaps = self.attenuation.heatmaps(all_imgs_in_ck)
+                preds_w = hmaps * preds_w
+
             # blend
             all_imgs_in_ck_w = self.blender(all_imgs_in_ck, preds_w)
-            if self.clamp:
-                all_imgs_in_ck_w = torch.clamp(all_imgs_in_ck_w, 0, 1)
             imgs_w[start: end, ...] = all_imgs_in_ck_w  # n 3 h w
+
+        # clamp
+        if self.clamp:
+            imgs_w = torch.clamp(imgs_w, 0, 1)
 
         outputs = {
             "imgs_w": imgs_w,  # watermarked imgs: f 3 h w
             "msgs": msgs[0:1].repeat(len(imgs), 1),  # original messages: f k
         }
         return outputs
-
+    
     @torch.no_grad()
     def detect(
         self,
