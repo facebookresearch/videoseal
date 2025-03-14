@@ -1,0 +1,50 @@
+{
+    "cmd": "/private/home/soucek/.conda/envs/videoseal/bin/python train_artifact_discriminator.py",
+    "git": "https://github.com/fairinternal/videoseal.git",
+    "preload": "MKL_THREADING_LAYER=GNU",
+    "commit": "main",
+    "precmd": [],
+    "params": {
+        "image_dataset":            "sa-1b-full",
+        "video_dataset":            "none",
+        "augmentation_config":      "configs/all_augs_v3.yaml",
+        "extractor_model":          "convnext_tiny",
+        "embedder_list":            "baseline/trustmark,baseline/cin,baseline/wam,baseline/mbrs",
+        "embedder_list_valid":      "videoseal_1.0",
+        "loss_type":                "bt_nll",
+        "grad_perturbation":        true,
+        "max_perturbation":         0.15,
+        "img_size":                 512,
+        "img_size_val":             512,
+        "img_size_proc":            256,
+        "iter_per_epoch":           1000,
+        "iter_per_valid":           50,
+        "epochs":                   60,
+        "workers":                  3,
+        "batch_size":               16,
+        "batch_size_eval":          16,
+        "batch_size_video":         1,
+        "batch_size_video_eval":    1,
+        "num_augs":                 2,
+        "optimizer":                "AdamW,lr=5e-5",
+        "scheduler":                "None",
+        "seed":                     111,
+        "master_port":              "__SAMPLE__(10000, 20000)"
+    },
+    "machine": {
+        "constraint":       "volta32gb",
+        "gres":             "gpu:8",
+        "nodes":            "1",
+        "tasks-per-node":   "8",
+        "partition":        "learnfair",
+        "cpus-per-task":    "10",
+        "time":             "10:00:00",
+        "mem-per-cpu":      "6G"
+    },
+    "meta": {
+        "group": "",
+        "name": "quality_test6_btnll_test_videosealv2_largersize_gradpert_run2",
+        "dest-arg": "yes",
+        "dest-name": "output_dir"
+    }
+}

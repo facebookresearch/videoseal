@@ -6,7 +6,7 @@ import time
 import pickle
 from typing import List, Tuple
 from PIL import Image
-
+import random
 import numpy as np
 import omegaconf
 
@@ -104,6 +104,9 @@ def get_parser():
     group = parser.add_argument_group('Losses parameters')
     aa('--loss_type', default='bce', type=str,
        help='Loss to use.', choices=['bce', 'bt_nll'])
+    aa('--grad_perturbation', type=utils.bool_inst, default=False)
+    aa('--max_perturbation', default=0.15, type=float)
+    aa('--min_perturbation', default=0.05, type=float)
     
     group = parser.add_argument_group('Loading parameters')
     aa('--batch_size', default=16, type=int, help='Batch size')
@@ -386,66 +389,74 @@ def train_one_epoch(
         # videos are too big to have a batch of them
         # so we do batch accumulation with bsz = 1
         if len(batch_imgs.shape) == 5:
-            accumulation_steps = batch_imgs.shape[0]
+            assert len(batch_imgs) == 1
         elif len(batch_imgs.shape) == 4:
-            accumulation_steps = 1
             batch_masks = batch_masks.unsqueeze(0)
             batch_imgs = batch_imgs.unsqueeze(0)
 
-
         optimizer.zero_grad()
 
-        # accumulate gradients
-        for acc_it in range(accumulation_steps):
+        imgs, masks = batch_imgs[0], batch_masks[0]
+        imgs = imgs.to(device, non_blocking=True)
 
-            imgs, masks = batch_imgs[acc_it], batch_masks[acc_it]
-            imgs = imgs.to(device, non_blocking=True)
+        with torch.no_grad():
+            # forward
+            outputs = embedder.embed(imgs, is_video=params.modality == Modalities.VIDEO)
+            watermarked_images = outputs["imgs_w"]
 
-            with torch.no_grad():
-                # forward
-                outputs = embedder.embed(imgs, is_video=params.modality == Modalities.VIDEO)
-                watermarked_images = outputs["imgs_w"]
+            joined_imgs = torch.cat([imgs, watermarked_images], 0)
+            joined_imgs_aug, masks, _ = augmenter.augment(
+                joined_imgs, torch.cat([masks] * 2, 0), is_video=params.modality == Modalities.VIDEO, do_resize=True)
+            joined_imgs_aug = joined_imgs_aug.view(2, -1, *imgs.shape[1:])
 
-                joined_imgs = torch.cat([imgs, watermarked_images], 0)
-                joined_imgs_aug, masks, _ = augmenter.augment(
-                    joined_imgs, torch.cat([masks] * 2, 0), is_video=params.modality == Modalities.VIDEO, do_resize=True)
-                joined_imgs_aug = joined_imgs_aug.view(2, -1, *imgs.shape[1:])
+            if params.img_size != params.img_size_proc:
+                assert params.img_size > params.img_size_proc
+                joined_imgs_aug = random_crop(joined_imgs_aug, params.img_size_proc)
 
-                if params.img_size != params.img_size_proc:
-                    assert params.img_size > params.img_size_proc
-                    joined_imgs_aug = random_crop(joined_imgs_aug, params.img_size_proc)
+        original_images_probs = extractor(joined_imgs_aug[0])
+        watermarked_images_probs = extractor(joined_imgs_aug[1])
 
-            original_images_probs = extractor(joined_imgs_aug[0])
-            watermarked_images_probs = extractor(joined_imgs_aug[1])
-
-            # Scale loss for accumulation so lr is not affected
-            loss = loss_function(original_images_probs, watermarked_images_probs) / accumulation_steps
-            loss.backward()
-
-            accuracy = ((original_images_probs > 0).float().mean() + (watermarked_images_probs < 0).float().mean()) / 2.
-            ranking = ((original_images_probs  - watermarked_images_probs) > 0).float().mean()
-
-            # with open("out.pickle", "wb") as f:
-            #     pickle.dump({"imgs":imgs, "watermarked_images":watermarked_images, "joined_imgs_aug":joined_imgs_aug, "original_images_probs":original_images_probs, "watermarked_images_probs":watermarked_images_probs}, f)
-            #     exit(0)
-
-            # log stats
-            log_stats = {
-                'loss': loss.item(),
-                'acc': accuracy.item(),
-                'ranking': ranking.item(),
-                'lr': optimizer.param_groups[0]['lr'],
-            }
-
-            torch.cuda.synchronize()
-            for name, value in log_stats.items():
-                metric_logger.update(**{name: value})
-
-            if it % 200 == 199:
-                inputs_ = Image.fromarray(np.concatenate(np.concatenate(joined_imgs_aug.permute(0, 1, 3, 4, 2).mul(255).to(torch.uint8).cpu().numpy()[:, :6], 1), 1))
-                inputs_.save(os.path.join(params.output_dir, f'{epoch:03}_{it:03}_{udist.get_rank()}_input.png'))
-
+        loss = loss_function(original_images_probs, watermarked_images_probs)
+        loss.backward()
         optimizer.step()
+
+        accuracy = ((original_images_probs > 0).float().mean() + (watermarked_images_probs < 0).float().mean()) / 2.
+        ranking = ((original_images_probs  - watermarked_images_probs) > 0).float().mean()
+
+        if params.grad_perturbation:
+            perturbation = torch.zeros_like(joined_imgs_aug[1])
+            perturbation.requires_grad_(True)
+            perturbation_loss = -extractor(joined_imgs_aug[1] + perturbation).mean()
+            perturbation_loss.backward()
+            perturbation_lr = random.random() * (params.max_perturbation - params.min_perturbation) + params.min_perturbation
+            perturbation_vec = perturbation.grad.detach().mul(-perturbation_lr)
+            perturbed_images = (joined_imgs_aug[1] + perturbation_vec).clip(0, 1)
+
+            optimizer.zero_grad()
+            original_images_probs = extractor(joined_imgs_aug[0])
+            watermarked_images_probs = extractor(perturbed_images)
+            loss = loss_function(original_images_probs, watermarked_images_probs)
+            loss.backward()
+            optimizer.step()
+
+        # log stats
+        log_stats = {
+            'loss': loss.item(),
+            'acc': accuracy.item(),
+            'ranking': ranking.item(),
+            'lr': optimizer.param_groups[0]['lr'],
+        }
+
+        torch.cuda.synchronize()
+        for name, value in log_stats.items():
+            metric_logger.update(**{name: value})
+
+        if it % 200 == 199:
+            inputs_ = Image.fromarray(np.concatenate(np.concatenate(joined_imgs_aug.permute(0, 1, 3, 4, 2).mul(255).to(torch.uint8).cpu().numpy()[:, :6], 1), 1))
+            inputs_.save(os.path.join(params.output_dir, f'{epoch:03}_{it:03}_{udist.get_rank()}_input.png'))
+            if params.grad_perturbation:
+                inputs_ = Image.fromarray(np.concatenate(perturbed_images.permute(0, 2, 3, 1).mul(255).to(torch.uint8).cpu().numpy()[:6], 1))
+                inputs_.save(os.path.join(params.output_dir, f'{epoch:03}_{it:03}_{udist.get_rank()}_perturbed.png'))
 
     metric_logger.synchronize_between_processes()
     print("Averaged {} stats:".format('train'), metric_logger)
