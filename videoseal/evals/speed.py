@@ -191,6 +191,8 @@ def main():
                         help='The number of frames to propagate the watermark to')
     group.add_argument('--videowam_mode', type=str, default='repeat', 
                         help='The inference mode for videos')
+    group.add_argument('--time_pooling_depth', type=int, default=None,
+                        help='The depth of the UNet at which applying the temporal pooling')
 
     group = parser.add_argument_group('Interpolation')
     group.add_argument('--interpolation_mode', type=str, default='bilinear',
@@ -251,7 +253,14 @@ def main():
             model.video_mode = args.videowam_mode or model.mode
         if hasattr(model, 'img_size'):
             model.img_size = args.img_size_proc or model.img_size
-        
+        if hasattr(model.embedder, 'unet') and hasattr(model.embedder.unet, 'time_pooling'):
+            if args.time_pooling_depth is not None:
+                model.embedder.unet.time_pooling = {
+                    "depth": args.time_pooling_depth,
+                    "kernel_size": model.step_size
+                }
+                model.step_size = 1
+
         # Record checkpoint path
         model.checkpoint_path = checkpoint_path
         model.name = os.path.basename(os.path.dirname(checkpoint_path)) if '/' in checkpoint_path else 'unknown'
