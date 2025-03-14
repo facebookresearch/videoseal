@@ -100,10 +100,7 @@ class SpeedTester:
             
             # Warmup runs
             for _ in range(warmup_runs):
-                if lowres_attenuation:
-                    outputs = model.embed_lowres_attenuation(imgs, is_video=is_video, interpolation=interpolation)
-                else:
-                    outputs = model.embed(imgs, is_video=is_video, interpolation=interpolation)
+                outputs = model.embed(imgs, is_video=is_video, interpolation=interpolation, lowres_attenuation=lowres_attenuation)
                 
                 if is_video:
                     _ = model.detect_and_aggregate(outputs["imgs_w"], video_aggregation, interpolation)
@@ -116,10 +113,7 @@ class SpeedTester:
                 torch.cuda.synchronize() if self.device == 'cuda' else None
                 start_time = time.time()
                 
-                if lowres_attenuation:
-                    outputs = model.embed_lowres_attenuation(imgs, is_video=is_video, interpolation=interpolation)
-                else:
-                    outputs = model.embed(imgs, is_video=is_video, interpolation=interpolation)
+                outputs = model.embed(imgs, is_video=is_video, interpolation=interpolation, lowres_attenuation=lowres_attenuation)
                 
                 torch.cuda.synchronize() if self.device == 'cuda' else None
                 embed_times.append(time.time() - start_time)
