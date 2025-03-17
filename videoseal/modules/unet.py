@@ -199,6 +199,14 @@ class UNetMsg(nn.Module):
                 hiddens.append(dblock(hiddens[-1]))  # b d h w -> b d' h/2 w/2
 
         # Middle path
+        if self.time_pooling:
+            if len(msgs) != len(hiddens[-1]):
+                # Trim when doing time average pooling.
+                assert time_pooling_stride is None
+                last_msg = msgs[-1].unsqueeze(0)
+                msgs = msgs[(time_pooling_kernel_size//2)::time_pooling_kernel_size]
+                if (len(msgs) * time_pooling_kernel_size) < nb_imgs:
+                    msgs = torch.cat([msgs, last_msg])
         hiddens.append(self.msg_processor(hiddens.pop(), msgs))  # b c+c' h w
         x = self.bottleneck(hiddens[-1])
 
