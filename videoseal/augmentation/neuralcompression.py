@@ -35,10 +35,12 @@ class NeuralCompression(nn.Module):
         for param in self.model.parameters():
             param.requires_grad = False
 
-    def forward(self, image, mask, **kwargs):
+    def forward(self, image, mask, *args, **kwargs):
         x_hat = self.model(image.to('cpu'))['x_hat'].to(image.device)
         return x_hat, mask
     
+    def __repr__(self):
+        return f"{self.model_name} (q={self.quality})"
 
 class BMSHJ2018Hyperprior(NeuralCompression):
     def __init__(self, quality):

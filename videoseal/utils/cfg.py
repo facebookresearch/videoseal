@@ -8,10 +8,11 @@ from typing import Union
 from urllib.parse import urlparse
 
 import omegaconf
+from omegaconf import DictConfig, OmegaConf
+
 import torch
 import torch.distributed as dist
 import torchvision.transforms as transforms
-from omegaconf import DictConfig, OmegaConf
 
 import videoseal.utils.dist as udist
 from videoseal.augmentation.augmenter import get_dummy_augmenter

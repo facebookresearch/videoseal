@@ -180,9 +180,6 @@ class Augmenter(nn.Module):
             # image augmentations
             selected_augs = []
             for ii in range(self.num_augs):
-                if ii != 0 and selected_aug_ in neural_compression_augs:
-                    # neural compression augmentations cannot be applied on non 256x256 images
-                    break
                 imgs_aug, mask_targets, selected_aug_ = self.augment(imgs_aug, mask_targets, is_video, do_resize)
                 selected_augs.append(selected_aug_)
             selected_aug = "+".join(selected_augs)

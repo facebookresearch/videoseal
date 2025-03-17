@@ -30,6 +30,9 @@ Examples:
         --epochs 601 --iter_per_epoch 100 --scheduler None --optimizer AdamW,lr=1e-5 \
         --lambda_dec 1.0 --lambda_d 0.5 --lambda_i 0.1 --perceptual_loss yuv  --num_augs 2 --augmentation_config configs/all_augs_v3.yaml --disc_in_channels 1 --disc_start 50
 
+
+--balanced False --total_gnorm 1.0 --scaling_w_schedule Cosine,scaling_min=0.2,start_epoch=300,epochs=300 --scaling_w 1.5 --attenuation jnd_1_1 --scaling_i 1.0 --nbits 256 --hidden_size_multiplier 1.0 --lambda_dec 1.0 --lambda_det 0.0 --lambda_d 0.1 --lambda_i 0.0 --perceptual_loss yuv --seed 0 --scheduler CosineLRScheduler,lr_min=1e-6,t_initial=601,warmup_lr_init=1e-8,warmup_t=20 --optimizer AdamW,lr=1e-3 --num_augs 2 --saveimg_freq 50 --eval_freq 10 --full_eval_freq 50 --batch_size_video_eval 1 --batch_size_video 1 --batch_size_eval 16 --batch_size 16 --workers 8 --iter_per_valid 10 --videowam_step_size 8 --finetune_detector_start 2000 --video_start 2000 --prop_img_vid 1.0 --epochs 601 --iter_per_epoch 1000 --img_size_proc 256 --img_size_val 256 --img_size 256 --disc_in_channels 1 --disc_start 50 --extractor_model convnext_tiny --embedder_model unet_tiny_yuv_quant --augmentation_config configs/ablations/augs_extreme.yaml --video_dataset none --image_dataset sa-1b-full-resized
+        
 """
 
 import argparse
@@ -564,7 +567,7 @@ def main(params):
             'optimizer_d': optimizer_d.state_dict(),
             'scheduler': scheduler.state_dict() if scheduler is not None else None,
             'scheduler_d': scheduler_d.state_dict() if scheduler_d is not None else None,
-            'args': params,
+            'args': omegaconf.OmegaConf.to_yaml(params),
         }
         udist.save_on_master(save_dict, os.path.join(
             params.output_dir, 'checkpoint.pth'))
