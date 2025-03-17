@@ -3,18 +3,21 @@ Test the speed of different methods on CPU or CUDA.
 
 Example usage:
 python -m videoseal.evals.speed \
-    --checkpoint /checkpoint/soucek/2025_logs/0228_vseal_128bits_jnd_ftvid_complete/_optimizer=AdamW,lr=1e-5_videowam_step_size=1/checkpoint200.pth \
+    --checkpoint  \
+        /checkpoint/pfz/2025_logs/0314_vseal_moreaugs/_scaling_w_schedule=1_nbits=128_optimizer=AdamW,lr=5e-4/checkpoint550.pth \
+        /checkpoint/pfz/2025_logs/0306_vseal_ydisc_release/_nbits=128/checkpoint600.pth \
+    --dataset moviegen --is_video true --num_samples 10 \
+    --device cuda \
+    --videowam_chunk_size 128 --num_frames 240 --lowres_attenuation true
+
+        /checkpoint/soucek/2025_logs/0228_vseal_128bits_jnd_ftvid_complete/_optimizer=AdamW,lr=1e-5_videowam_step_size=1/checkpoint200.pth \
         baselines/hidden \
         baselines/mbrs \
         baselines/cin \
         baselines/wam \
         baselines/trustmark \
-    --dataset moviegen --is_video true --num_samples 10 \
-    --device cuda \
-    --videowam_chunk_size 128 --num_frames 240 --lowres_attenuation true
-
     --checkpoint /checkpoint/pfz/2025_logs/0303_vseal_ep500_ftvid_complete/_finetune_detector_start=2000_augmentation_config=0/checkpoint200.pth \
-    
+
 python -m videoseal.evals.speed     --checkpoint /checkpoint/pfz/2025_logs/0303_vseal_ep500_ftvid_complete/_finetune_detector_start=2000_augmentation_config=0/checkpoint200.pth          baselines/trustmark     --dataset sa-v --is_video true --num_samples 10     --device cuda --videowam_chunk_size 128 --num_frames 240 --lowres_attenuation true
 """
     

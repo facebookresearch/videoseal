@@ -203,14 +203,15 @@ class UNetMsg(nn.Module):
         x = self.bottleneck(hiddens[-1])
 
         # Upward path
-        def concat_skip_connect(x): return torch.cat(
-            (x, hiddens.pop() * self.connect_scale), dim=1)
         for ublock in self.ups:
             # Recover the original number of frames for temporal pooling.
             if len(x) != len(hiddens[-1]):
                 x = torch.repeat_interleave(x, repeats=time_pooling_kernel_size, dim=0)  # b/k d h w -> b d h w
                 x = x[:nb_imgs]
-            x = concat_skip_connect(x)  # b d h w -> b 2d h w
+            x = torch.cat(
+                (x, hiddens.pop() * self.connect_scale), 
+                dim=1
+            )  # b d h w -> b 2d h w
             x = ublock(x)  # b d h w
 
         # Recover the original number of frames for temporal pooling.
