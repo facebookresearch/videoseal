@@ -107,6 +107,12 @@ def get_parser():
     aa('--grad_perturbation', type=utils.bool_inst, default=False)
     aa('--max_perturbation', default=0.15, type=float)
     aa('--min_perturbation', default=0.05, type=float)
+    aa('--watermark_strength_contrasting', type=utils.bool_inst, default=False)
+    aa('--strength_contrasting_single_watermark', type=utils.bool_inst, default=True)
+    aa('--weak_alpha', default=0.5, type=float)
+    aa('--strong_alpha', default=2, type=float)
+    aa('--alpha_range', default=0.4, type=float)
+    aa('--ramdomly_invert_watermark', type=utils.bool_inst, default=False)
     
     group = parser.add_argument_group('Loading parameters')
     aa('--batch_size', default=16, type=int, help='Batch size')
@@ -404,6 +410,10 @@ def train_one_epoch(
             outputs = embedder.embed(imgs, is_video=params.modality == Modalities.VIDEO)
             watermarked_images = outputs["imgs_w"]
 
+            if params.ramdomly_invert_watermark:
+                if random.random() < 0.5:
+                    watermarked_images = (imgs - (watermarked_images - imgs)).clip(0, 1)
+
             joined_imgs = torch.cat([imgs, watermarked_images], 0)
             joined_imgs_aug, masks, _ = augmenter.augment(
                 joined_imgs, torch.cat([masks] * 2, 0), is_video=params.modality == Modalities.VIDEO, do_resize=True)
@@ -418,10 +428,47 @@ def train_one_epoch(
 
         loss = loss_function(original_images_probs, watermarked_images_probs)
         loss.backward()
-        optimizer.step()
 
         accuracy = ((original_images_probs > 0).float().mean() + (watermarked_images_probs < 0).float().mean()) / 2.
         ranking = ((original_images_probs  - watermarked_images_probs) > 0).float().mean()
+
+        # log stats
+        log_stats = {
+            'loss': loss.item(),
+            'acc': accuracy.item(),
+            'ranking': ranking.item(),
+            'lr': optimizer.param_groups[0]['lr'],
+        }
+
+        if params.watermark_strength_contrasting:
+            watermark1 = watermark2 = imgs - watermarked_images
+            if not params.strength_contrasting_single_watermark:
+                # run the embedder for the second time with different watermark message
+                with torch.no_grad():
+                    outputs2 = embedder.embed(imgs, is_video=params.modality == Modalities.VIDEO)
+                    watermarked_images2 = outputs2["imgs_w"]
+                watermark2 = imgs - watermarked_images2
+
+            aplha1 = params.weak_alpha + random.random() * params.alpha_range - params.alpha_range / 2
+            aplha2 = params.strong_alpha + random.random() * params.alpha_range - params.alpha_range / 2
+
+            watermarked_images_weak = (imgs + aplha1 * watermark1).clip(0, 1)
+            watermarked_images_strong = (imgs + aplha2 * watermark2).clip(0, 1)
+            joined_imgs_contrasting = torch.stack([watermarked_images_weak, watermarked_images_strong], 0)
+
+            if params.img_size != params.img_size_proc:
+                assert params.img_size > params.img_size_proc
+                joined_imgs_contrasting = random_crop(joined_imgs_contrasting, params.img_size_proc)
+
+            weak_probs = extractor(joined_imgs_contrasting[0])
+            strong_probs = extractor(joined_imgs_contrasting[1])
+
+            loss_wm_contrasting = loss_function(weak_probs, strong_probs)
+            loss_wm_contrasting.backward()
+            log_stats["loss_wm_contrasting"] = loss_wm_contrasting.item()
+
+        # do joint step for the main loss and the watermark_strength_contrasting, if enabled
+        optimizer.step()
 
         if params.grad_perturbation:
             perturbation = torch.zeros_like(joined_imgs_aug[1])
@@ -435,17 +482,12 @@ def train_one_epoch(
             optimizer.zero_grad()
             original_images_probs = extractor(joined_imgs_aug[0])
             watermarked_images_probs = extractor(perturbed_images)
-            loss = loss_function(original_images_probs, watermarked_images_probs)
-            loss.backward()
-            optimizer.step()
 
-        # log stats
-        log_stats = {
-            'loss': loss.item(),
-            'acc': accuracy.item(),
-            'ranking': ranking.item(),
-            'lr': optimizer.param_groups[0]['lr'],
-        }
+            loss_gradpert = loss_function(original_images_probs, watermarked_images_probs)
+            loss_gradpert.backward()
+            log_stats["loss_gradpert"] = loss_gradpert.item()
+
+            optimizer.step()
 
         torch.cuda.synchronize()
         for name, value in log_stats.items():
@@ -457,6 +499,9 @@ def train_one_epoch(
             if params.grad_perturbation:
                 inputs_ = Image.fromarray(np.concatenate(perturbed_images.permute(0, 2, 3, 1).mul(255).to(torch.uint8).cpu().numpy()[:6], 1))
                 inputs_.save(os.path.join(params.output_dir, f'{epoch:03}_{it:03}_{udist.get_rank()}_perturbed.png'))
+            if params.watermark_strength_contrasting:
+                inputs_ = Image.fromarray(np.concatenate(np.concatenate(joined_imgs_contrasting.permute(0, 1, 3, 4, 2).mul(255).to(torch.uint8).cpu().numpy()[:, :6], 1), 1))
+                inputs_.save(os.path.join(params.output_dir, f'{epoch:03}_{it:03}_{udist.get_rank()}_contrasting.png'))
 
     metric_logger.synchronize_between_processes()
     print("Averaged {} stats:".format('train'), metric_logger)
