@@ -116,6 +116,8 @@ def get_parser():
     aa('--strong_alpha', default=2, type=float)
     aa('--alpha_range', default=0.4, type=float)
     aa('--ramdomly_invert_watermark', type=utils.bool_inst, default=False)
+    aa('--grad_matching', type=utils.bool_inst, default=False)
+    aa('--grad_matching_weight', default=0.2, type=float)
     
     group = parser.add_argument_group('Loading parameters')
     aa('--batch_size', default=16, type=int, help='Batch size')
@@ -427,10 +429,14 @@ def train_one_epoch(
                 joined_imgs_aug = random_crop(joined_imgs_aug, params.img_size_proc)
 
         original_images_probs = extractor(joined_imgs_aug[0])
-        watermarked_images_probs = extractor(joined_imgs_aug[1])
+        if params.grad_matching:
+            perturbation = torch.zeros_like(joined_imgs_aug[1])
+            perturbation.requires_grad_(True)
+            watermarked_images_probs = extractor(joined_imgs_aug[1] + perturbation)
+        else:
+            watermarked_images_probs = extractor(joined_imgs_aug[1])
 
         loss = loss_function(original_images_probs, watermarked_images_probs)
-        loss.backward()
 
         accuracy = ((original_images_probs > 0).float().mean() + (watermarked_images_probs < 0).float().mean()) / 2.
         ranking = ((original_images_probs  - watermarked_images_probs) > 0).float().mean()
@@ -442,6 +448,15 @@ def train_one_epoch(
             'ranking': ranking.item(),
             'lr': optimizer.param_groups[0]['lr'],
         }
+
+        if params.grad_matching:
+            grad_ = torch.autograd.grad(watermarked_images_probs.mean(), perturbation, create_graph=True)
+            watermark = joined_imgs_aug[1] - joined_imgs_aug[0]
+            loss_2ndorder = (1-F.cosine_similarity(grad_[0].view(-1), -watermark.view(-1), dim=0)) * params.grad_matching_weight
+            log_stats["loss_2ndorder"] = loss_2ndorder.item()
+            loss += loss_2ndorder
+
+        loss.backward()
 
         if params.watermark_strength_contrasting:
             watermark1 = watermark2 = watermarked_images - imgs
@@ -492,7 +507,7 @@ def train_one_epoch(
 
                 with torch.no_grad():
                     perturbation.add_(perturbation_vec)
-                perturbation.grad.zero_()
+                    perturbation.grad.zero_()
 
             perturbed_images = (joined_imgs_aug[1] + perturbation).clip(0, 1)
 
