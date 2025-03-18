@@ -105,8 +105,11 @@ def get_parser():
     aa('--loss_type', default='bce', type=str,
        help='Loss to use.', choices=['bce', 'bt_nll'])
     aa('--grad_perturbation', type=utils.bool_inst, default=False)
+    aa('--use_grad_sign_only', type=utils.bool_inst, default=False)
+    aa('--use_rand_perturbation', type=utils.bool_inst, default=False)
     aa('--max_perturbation', default=0.15, type=float)
     aa('--min_perturbation', default=0.05, type=float)
+    aa('--n_perturbation_steps', default=1, type=int)
     aa('--watermark_strength_contrasting', type=utils.bool_inst, default=False)
     aa('--strength_contrasting_single_watermark', type=utils.bool_inst, default=True)
     aa('--weak_alpha', default=0.5, type=float)
@@ -441,13 +444,13 @@ def train_one_epoch(
         }
 
         if params.watermark_strength_contrasting:
-            watermark1 = watermark2 = imgs - watermarked_images
+            watermark1 = watermark2 = watermarked_images - imgs
             if not params.strength_contrasting_single_watermark:
                 # run the embedder for the second time with different watermark message
                 with torch.no_grad():
                     outputs2 = embedder.embed(imgs, is_video=params.modality == Modalities.VIDEO)
                     watermarked_images2 = outputs2["imgs_w"]
-                watermark2 = imgs - watermarked_images2
+                watermark2 = watermarked_images2 - imgs
 
             aplha1 = params.weak_alpha + random.random() * params.alpha_range - params.alpha_range / 2
             aplha2 = params.strong_alpha + random.random() * params.alpha_range - params.alpha_range / 2
@@ -471,13 +474,27 @@ def train_one_epoch(
         optimizer.step()
 
         if params.grad_perturbation:
-            perturbation = torch.zeros_like(joined_imgs_aug[1])
+            if params.use_rand_perturbation:
+                perturbation = torch.rand_like(joined_imgs_aug[1]).mul_(2).sub_(1).mul_(params.min_perturbation)
+            else:
+                perturbation = torch.zeros_like(joined_imgs_aug[1])
             perturbation.requires_grad_(True)
-            perturbation_loss = -extractor(joined_imgs_aug[1] + perturbation).mean()
-            perturbation_loss.backward()
-            perturbation_lr = random.random() * (params.max_perturbation - params.min_perturbation) + params.min_perturbation
-            perturbation_vec = perturbation.grad.detach().mul(-perturbation_lr)
-            perturbed_images = (joined_imgs_aug[1] + perturbation_vec).clip(0, 1)
+
+            for _ in range(params.n_perturbation_steps):
+                perturbation_loss = -extractor(joined_imgs_aug[1] + perturbation).mean()
+                perturbation_loss.backward()
+                perturbation_lr = random.random() * (params.max_perturbation - params.min_perturbation) + params.min_perturbation
+                
+                perturbation_vec = perturbation.grad.detach()
+                if params.use_grad_sign_only:
+                    perturbation_vec.sign_()
+                perturbation_vec.mul_(-perturbation_lr)
+
+                with torch.no_grad():
+                    perturbation.add_(perturbation_vec)
+                perturbation.grad.zero_()
+
+            perturbed_images = (joined_imgs_aug[1] + perturbation).clip(0, 1)
 
             optimizer.zero_grad()
             original_images_probs = extractor(joined_imgs_aug[0])
