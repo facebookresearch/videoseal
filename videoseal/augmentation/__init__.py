@@ -2,7 +2,6 @@ from .sequential import Sequential
 from .geometric import Crop, HorizontalFlip, Identity, Perspective, Resize, Rotate
 from .valuemetric import JPEG, Brightness, Contrast, GaussianBlur, Grayscale, Hue, MedianFilter, Saturation
 from .video import H264, H264rgb, H265, VP9, AV1, SpeedChange, WindowAveraging, DropFrame, TemporalReorder
-from .neuralcompression import BMSHJ2018Hyperprior, BMSHJ2018Factorized, MBT2018Mean, MBT2018, Cheng2020Anchor, Cheng2020Attn
 
 def get_validation_augs_subset(
     is_video: bool = False
@@ -27,7 +26,6 @@ def get_validation_augs_subset(
             (Crop(),                    [0.71]),  # size ratio
             (Brightness(),              [0.5]),
             (JPEG(),                    [60]),
-            (BMSHJ2018Hyperprior(3),    [0]),
             (Sequential(JPEG(), Crop(), Brightness()), [(60, 0.71, 0.5)]),
         ]
     return augs
@@ -115,12 +113,6 @@ def get_validation_augs(
             (JPEG(),              [40, 50, 60, 70, 80, 90]),
             (GaussianBlur(),      [3, 5, 9, 13, 17]),
             # (MedianFilter(),      [3, 5, 9, 13, 17]),
-            (BMSHJ2018Hyperprior(1), [0]),
-            (BMSHJ2018Hyperprior(3), [0]),
-            (BMSHJ2018Hyperprior(6), [0]),
-            (Cheng2020Anchor(1),     [0]),
-            (Cheng2020Anchor(3),     [0]),
-            (Cheng2020Anchor(6),     [0]),
             (Sequential(JPEG(), Crop(), Brightness()), [(40, 0.71, 0.5)]),
             (Sequential(JPEG(), Crop(), Brightness()), [(60, 0.71, 0.5)]),
             (Sequential(JPEG(), Crop(), Brightness()), [(80, 0.71, 0.5)]),
