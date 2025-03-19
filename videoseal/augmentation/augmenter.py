@@ -53,12 +53,35 @@ def get_dummy_augmenter():
     """
     An augmenter that does nothing.
     """
-    
-    return Augmenter(
-        augs = {'identity': 1},
-        augs_params = {},
-        masks = {'kind': None}
-    )
+    return DummyAugmenter()
+
+
+class DummyAugmenter(nn.Module):
+    """
+    An augmenter that does nothing.
+    """
+    def __init__(self) -> None:
+        super(DummyAugmenter, self).__init__()
+
+    def forward(
+        self, 
+        imgs_w: torch.Tensor, 
+        imgs: torch.Tensor, 
+        masks: torch.Tensor, 
+        is_video: bool = True, 
+        do_resize: bool = True
+    ) -> tuple[torch.Tensor, torch.Tensor, str]:
+        """
+        Args:
+            imgs: (torch.Tensor) Batched images with shape BxCxHxW
+            imgs_w: (torch.Tensor) Batched watermarked images with shape BxCxHxW
+            masks: (torch.Tensor) Batched masks with shape Bx1xHxW
+        Returns:
+            imgs_aug: (torch.Tensor) The augmented watermarked images.
+            mask_targets: (torch.Tensor) The mask targets, at ones where the watermark is present.
+        """
+        return imgs_w, masks, "identity"
+
 
 class Augmenter(nn.Module):
     """

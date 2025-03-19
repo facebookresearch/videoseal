@@ -250,12 +250,14 @@ def main():
             model.video_mode = args.videowam_mode or model.mode
         if hasattr(model, 'img_size'):
             model.img_size = args.img_size_proc or model.img_size
+
+        # Override the temporal pooling
         if hasattr(model.embedder, 'unet') and hasattr(model.embedder.unet, 'time_pooling'):
-            if args.time_pooling_depth is not None:
-                model.embedder.unet.time_pooling = {
-                    "depth": args.time_pooling_depth,
-                    "kernel_size": model.step_size
-                }
+            if args.time_pooling is not None:
+                model.embedder.unet.time_pooling = True
+                model.embedder.unet.time_pooling_depth = args.time_pooling_depth
+                model.embedder.unet.temporal_pool.kernel_size = model.step_size
+                # When doing time average pooling, the step size should be set to 1.
                 model.step_size = 1
 
         # Record checkpoint path

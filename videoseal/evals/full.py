@@ -1,5 +1,4 @@
 """
-
 Example:
 
 1/ Evaluate a checkpoint on images
@@ -320,19 +319,20 @@ def main():
     model.step_size = args.videowam_step_size or model.step_size
     model.video_mode = args.videowam_mode or model.mode
     model.img_size = args.img_size_proc or model.img_size
-    if hasattr(model.embedder, 'unet') and hasattr(model.embedder.unet, 'time_pooling'):
-        if args.time_pooling_depth is not None:
-            model.embedder.unet.time_pooling = {
-                "depth": args.time_pooling_depth,
-                "kernel_size": model.step_size
-            }
-            # When doing time average pooling, the step size should be set to 1.
-            model.step_size = 1
 
     # Setup the device
     avail_device = 'cuda' if torch.cuda.is_available() else 'cpu'
     device = args.device or avail_device
     model.to(device)
+
+    # Override the temporal pooling
+    if hasattr(model.embedder, 'unet') and hasattr(model.embedder.unet, 'time_pooling'):
+        if args.time_pooling is not None:
+            model.embedder.unet.time_pooling = True
+            model.embedder.unet.time_pooling_depth = args.time_pooling_depth
+            model.embedder.unet.temporal_pool.kernel_size = model.step_size
+            # When doing time average pooling, the step size should be set to 1.
+            model.step_size = 1
 
     # Override attenuation build
     if args.attenuation is not None:
