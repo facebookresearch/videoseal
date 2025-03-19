@@ -485,8 +485,15 @@ def train_one_epoch(
             loss_wm_contrasting.backward()
             log_stats["loss_wm_contrasting"] = loss_wm_contrasting.item()
 
-        # do joint step for the main loss and the watermark_strength_contrasting, if enabled
-        optimizer.step()
+        # do joint step for the main loss, grad matching loss, and the watermark_strength_contrasting, if enabled
+        if params.grad_matching:
+            # the norm of the gradients in the cosine loss can be small and produce inf/nan gradients, check for that
+            if all([torch.isfinite(p.grad).all().item() for p in extractor.parameters()]):
+                optimizer.step()
+            else:
+                print("WARINING: Some gradients are not finite! Skipping the update step!", flush=True)
+        else:
+            optimizer.step()
 
         if params.grad_perturbation:
             if params.use_rand_perturbation:
