@@ -2,6 +2,41 @@
 
 This document provides instructions on how to use the TorchScript version of the VideoSeal model for watermarking images and videos.
 
+
+## Quickstart
+
+```python
+import os
+from PIL import Image
+import torch
+import torchvision
+from torchvision.transforms.functional import to_tensor, to_pil_image
+
+# Download the model and load it.
+os.makedirs("ckpts", exist_ok=True)
+if not os.path.exists("ckpts/y_256b_img.jit"):
+    os.system("wget https://dl.fbaipublicfiles.com/videoseal/y_256b_img.jit -P ckpts/")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model = torch.jit.load("ckpts/y_256b_img.jit").to(device).eval()
+
+# Image watermarking in 3 lines.
+img = to_tensor(Image.open("image.jpg")).unsqueeze(0).to(device)
+msg = torch.randint(0, 2, (1, 256)).float().to(device)
+img_watermarked = model.embed(img, msg)
+# Video watermarking in 3 lines.
+video = torchvision.io.read_video("video.mp4")[0].permute(0, 3, 1, 2)  # TCHW format
+video = (video.float() / 255.0).to(device)[:16]  # First 16 frames
+video_watermarked = model.embed(video, msg, is_video=True)
+
+# Image detection.
+img_watermarked = to_tensor(Image.open("image_watermarked.jpg")).unsqueeze(0).to(device)
+preds = model.detect(img_watermarked)
+# Video detection.
+video_watermarked = torchvision.io.read_video("video_watermarked.mp4")[0].permute(0, 3, 1, 2)
+video_watermarked = (video_watermarked.float() / 255.0).to(device)[:16]
+preds = model.detect(video_watermarked, is_video=True)
+```
+
 ## Loading and using
 
 ### Download the model

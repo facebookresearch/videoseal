@@ -331,38 +331,6 @@ class WamJIT(nn.Module):
 
         return imgs_w
 
-    def detect_img(
-        self,
-        imgs: torch.Tensor,
-        mode: str = "bilinear",
-        align_corners: bool = False,
-        antialias: bool = True,
-    ):
-        """
-        Performs the forward pass of the detector only (used at inference).
-        Rescales the input images to 256x256 pixels and then computes the mask and the message.
-        
-        Args:
-            imgs (torch.Tensor): Batched images with shape BxCxHxW.
-            mode: Interpolation mode
-            align_corners: Whether to align corners in interpolation
-            antialias: Whether to use antialiasing in interpolation
-            
-        Returns:
-            dict: A dictionary containing the detected messages
-        """
-        # interpolate
-        imgs_res = imgs.clone()
-        if imgs.shape[-2:] != (self.img_size, self.img_size):
-            imgs_res = F.interpolate(imgs, size=(self.img_size, self.img_size),
-                                     mode=mode, align_corners=align_corners, 
-                                     antialias=antialias)
-        
-        # detect watermark
-        preds = self.detector(imgs_res)
-
-        return preds
-
     def _apply_video_mode(self, preds_w: torch.Tensor, total_frames: int, step_size: int, video_mode: str) -> torch.Tensor:
         """
         Applies the selected video mode to expand predictions across frames.
@@ -404,6 +372,38 @@ class WamJIT(nn.Module):
             preds_w = full_preds  # f c h w
         
         return preds_w[:total_frames]  # f c h w
+
+    def detect_img(
+        self,
+        imgs: torch.Tensor,
+        mode: str = "bilinear",
+        align_corners: bool = False,
+        antialias: bool = True,
+    ):
+        """
+        Performs the forward pass of the detector only (used at inference).
+        Rescales the input images to 256x256 pixels and then computes the mask and the message.
+        
+        Args:
+            imgs (torch.Tensor): Batched images with shape BxCxHxW.
+            mode: Interpolation mode
+            align_corners: Whether to align corners in interpolation
+            antialias: Whether to use antialiasing in interpolation
+            
+        Returns:
+            dict: A dictionary containing the detected messages
+        """
+        # interpolate
+        imgs_res = imgs.clone()
+        if imgs.shape[-2:] != (self.img_size, self.img_size):
+            imgs_res = F.interpolate(imgs, size=(self.img_size, self.img_size),
+                                     mode=mode, align_corners=align_corners, 
+                                     antialias=antialias)
+        
+        # detect watermark
+        preds = self.detector(imgs_res)
+
+        return preds
 
     def detect_video(
         self,
