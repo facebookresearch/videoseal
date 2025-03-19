@@ -85,7 +85,7 @@ video_path = "path/to/your/video.mp4"
 # Read video returns a tuple of (video_frames, audio_frames, metadata)
 frames, audio, metadata = read_video(video_path, pts_unit='sec')
 # Convert to float and normalize to [0, 1].
-video_tensor = frames.float() / 255.0
+video_tensor = (frames.float() / 255.0)[:16]  # first 16frames to avoid OOM.
 # Move to device and ensure format [T, C, H, W].
 video_tensor = video_tensor.permute(0, 3, 1, 2).to(device)
 
