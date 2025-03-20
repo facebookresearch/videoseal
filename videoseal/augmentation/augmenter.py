@@ -36,7 +36,6 @@ name2aug = {
     'h264': H264,
     'h264rgb': H264rgb,
     'h265': H265,
-    # 'bmshj2018': bmshj2018,
     'drop_frame': DropFrame
 }
 video_augs = ['video_compression', 'h264', 'h264rgb', 'h265']
@@ -46,12 +45,12 @@ def get_dummy_augmenter():
     """
     An augmenter that does nothing.
     """
-    
     return Augmenter(
         augs = {'identity': 1},
         augs_params = {},
         masks = {'kind': None}
     )
+
 
 class Augmenter(nn.Module):
     """
@@ -172,9 +171,8 @@ class Augmenter(nn.Module):
             imgs_aug = imgs_w * mask_targets + imgs * (1 - mask_targets)
             # image augmentations
             selected_augs = []
-            for _ in range(self.num_augs):
-                imgs_aug, mask_targets, selected_aug_ = self.augment(
-                    imgs_aug, mask_targets, is_video, do_resize)
+            for ii in range(self.num_augs):
+                imgs_aug, mask_targets, selected_aug_ = self.augment(imgs_aug, mask_targets, is_video, do_resize)
                 selected_augs.append(selected_aug_)
             selected_aug = "+".join(selected_augs)
             return imgs_aug, mask_targets, selected_aug

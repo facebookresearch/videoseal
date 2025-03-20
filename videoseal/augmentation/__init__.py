@@ -3,7 +3,6 @@ from .geometric import Crop, HorizontalFlip, Identity, Perspective, Resize, Rota
 from .valuemetric import JPEG, Brightness, Contrast, GaussianBlur, Grayscale, Hue, MedianFilter, Saturation
 from .video import H264, H264rgb, H265, VP9, AV1, SpeedChange, WindowAveraging, DropFrame, TemporalReorder
 
-
 def get_validation_augs_subset(
     is_video: bool = False
 ) -> list:
@@ -22,11 +21,11 @@ def get_validation_augs_subset(
         ]
     else:
         augs = [
-            (Identity(),          [0]),  # No parameters needed for identity
-            (HorizontalFlip(),    [0]),  # No parameters needed for flip
-            (Crop(),              [0.71]),  # size ratio
-            (Brightness(),        [0.5]),
-            (JPEG(),              [60]),
+            (Identity(),                [0]),  # No parameters needed for identity
+            (HorizontalFlip(),          [0]),  # No parameters needed for flip
+            (Crop(),                    [0.71]),  # size ratio
+            (Brightness(),              [0.5]),
+            (JPEG(),                    [60]),
             (Sequential(JPEG(), Crop(), Brightness()), [(60, 0.71, 0.5)]),
         ]
     return augs

@@ -52,13 +52,11 @@ class PixelDecoder(nn.Module):
             self.linear = nn.Linear(embed_dim, self.nbits + 1)
 
         self.sigmoid_output = sigmoid_output
-    
-        
             
     def forward(
         self,
         image_embeddings: torch.Tensor,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> torch.Tensor:
         """
         Predict masks given image and prompt embeddings.
 
