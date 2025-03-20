@@ -3,18 +3,21 @@ Test the speed of different methods on CPU or CUDA.
 
 Example usage:
 python -m videoseal.evals.speed \
-    --checkpoint /checkpoint/soucek/2025_logs/0228_vseal_128bits_jnd_ftvid_complete/_optimizer=AdamW,lr=1e-5_videowam_step_size=1/checkpoint200.pth \
+    --checkpoint  \
+        /checkpoint/pfz/2025_logs/0314_vseal_moreaugs/_scaling_w_schedule=1_nbits=128_optimizer=AdamW,lr=5e-4/checkpoint550.pth \
+        /checkpoint/pfz/2025_logs/0306_vseal_ydisc_release/_nbits=128/checkpoint600.pth \
+    --dataset moviegen --is_video true --num_samples 10 \
+    --device cuda \
+    --videowam_chunk_size 128 --num_frames 240 --lowres_attenuation true
+
+        /checkpoint/soucek/2025_logs/0228_vseal_128bits_jnd_ftvid_complete/_optimizer=AdamW,lr=1e-5_videowam_step_size=1/checkpoint200.pth \
         baselines/hidden \
         baselines/mbrs \
         baselines/cin \
         baselines/wam \
         baselines/trustmark \
-    --dataset moviegen --is_video true --num_samples 10 \
-    --device cuda \
-    --videowam_chunk_size 128 --num_frames 240 --lowres_attenuation true
-
     --checkpoint /checkpoint/pfz/2025_logs/0303_vseal_ep500_ftvid_complete/_finetune_detector_start=2000_augmentation_config=0/checkpoint200.pth \
-    
+
 python -m videoseal.evals.speed     --checkpoint /checkpoint/pfz/2025_logs/0303_vseal_ep500_ftvid_complete/_finetune_detector_start=2000_augmentation_config=0/checkpoint200.pth          baselines/trustmark     --dataset sa-v --is_video true --num_samples 10     --device cuda --videowam_chunk_size 128 --num_frames 240 --lowres_attenuation true
 """
     
@@ -247,12 +250,14 @@ def main():
             model.video_mode = args.videowam_mode or model.mode
         if hasattr(model, 'img_size'):
             model.img_size = args.img_size_proc or model.img_size
+
+        # Override the temporal pooling
         if hasattr(model.embedder, 'unet') and hasattr(model.embedder.unet, 'time_pooling'):
-            if args.time_pooling_depth is not None:
-                model.embedder.unet.time_pooling = {
-                    "depth": args.time_pooling_depth,
-                    "kernel_size": model.step_size
-                }
+            if args.time_pooling is not None:
+                model.embedder.unet.time_pooling = True
+                model.embedder.unet.time_pooling_depth = args.time_pooling_depth
+                model.embedder.unet.temporal_pool.kernel_size = model.step_size
+                # When doing time average pooling, the step size should be set to 1.
                 model.step_size = 1
 
         # Record checkpoint path
