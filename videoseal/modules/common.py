@@ -175,7 +175,7 @@ class ChanRMSNorm(nn.Module):
         return F.normalize(x, dim = 1) * self.scale * self.gamma
 
 
-def get_normalization(normalization: str):
+def get_normalization(normalization: str) -> nn.Module:
     """ Set the normalization layer """
     if normalization.startswith("batch"):
         norm_layer = nn.BatchNorm2d

@@ -169,40 +169,40 @@ class UNetMsg(nn.Module):
         self.connect_scale = 2 ** -0.5
 
         # select layers and activations
-        norm_layer: nn.Module = get_normalization(normalization)
-        act_layer: nn.Module = get_activation(activation)
-        conv_layer_type: nn.Module = get_conv_layer(conv_layer)
+        norm_layer = get_normalization(normalization)
+        act_layer = get_activation(activation)
+        conv_layer = get_conv_layer(conv_layer)
 
         # Calculate the z_channels for each layer based on z_channels_mults
         z_channels_list = [self.z_channels * m for m in self.z_channels_mults]
 
         # Initial convolution
         self.inc = ResnetBlock(
-            in_channels, z_channels_list[0], act_layer, norm_layer, id_init=id_init, conv_layer=conv_layer_type)
+            in_channels, z_channels_list[0], act_layer, norm_layer, id_init=id_init, conv_layer=conv_layer)
 
         # Downward path
         self.downs = nn.ModuleList()
         for ii in range(len(z_channels_list) - 1):
             self.downs.append(DBlock(
-                z_channels_list[ii], z_channels_list[ii + 1], act_layer, norm_layer, downsampling_type, id_init, conv_layer=conv_layer_type))
+                z_channels_list[ii], z_channels_list[ii + 1], act_layer, norm_layer, downsampling_type, id_init, conv_layer=conv_layer))
 
         # Message mixing and middle blocks
         z_channels_list[-1] = z_channels_list[-1] + self.msg_processor.hidden_size
         self.bottleneck = BottleNeck(
-            num_blocks, z_channels_list[-1], z_channels_list[-1], act_layer, norm_layer, id_init=id_init, conv_layer=conv_layer_type)
+            num_blocks, z_channels_list[-1], z_channels_list[-1], act_layer, norm_layer, id_init=id_init, conv_layer=conv_layer)
 
         # Upward path
         self.ups = nn.ModuleList()
         for ii in reversed(range(len(z_channels_list) - 1)):
             self.ups.append(UBlock(
-                2 * z_channels_list[ii + 1], z_channels_list[ii], act_layer, norm_layer, upsampling_type, id_init, conv_layer=conv_layer_type))
+                2 * z_channels_list[ii + 1], z_channels_list[ii], act_layer, norm_layer, upsampling_type, id_init, conv_layer=conv_layer))
 
         # Final output convolution
         self.outc = nn.Conv2d(z_channels_list[0], out_channels, 1)
         if zero_init:
             self.zero_init_(self.outc)
         
-        # time_pooling is a dictionary with keys "depth", "kernel_size", and optional "stride"
+        # time_pooling
         self.time_pooling = time_pooling
         self.time_pooling_depth = time_pooling_depth
         if self.time_pooling:
@@ -213,6 +213,7 @@ class UNetMsg(nn.Module):
                 padding=0, ceil_mode=True, count_include_pad=False,
             )
         else:
+            # fill self.attributes for torchscript
             self.temporal_pool = nn.Identity()
             self.temporal_pool.kernel_size = 1
 
@@ -241,9 +242,10 @@ class UNetMsg(nn.Module):
         x = self.bottleneck(hiddens[-1])
 
         # Upward path
-        for ublock in self.ups:
+        current_depth = len(self.downs)
+        for ii, ublock in enumerate(self.ups):
             # Recover the original number of frames for temporal pooling.
-            if len(x) != len(hiddens[-1]):
+            if self.time_pooling and current_depth == self.time_pooling_depth:
                 x = torch.repeat_interleave(x, repeats=self.temporal_pool.kernel_size, dim=0)  # b/k d h w -> b d h w
                 x = x[:nb_imgs]
             
@@ -253,9 +255,10 @@ class UNetMsg(nn.Module):
                 dim=1
             )  # b d h w -> b 2d h w
             x = ublock(x)  # b d h w
-
+            current_depth -= 1
+            
         # Recover the original number of frames for temporal pooling.
-        if len(x) != len(hiddens[-1]):
+        if self.time_pooling and current_depth == self.time_pooling_depth:
             x = torch.repeat_interleave(x, repeats=self.temporal_pool.kernel_size, dim=0)  # b/k d h w -> b d h w
             x = x[:nb_imgs]
 
@@ -287,59 +290,6 @@ class UNetMsg(nn.Module):
             if m.bias is not None:
                 nn.init.zeros_(m.bias)
         return m
-
-def test_trace_unetmsg() -> bool:
-    """Test if UNetMsg can be converted to TorchScript using tracing."""
-    import torch
-    from videoseal.modules.msg_processor import MsgProcessor
-    
-    # Create a small UNetMsg model for testing
-    nbits: int = 8
-    hidden_size: int = 16
-    in_channels: int = 3
-    out_channels: int = 3
-    z_channels: int = 32
-    
-    # Create message processor and model
-    msg_processor: MsgProcessor = MsgProcessor(
-        nbits=nbits,
-        hidden_size=hidden_size,
-        msg_processor_type="binary+concat"
-    )
-    
-    model: UNetMsg = UNetMsg(
-        msg_processor=msg_processor,
-        in_channels=in_channels,
-        out_channels=out_channels,
-        z_channels=z_channels,
-        num_blocks=2,
-        activation="relu",
-        normalization="batch",
-        z_channels_mults=(1, 2, 4),
-    )
-    
-    # Generate sample inputs
-    batch_size: int = 2
-    height: int = 64
-    width: int = 64
-    imgs = torch.randn(batch_size, in_channels, height, width)
-    msgs = msg_processor.get_random_msg(batch_size)
-    
-    # Test tracing
-    try:
-        model.eval()
-        with torch.no_grad():
-            original_output = model(imgs, msgs)
-            traced_model: torch.jit.ScriptModule = torch.jit.trace(model, (imgs, msgs))
-            traced_output = traced_model(imgs, msgs)
-        
-        max_diff: float = (original_output - traced_output).abs().max().item()
-        print(f"Successfully traced UNetMsg! Max output diff: {max_diff:.6e}")
-        traced_model.save("unetmsg_traced.pt")
-        return True
-    except Exception as e:
-        print(f"Failed to trace UNetMsg: {e}")
-        return False
 
 def test_script_unetmsg() -> bool:
     """Test if UNetMsg can be converted to TorchScript using scripting."""
@@ -374,14 +324,12 @@ def test_script_unetmsg() -> bool:
     try:
         scripted_model = torch.jit.script(model)
         print("Successfully scripted UNetMsg!")
-        scripted_model.save("unetmsg_scripted.pt")
+        scripted_model.save("unetmsg_scripted.jit")
         return True
     except Exception as e:
         print(f"Failed to script UNetMsg: {e}")
         return False
 
 if __name__ == "__main__":
-    # print("Testing tracing...")
-    # test_trace_unetmsg()
     print("\nTesting scripting...")
     test_script_unetmsg()
