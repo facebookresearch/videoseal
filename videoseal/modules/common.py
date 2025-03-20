@@ -266,7 +266,7 @@ def get_conv_layer(name: str) -> nn.Module:
 
 
 class AvgPool3dWrapper(nn.Module):
-    def __init__(self, kernel_size=3, stride=3, padding=0, ceil_mode=True, count_include_pad=False):
+    def __init__(self, kernel_size=3, stride=None, padding=0, ceil_mode=True, count_include_pad=False):
         """
         Wrapper class for 3D average pooling to handle 4D input tensors. Almost reimplementation of AvgPool3d.
         Args:
@@ -278,7 +278,7 @@ class AvgPool3dWrapper(nn.Module):
         """
         super().__init__()
         self.kernel_size = kernel_size
-        self.stride = stride
+        self.stride = kernel_size if stride is None else stride
         self.padding = padding
         self.ceil_mode = ceil_mode
         self.count_include_pad = count_include_pad

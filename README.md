@@ -94,17 +94,17 @@ It should output the path to the ffmpeg binary, the version of ffmpeg and the vm
 
 ## Quick start for inference
 
-### Download pre-trained model
+### Download pre-trained model for 256-bits
 
 For Linux:
 ```bash
-wget https://dl.fbaipublicfiles.com/videoseal/y_128b_img.pth -P checkpoints/
+wget https://dl.fbaipublicfiles.com/videoseal/y_256b_img.pth -P checkpoints/
 ```
 
 For Mac:
 ```bash
 mkdir checkpoints
-curl -o checkpoints/y_128b_img.pth https://dl.fbaipublicfiles.com/videoseal/y_128b_img.pth
+curl -o checkpoints/y_256b_img.pth https://dl.fbaipublicfiles.com/videoseal/y_256b_img.pth
 ```
 
 ### Run inference
@@ -114,7 +114,7 @@ curl -o checkpoints/y_128b_img.pth https://dl.fbaipublicfiles.com/videoseal/y_12
 
 ### Model details
 
-- Default configuration: Uses model card `videoseal_1.0` with config for `y_128b_img.pth`
+- Default configuration: Uses model card `videoseal_1.0` with config for `y_256b_img.pth`
 - Training configuration: See training grid at [img_train.json](https://github.com/fairinternal/videoseal/blob/main/expes/videoseal/img_train.json)
 
 

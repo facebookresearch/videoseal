@@ -104,7 +104,6 @@ class MsgProcessor(torch.nn.Module):
             raise ValueError(f"Invalid msg_type: {self.msg_type}")
 
         # apply the message embeddings to the latents
-        msg_aux = msg_aux[: len(latents)]  # Trim for temporal pooling.
         if self.msg_agg == "concat":
             latents = torch.cat([
                 latents,  # b d' h/f w/f

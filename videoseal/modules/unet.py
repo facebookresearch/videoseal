@@ -206,7 +206,6 @@ class UNetMsg(nn.Module):
         self.time_pooling = time_pooling
         self.time_pooling_depth = time_pooling_depth
         if self.time_pooling:
-            time_pooling_stride = time_pooling_kernel_size if time_pooling_stride is None else time_pooling_stride
             self.temporal_pool = AvgPool3dWrapper(
                 time_pooling_kernel_size, 
                 time_pooling_stride, 
@@ -215,6 +214,7 @@ class UNetMsg(nn.Module):
         else:
             # fill self.attributes for torchscript
             self.temporal_pool = nn.Identity()
+            self.temporal_pool.stride = 1
             self.temporal_pool.kernel_size = 1
 
     def forward(
@@ -236,9 +236,18 @@ class UNetMsg(nn.Module):
                 hiddens.append(dblock(hiddens[-1]))  # b d h w -> b d' h/2 w/2
 
         # Middle path
-        last_hidden = hiddens.pop()
-        processed_hidden = self.msg_processor(last_hidden, msgs)  # b c+c' h w
-        hiddens.append(processed_hidden)
+        if self.time_pooling:
+            # first dim may have changed because of time pooling, trim msgs.
+            if len(msgs) != len(hiddens[-1]):
+                tpks = self.temporal_pool.kernel_size
+                tps = self.temporal_pool.stride
+                assert tps == tpks
+                last_msg = msgs[-1].unsqueeze(0)
+                msgs = msgs[(tpks//2)::tpks]
+                if (len(msgs) * tpks) < nb_imgs:
+                    msgs = torch.cat([msgs, last_msg])
+        # Process latents and messages.
+        hiddens.append(self.msg_processor(hiddens.pop(), msgs))  # b c+c' h w
         x = self.bottleneck(hiddens[-1])
 
         # Upward path
