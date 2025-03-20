@@ -266,13 +266,13 @@ class UNetMsg(nn.Module):
         return logits
 
     def use_checkpointing(self) -> None:
-        # Apply checkpointing to save memory during training
-        self.inc = torch.utils.checkpoint.checkpoint(self.inc)
+        # Apply checkpointing to save memory during training. Not used.
+        self.inc = torch.utils.checkpoint(self.inc)
         for ii in range(len(self.downs)):
-            self.downs[ii] = torch.utils.checkpoint.checkpoint(self.downs[ii])
+            self.downs[ii] = torch.utils.checkpoint(self.downs[ii])
         for ii in range(len(self.ups)):
-            self.ups[ii] = torch.utils.checkpoint.checkpoint(self.ups[ii])
-        self.outc = torch.utils.checkpoint.checkpoint(self.outc)
+            self.ups[ii] = torch.utils.checkpoint(self.ups[ii])
+        self.outc = torch.utils.checkpoint(self.outc)
 
     def zero_init_(self, m: nn.Module) -> nn.Module:
         if isinstance(m, nn.Conv2d):

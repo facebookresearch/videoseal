@@ -17,7 +17,6 @@ from .masks import get_mask_embedder
 from .valuemetric import (JPEG, Brightness, Contrast, GaussianBlur, Hue,
                           MedianFilter, Saturation)
 from .video import VideoCompressorAugmenter, DropFrame, H264, H265, H264rgb
-from .neuralcompression import BMSHJ2018Hyperprior, BMSHJ2018Factorized, MBT2018Mean, MBT2018, Cheng2020Anchor, Cheng2020Attn
 
 name2aug = {
     'rotate': Rotate,
@@ -37,16 +36,9 @@ name2aug = {
     'h264': H264,
     'h264rgb': H264rgb,
     'h265': H265,
-    'mbt2018_mean': MBT2018Mean,
-    'mbt2018': MBT2018,
-    'bmshj2018_hyperprior': BMSHJ2018Hyperprior,
-    'bmshj2018_factorized': BMSHJ2018Factorized,
-    'cheng2020_anchor': Cheng2020Anchor,
-    'cheng2020_attn': Cheng2020Attn,
     'drop_frame': DropFrame
 }
 video_augs = ['video_compression', 'h264', 'h264rgb', 'h265']
-neural_compression_augs = ['mbt2018_mean', 'mbt2018', 'bmshj2018_hyperprior', 'bmshj2018_factorized', 'cheng2020_anchor', 'cheng2020_attn']
 
 
 def get_dummy_augmenter():
