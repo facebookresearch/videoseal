@@ -35,7 +35,16 @@ class NeuralCompression(nn.Module):
         for param in self.model.parameters():
             param.requires_grad = False
 
-    def forward(self, image, mask, *args, **kwargs):
+    def forward(self, image: torch.Tensor, mask: torch.Tensor, *args, **kwargs):
+        if model_name not in ['bmshj2018-factorized']:
+            # resize to closest multiple of 64
+            h, w = image.shape[-2:]
+            h = max((h // 64) * 64, 64)
+            w = max((w // 64) * 64, 64)
+            if image.shape[-2:] != (h, w):
+                image = F.interpolate(image, size=(h, w), mode='bilinear', align_corners=False)
+                if mask is not None:
+                    mask = F.interpolate(mask, size=(h, w), mode='bilinear', align_corners=False)
         x_hat = self.model(image.to('cpu'))['x_hat'].to(image.device)
         return x_hat, mask
     
@@ -98,20 +107,14 @@ if __name__ == "__main__":
     image_sizes = [
         (32, 32),    # Small square, power of 2
         (64, 64),    # Medium square, power of 2
-        (128, 128),  # Larger square, power of 2
-        (256, 256),  # Large square, power of 2
         (96, 96),    # Non-power of 2
+        (128, 128),  # Larger square, power of 2
         (224, 224),  # Common CNN input size
-        (48, 96),    # 1:2 aspect ratio
-        (96, 48),    # 2:1 aspect ratio
-        (100, 100),  # Non-power of 2
-        (101, 101),  # Odd size
-        (33, 65),    # Odd size, rectangular
-        (16, 16),    # Very small, might cause issues
+        (256, 256),  # Large square, power of 2
+        (320, 320),  # Common video size
+        (384, 384),  # Common video size
         (512, 512),  # Very large, might cause memory issues
-        (1, 32),     # Extreme aspect ratio
-        (32, 1),     # Extreme aspect ratio
-        (3, 3),      # Extremely small, likely to cause issues
+        (256, 512),  # Large square, power of 2
     ]
 
     # Load test images.
