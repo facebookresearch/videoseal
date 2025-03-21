@@ -269,7 +269,7 @@ def main(params):
     augmenter_cfg.num_augs = params.num_augs
     augmenter = Augmenter(
         **augmenter_cfg,
-    )
+    ).to(device)
     print(f'augmenter: {augmenter}')
 
     # Build the extractor model

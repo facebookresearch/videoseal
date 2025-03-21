@@ -4,30 +4,35 @@ masks:
 
 # The probability of applying the augmentation.
 augs:
-  identity:             1
-  jpeg:                 1
-  resize:               1
-  crop:                 1
-  rotate:               1
-  hflip:                1
-  perspective:          1
-  gaussian_blur:        1
-  median_filter:        1
-  brightness:           1
-  contrast:             1
-  saturation:           1
-  hue:                  1
-  h264:                 1
-  h264rgb:              1
-  h265:                 1
-  mbt2018_mean:         1
-  mbt2018:              1
-  bmshj2018_hyperprior: 1
-  bmshj2018_factorized: 1
-  cheng2020_anchor:     1
-  cheng2020_attn:       1
+  identity:                 1
+  jpeg:                     0
+  resize:                   0
+  crop:                     0
+  rotate:                   0
+  hflip:                    0
+  perspective:              0
+  gaussian_blur:            0
+  median_filter:            0
+  brightness:               0
+  contrast:                 0
+  saturation:               0
+  hue:                      0
+  h264:                     0
+  h264rgb:                  0
+  h265:                     0
+  mbt2018_mean:             0
+  mbt2018:                  0
+  bmshj2018_hyperprior:     0
+  bmshj2018_factorized:     0
+  cheng2020_anchor:         0
+  cheng2020_attn:           0
+  stable_diffusion_vae:     0
+  stable_diffusion_xl_vae:  0
+  vqgan_1024:               1
+  vqgan_16384:              1 
 
 augs_params:
+  # if there is no params, the augmentation will be applied with default params.
   resize:
     # edge size will be sampled from [min_size, max_size] * original edge size
     min_size: 0.3
