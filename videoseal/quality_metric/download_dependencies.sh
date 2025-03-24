@@ -3,6 +3,7 @@
 git clone --depth=1 https://github.com/IIGROUP/MANIQA.git
 cd MANIQA
     wget https://github.com/IIGROUP/MANIQA/releases/download/Koniq10k/ckpt_koniq10k.pt -q --show-progress
+    sed 's/score = torch\.tensor(\[\])\.cuda()/score = torch\.tensor(\[\])\.to(x\.device)/' -i models/maniqa.py
 cd ..
 
 
@@ -27,4 +28,12 @@ cd ..
 git clone --depth=1 https://github.com/pavancm/CONTRIQUE.git
 cd CONTRIQUE
     wget -L https://utexas.box.com/shared/static/rhpa8nkcfzpvdguo97n2d5dbn4qb03z8.tar -O models/CONTRIQUE_checkpoint25.tar -q --show-progress
+cd ..
+
+
+# AHIQ
+git clone --depth 1 https://github.com/IIGROUP/AHIQ.git
+cd AHIQ
+    gdown https://drive.google.com/uc?id=1Nk-IpjnDNXbWacoh3T69wkSYhYYWip2W -O checkpoints/ahiq_pipal/
+    # gdown https://drive.google.com/uc?id=1Jr2nLnhMA0f0uPEjMG7sH-T4WfIEasXn -O checkpoints/ahiq_pipal/
 cd ..
