@@ -166,8 +166,8 @@ class TamingVQGANCompression(nn.Module):
         for param in self.model.parameters():
             param.requires_grad = False
         
-        # Get model name from checkpoint path
-        self.model_name = os.path.basename(os.path.dirname(ckpt_path))
+        # Split checkpoint path by "/" and get part that contains "vqgan".
+        self.model_name = next((part for part in self.ckpt_path.split('/') if 'vqgan' in part.lower()), 'vqgan')
 
     def preprocess(self, x):
         """Preprocess image to VQGAN input format [-1, 1]"""
