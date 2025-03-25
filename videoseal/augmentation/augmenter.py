@@ -131,14 +131,15 @@ class Augmenter(nn.Module):
             if aug_name in video_augs and not is_video:
                 continue
             aug_prob = float(augs[aug_name])
-            aug_params = augs_params[aug_name] if aug_name in augs_params else {}
-            try:
-                selected_aug = name2aug[aug_name](**aug_params)
-            except KeyError:
-                raise ValueError(
-                    f"Augmentation {aug_name} not found. Add it in name2aug.")
-            augmentations.append(selected_aug)
-            probs.append(aug_prob)
+            if aug_prob > 0:
+                aug_params = augs_params[aug_name] if aug_name in augs_params else {}
+                try:
+                    selected_aug = name2aug[aug_name](**aug_params)
+                except KeyError:
+                    raise ValueError(
+                        f"Augmentation {aug_name} not found. Add it in name2aug.")
+                augmentations.append(selected_aug)
+                probs.append(aug_prob)
         # normalize probabilities
         total_prob = sum(probs)
         probs = [prob / total_prob for prob in probs]

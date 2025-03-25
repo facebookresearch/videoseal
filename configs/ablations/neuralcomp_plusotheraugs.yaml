@@ -20,15 +20,15 @@ augs:
   h264:                     1
   h264rgb:                  1
   h265:                     1
-  mbt2018_mean:             1
-  mbt2018:                  1
+  mbt2018_mean:             0
+  mbt2018:                  0
   bmshj2018_hyperprior:     1
-  bmshj2018_factorized:     1
-  cheng2020_anchor:         1
-  cheng2020_attn:           1
+  bmshj2018_factorized:     0
+  cheng2020_anchor:         0
+  cheng2020_attn:           0
   stable_diffusion_vae:     1
-  stable_diffusion_xl_vae:  1
-  vqgan_1024:               1
+  stable_diffusion_xl_vae:  0
+  vqgan_1024:               0
   vqgan_16384:              1 
 
 augs_params:

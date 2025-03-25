@@ -28,7 +28,7 @@ augs:
   cheng2020_attn:           0
   stable_diffusion_vae:     0
   stable_diffusion_xl_vae:  0
-  vqgan_1024:               1
+  vqgan_1024:               0
   vqgan_16384:              1 
 
 augs_params:

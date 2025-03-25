@@ -773,9 +773,6 @@ def eval_one_epoch(
         for acc_it in range(accumulation_steps):
             imgs, masks = batch_imgs[acc_it], batch_masks[acc_it]
 
-            imgs = imgs.to(device)
-            masks = masks.to(device)
-
             # forward embedder
             embed_time = time.time()
             outputs = wam.embed(imgs, is_video=is_video, lowres_attenuation=params.lowres_attenuation)
@@ -852,7 +849,7 @@ def eval_one_epoch(
                         if params.nbits > 0:
                             bit_accuracy_ = bit_accuracy(
                                 bit_preds,
-                                msgs,
+                                msgs.to(bit_preds.device),
                                 masks_aug
                             ).nanmean().item()
 
