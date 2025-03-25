@@ -1,4 +1,5 @@
 import sys
+import enum
 import torch
 from PIL import Image
 import torchvision.transforms
@@ -21,6 +22,53 @@ from AHIQ.model.deform_regressor import deform_fusion as AHIQ_deform_fusion, Pix
 from AHIQ.utils.util import SaveOutput as AHIQ_SaveOutput
 from AHIQ.script.extract_feature import get_resnet_feature as AHIQ_get_resnet_feature, get_vit_feature as AHIQ_get_vit_feature
 sys.path = sys.path[1:]
+from pycvvdp import cvvdp as CVVDP_metric
+
+
+class MetricType(enum.Enum):
+    NO_REFERENCE = 0
+    REFERENCE = 1
+
+class MetricObjective(enum.Enum):
+    MINIMIZE = 0
+    MAXIMIZE = 1
+
+
+class MetricResult:
+
+    def __init__(self, value: float, metric_objective: MetricObjective, metric_type: MetricType, metric_name: str):
+        self.value = value
+        self.objective = metric_objective
+        self.type = metric_type
+        self.name = metric_name
+        self._count = 1
+
+    def __eq__(self, other):
+        assert self.name == other.name
+        return self.value == other.value
+    
+    def __lt__(self, other):
+        assert self.name == other.name
+        return self.value < other.value if self.objective == MetricObjective.MAXIMIZE else self.value > other.value
+
+    def __add__(self, other):
+        assert self.name == other.name
+        count = self._count + other._count
+        value = (self._count * self.value + other._count * other.value) / count
+
+        result = MetricResult(value, self.objective, self.type, self.name)
+        result._count = count
+        return result
+
+    def __repr__(self):
+        return str(self.value)
+
+    def __float__(self):
+        return self.value
+
+    def __format__(self, format_spec):
+        format_spec = f"{{value:{format_spec}}}"
+        return format_spec.format(value=self.value)
 
 
 class MetricARNIQA:
@@ -52,7 +100,7 @@ class MetricARNIQA:
 
         score = self.model(img, img_ds, return_embedding=False, scale_score=True)
         score = score.mean()
-        return score.item()
+        return MetricResult(score.item(), MetricObjective.MAXIMIZE, MetricType.NO_REFERENCE, "ARNIQA")
 
     @staticmethod
     def center_corners_crop(img: Image, crop_size: int = 224):
@@ -168,7 +216,7 @@ class MetricMANIQA:
             avg_score += score
         score = avg_score / 20
 
-        return score.item()
+        return MetricResult(score.item(), MetricObjective.MAXIMIZE, MetricType.NO_REFERENCE, "MANIQA")
 
 
 class MetricTReS:
@@ -200,9 +248,9 @@ class MetricTReS:
     def __call__(self, img: Image):
         img = self.transforms(img).to(self.device).unsqueeze(0)
         img = torch.as_tensor(img)
-        pred, _ = self.model(img)
+        score, _ = self.model(img)
 
-        return pred.item()
+        return MetricResult(score.item(), MetricObjective.MAXIMIZE, MetricType.NO_REFERENCE, "TReS")
 
 
 class MetricCONTRIQUE:
@@ -228,7 +276,7 @@ class MetricCONTRIQUE:
         feat = np.hstack((model_feat.detach().cpu().numpy(), model_feat_2.detach().cpu().numpy()))
 
         score = self.regressor.predict(feat)[0]
-        return float(score)
+        return MetricResult(float(score), MetricObjective.MAXIMIZE, MetricType.NO_REFERENCE, "CONTRIQUE")
 
 
 class MetricCLIPIQA:
@@ -243,7 +291,7 @@ class MetricCLIPIQA:
     def __call__(self, img: Image):
         x = torch.tensor(np.array(img)).permute(2, 0, 1)[None, ...] / 255.
         score = self.metric(x.to(self.device))
-        return score.item()
+        return MetricResult(score.item(), MetricObjective.MAXIMIZE, MetricType.NO_REFERENCE, "CLIP-IQA")
 
 
 class MetricPieAPP:
@@ -259,7 +307,7 @@ class MetricPieAPP:
         x = torch.tensor(np.array(img)).permute(2, 0, 1)[None, ...] / 255.
         y = torch.tensor(np.array(reference)).permute(2, 0, 1)[None, ...] / 255.
         score = self.metric(x.to(self.device), y.to(self.device))
-        return score.item()
+        return MetricResult(score.item(), MetricObjective.MINIMIZE, MetricType.REFERENCE, "PieAPP")
 
 
 class MetricLPIPS:
@@ -275,7 +323,7 @@ class MetricLPIPS:
         x = torch.tensor(np.array(img)).permute(2, 0, 1)[None, ...] / 255.
         y = torch.tensor(np.array(reference)).permute(2, 0, 1)[None, ...] / 255.
         score = self.metric(x.to(self.device), y.to(self.device))
-        return score.item()
+        return MetricResult(score.item(), MetricObjective.MINIMIZE, MetricType.REFERENCE, "LPIPS")
 
 
 class MetricDISTS:
@@ -291,7 +339,7 @@ class MetricDISTS:
         x = torch.tensor(np.array(img)).permute(2, 0, 1)[None, ...] / 255.
         y = torch.tensor(np.array(reference)).permute(2, 0, 1)[None, ...] / 255.
         score = self.metric(x.to(self.device), y.to(self.device))
-        return score.item()
+        return MetricResult(score.item(), MetricObjective.MINIMIZE, MetricType.REFERENCE, "DISTS")
 
 
 class MetricPSNR:
@@ -304,7 +352,7 @@ class MetricPSNR:
         x = torch.tensor(np.array(img)).permute(2, 0, 1)[None, ...] / 255.
         y = torch.tensor(np.array(reference)).permute(2, 0, 1)[None, ...] / 255.
         score = piq.psnr(x.to(self.device), y.to(self.device), data_range=1., reduction='none')
-        return score.item()
+        return MetricResult(score.item(), MetricObjective.MAXIMIZE, MetricType.REFERENCE, "PSNR")
 
 
 class MetricSSIM:
@@ -317,7 +365,7 @@ class MetricSSIM:
         x = torch.tensor(np.array(img)).permute(2, 0, 1)[None, ...] / 255.
         y = torch.tensor(np.array(reference)).permute(2, 0, 1)[None, ...] / 255.
         score = piq.ssim(x.to(self.device), y.to(self.device), data_range=1.)
-        return score.item()
+        return MetricResult(score.item(), MetricObjective.MAXIMIZE, MetricType.REFERENCE, "SSIM")
 
 
 class MetricAHIQ:
@@ -395,26 +443,50 @@ class MetricAHIQ:
             pred += self.regressor(vit_dis, vit_ref, cnn_dis, cnn_ref)
 
         pred /= self.opt.n_ensemble
-        return pred.squeeze().item()
+        return MetricResult(pred.squeeze().item(), MetricObjective.MAXIMIZE, MetricType.REFERENCE, "AHIQ")
 
 
-if __name__ == "__main__":
-    device = "cuda:0"
-    noreference_metrics = {
+class MetricCVVDP:
+
+    def __init__(self, device="cpu"):
+        self.device = device
+        self.cvvdp_display = CVVDP_metric(display_name='standard_fhd')
+
+    @torch.no_grad()
+    def __call__(self, img: Image, reference: Image):
+        x = torch.tensor(np.array(img)).permute(2, 0, 1) / 255.
+        y = torch.tensor(np.array(reference)).permute(2, 0, 1) / 255.
+
+        score = self.cvvdp_display.predict(x.to(self.device), y.to(self.device), dim_order="CHW")[0]
+        return MetricResult(score.item(), MetricObjective.MAXIMIZE, MetricType.REFERENCE, "CVVDP")
+
+
+def get_metrics_noref(device):
+    return {
         "ARNIQA": MetricARNIQA(device),
         "MANIQA": MetricMANIQA(device),
         "TReS": MetricTReS(device, model="live"),
         "CONTRIQUE": MetricCONTRIQUE(device),
         "CLIP-IQA": MetricCLIPIQA(device),
     }
-    reference_metrics = {
+
+
+def get_metrics_ref(device):
+    return {
         "AHIQ": MetricAHIQ(device),
         "PieAPP": MetricPieAPP(device),
         "LPIPS": MetricLPIPS(device),
         "DISTS": MetricDISTS(device),
         "PSNR": MetricPSNR(device),
         "SSIM": MetricSSIM(device),
+        "CVVDP": MetricCVVDP(device),
     }
+
+
+if __name__ == "__main__":
+    device = "cuda:0"
+    noreference_metrics = get_metrics_noref(device)
+    reference_metrics = get_metrics_ref(device)
 
     img1 = Image.open("./test_image.png")
     img2 = Image.open("./test_image_watermarked.png")
