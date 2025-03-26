@@ -29,6 +29,7 @@ from videoseal.utils.data import Modalities, parse_dataset_params
 from videoseal.utils.tensorboard import CustomTensorboardWriter
 
 from videoseal.utils.cfg import setup_model_from_checkpoint
+from videoseal.quality_metric.watermark_generators import FFTWatermark
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
@@ -201,7 +202,12 @@ def main(params):
     embedder_list = params.embedder_list.split(",")
     embedder_list_idx = udist.get_rank() % len(embedder_list)
     
-    embedder = setup_model_from_checkpoint(embedder_list[embedder_list_idx]).to(device)
+    if embedder_list[embedder_list_idx].startswith("artificial"):
+        assert embedder_list[embedder_list_idx] == "artificial/fft"
+        embedder = FFTWatermark()
+    else:
+        embedder = setup_model_from_checkpoint(embedder_list[embedder_list_idx]).to(device)
+    
     for p in embedder.parameters():
         p.requires_grad_ = False
     embedder.eval()
