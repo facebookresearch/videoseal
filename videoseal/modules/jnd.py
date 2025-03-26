@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-def apply_jnd(imgs, imgs_w, hmaps, mode, alpha=1.0):
+def apply_jnd(imgs: torch.Tensor, imgs_w: torch.Tensor, hmaps: torch.Tensor, mode: str, alpha: float = 1.0) -> torch.Tensor:
     """ 
     Apply the JND model to the images.
     Args:
@@ -25,13 +25,11 @@ def apply_jnd(imgs, imgs_w, hmaps, mode, alpha=1.0):
 class JND(nn.Module):
     """ https://ieeexplore.ieee.org/document/7885108 """
     
-    def __init__(self, 
-            preprocess = lambda x: x,
-            postprocess = lambda x: x,
-            in_channels = 1,
-            out_channels = 3,
-            blue = False,
-            apply_mode = "multiply"
+    def __init__(self,
+            in_channels: int = 1,
+            out_channels: int = 3,
+            blue: bool = False,
+            apply_mode: str = "multiply"
     ) -> None:
         super(JND, self).__init__()
 
@@ -73,14 +71,10 @@ class JND(nn.Module):
         self.conv_y.weight = nn.Parameter(kernel_y, requires_grad=False)
         self.conv_lum.weight = nn.Parameter(kernel_lum, requires_grad=False)
 
-        # setup pre and post processing
-        self.preprocess = preprocess
-        self.postprocess = postprocess
-
         # setup apply mode
         self.apply_mode = apply_mode
 
-    def jnd_la(self, x, alpha=1.0, eps=1e-5):
+    def jnd_la(self, x: torch.Tensor, alpha: float = 1.0, eps: float = 1e-5) -> torch.Tensor:
         """ Luminance masking: x must be in [0,255] """
         la = self.conv_lum(x) / 32
         mask_lum = la <= 127
@@ -88,7 +82,7 @@ class JND(nn.Module):
         la[~mask_lum] = 3/128 * (la[~mask_lum] - 127) + 3
         return alpha * la
 
-    def jnd_cm(self, x, beta=0.117, eps=1e-5):
+    def jnd_cm(self, x: torch.Tensor, beta: float = 0.117, eps: float = 1e-5) -> torch.Tensor:
         """ Contrast masking: x must be in [0,255] """
         grad_x = self.conv_x(x)
         grad_y = self.conv_y(x)
@@ -102,7 +96,7 @@ class JND(nn.Module):
         imgs: torch.Tensor, 
         clc: float = 0.3
     ) -> torch.Tensor:
-        """ imgs must be in [0,1] after preprocess """
+        """ imgs must be in [0,1] """
         imgs = 255 * imgs
         rgbs = torch.tensor([0.299, 0.587, 0.114])
         if self.in_channels == 1:
@@ -128,20 +122,16 @@ class JND(nn.Module):
         return hmaps / 255
 
     def forward(self, imgs: torch.Tensor, imgs_w: torch.Tensor, alpha: float = 1.0) -> torch.Tensor:
-        """ imgs and deltas must be in [0,1] after preprocess """
-        imgs = self.preprocess(imgs)
-        imgs_w = self.preprocess(imgs_w)
+        """ imgs and deltas must be in [0,1] """
         hmaps = self.heatmaps(imgs, clc=0.3)
         imgs_w = apply_jnd(imgs, imgs_w, hmaps, self.apply_mode, alpha)
-        return self.postprocess(imgs_w)
+        return imgs_w
 
 
 class JNDSimplified(nn.Module):
     """ https://ieeexplore.ieee.org/document/7885108 """
     
-    def __init__(self, 
-            preprocess = lambda x: x,
-            postprocess = lambda x: x,
+    def __init__(self,
             in_channels = 1,
             out_channels = 3,
             blue = False,
@@ -177,10 +167,6 @@ class JNDSimplified(nn.Module):
         self.conv_x.weight = nn.Parameter(kernel_x, requires_grad=False)
         self.conv_y.weight = nn.Parameter(kernel_y, requires_grad=False)
 
-        # setup pre and post processing
-        self.preprocess = preprocess
-        self.postprocess = postprocess
-
         # setup apply mode
         self.apply_mode = apply_mode
 
@@ -192,7 +178,7 @@ class JNDSimplified(nn.Module):
         max_hmap_value: float = 1.0,
         max_squared_gradient_value_for_clipping = 64000,
     ) -> torch.Tensor:
-        """ imgs must be in [0,1] after preprocess """
+        """ imgs must be in [0,1] """
         imgs = 255 * imgs
         rgbs = torch.tensor([0.299, 0.587, 0.114])
         if self.in_channels == 1:
@@ -220,21 +206,17 @@ class JNDSimplified(nn.Module):
         return hmaps / 255
 
     def forward(self, imgs: torch.Tensor, imgs_w: torch.Tensor, alpha: float = 1.0) -> torch.Tensor:
-        """ imgs and deltas must be in [0,1] after preprocess """
-        imgs = self.preprocess(imgs)
-        imgs_w = self.preprocess(imgs_w)
+        """ imgs and deltas must be in [0,1] """
         hmaps = self.heatmaps(imgs)
         imgs_w = apply_jnd(imgs, imgs_w, hmaps, self.apply_mode, alpha)
-        return self.postprocess(imgs_w)
+        return imgs_w
 
 
 class VarianceBasedJND(nn.Module):
     """ https://fb.workplace.com/groups/333602299016183/permalink/596243969418680/
         https://fb.workplace.com/groups/333602299016183/permalink/628744052835338/ """
     
-    def __init__(self, 
-            preprocess = lambda x: x,
-            postprocess = lambda x: x,
+    def __init__(self,
             in_channels = 3,
             out_channels = 1,
             min_heatmap_value = 0.2,
@@ -281,10 +263,6 @@ class VarianceBasedJND(nn.Module):
         self.out_channels = out_channels
         assert out_channels == 1
         assert in_channels in [1, 3]
-
-        # setup pre and post processing
-        self.preprocess = preprocess
-        self.postprocess = postprocess
 
         # setup apply mode
         self.apply_mode = apply_mode
@@ -340,10 +318,7 @@ class VarianceBasedJND(nn.Module):
         return vm
 
     def forward(self, imgs: torch.Tensor, imgs_w: torch.Tensor, alpha: float = 1.0) -> torch.Tensor:
-        """ imgs and deltas must be in [0,1] after preprocess """
-        imgs = self.preprocess(imgs)
-        imgs_w = self.preprocess(imgs_w)
+        """ imgs and deltas must be in [0,1] """
         hmaps = self.heatmaps(imgs * 255)  # the c++ code uses the original [0, 255] range, therefore we do the same
-
         imgs_w = apply_jnd(imgs, imgs_w, hmaps, self.apply_mode, alpha)
-        return self.postprocess(imgs_w)
+        return imgs_w

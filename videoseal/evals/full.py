@@ -1,5 +1,4 @@
 """
-
 Example:
 
 1/ Evaluate a checkpoint on images
@@ -114,10 +113,7 @@ def evaluate(
             # does cpu -> gpu -> cpu when gpu is available
             print(f"embedding")
             timer.start()
-            if lowres_attenuation:
-                outputs = model.embed_lowres_attenuation(imgs, is_video=is_video, interpolation=interpolation)
-            else:
-                outputs = model.embed(imgs, is_video=is_video, interpolation=interpolation)
+            outputs = model.embed(imgs, is_video=is_video, interpolation=interpolation, lowres_attenuation=lowres_attenuation)
             metrics['embed_time'] = timer.end()
             msgs = outputs["msgs"]  # b k
             imgs_w = outputs["imgs_w"]  # b c h w
@@ -285,6 +281,8 @@ def main():
                         help='The number of frames to propagate the watermark to')
     group.add_argument('--videowam_mode', type=str, default='repeat', 
                         help='The inference mode for videos')
+    group.add_argument('--time_pooling_depth', type=int, default=None,
+                        help='The depth of the UNet at which applying the temporal pooling')
 
     group = parser.add_argument_group('Experiment')
     group.add_argument("--output_dir", type=str, default="output/", help="Output directory for logs and images (Default: /output)")
@@ -326,6 +324,15 @@ def main():
     avail_device = 'cuda' if torch.cuda.is_available() else 'cpu'
     device = args.device or avail_device
     model.to(device)
+
+    # Override the temporal pooling
+    if hasattr(model.embedder, 'unet') and hasattr(model.embedder.unet, 'time_pooling'):
+        if args.time_pooling_depth is not None:
+            model.embedder.unet.time_pooling = True
+            model.embedder.unet.time_pooling_depth = args.time_pooling_depth
+            model.embedder.unet.temporal_pool.kernel_size = model.step_size
+            # When doing time average pooling, the step size should be set to 1.
+            model.step_size = 1
 
     # Override attenuation build
     if args.attenuation is not None:

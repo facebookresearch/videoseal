@@ -30,6 +30,7 @@ Examples:
         --epochs 601 --iter_per_epoch 100 --scheduler None --optimizer AdamW,lr=1e-5 \
         --lambda_dec 1.0 --lambda_d 0.5 --lambda_i 0.1 --perceptual_loss yuv  --num_augs 2 --augmentation_config configs/all_augs_v3.yaml --disc_in_channels 1 --disc_start 50
 
+        
 """
 
 import argparse
@@ -316,7 +317,7 @@ def main(params):
     # print(f"discriminator: {sum(p.numel() for p in image_detection_loss.discriminator.parameters() if p.requires_grad) / 1e3:.1f}K parameters")
 
     # Build the scaling schedule. Default is none
-    if params.scaling_w_schedule is not None:
+    if params.scaling_w_schedule is not None and params.scaling_w_schedule.lower() != "none":
         scaling_w_schedule = uoptim.parse_params(params.scaling_w_schedule)
         scaling_scheduler = uoptim.ScalingScheduler(
             obj=wam.blender, attribute="scaling_w", scaling_o=params.scaling_w,
@@ -564,7 +565,7 @@ def main(params):
             'optimizer_d': optimizer_d.state_dict(),
             'scheduler': scheduler.state_dict() if scheduler is not None else None,
             'scheduler_d': scheduler_d.state_dict() if scheduler_d is not None else None,
-            'args': params,
+            'args': omegaconf.OmegaConf.to_yaml(params),
         }
         udist.save_on_master(save_dict, os.path.join(
             params.output_dir, 'checkpoint.pth'))
@@ -777,10 +778,7 @@ def eval_one_epoch(
 
             # forward embedder
             embed_time = time.time()
-            if params.lowres_attenuation:
-                outputs = wam.embed(imgs, is_video=is_video)
-            else:
-                outputs = wam.embed_lowres_attenuation(imgs, is_video=is_video)
+            outputs = wam.embed(imgs, is_video=is_video, lowres_attenuation=params.lowres_attenuation)
             embed_time = (time.time() - embed_time) / imgs.shape[0]
             msgs = outputs["msgs"].to(device)  # b k
             imgs_w = outputs["imgs_w"]  # b c h w

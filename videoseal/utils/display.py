@@ -26,7 +26,7 @@ def save_img(img: Tensor, out_path: str) -> None:
     assert img.size(0) == 3, "Image tensor's channel size must be 3"
 
     # Clamp the values and convert to numpy
-    img = img.clamp(0, 1) * 255
+    img = (img.clamp(0, 1) * 255).round()
     img = img.to(torch.uint8).cpu()
 
     # Write the image file
@@ -58,7 +58,7 @@ def save_vid(vid: Tensor, out_path: str, fps: int, crf: int = 23) -> None:
     vid = vid.clamp(0, 1)
 
     # Convert from (T, C, H, W) to (T, H, W, C)
-    vid = vid.permute(0, 2, 3, 1) * 255
+    vid = (vid.permute(0, 2, 3, 1) * 255).round()
     vid = vid.to(torch.uint8).cpu()
 
     # Write the video file

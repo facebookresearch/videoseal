@@ -10,6 +10,7 @@ pycocotools
 pandas
 PyWavelets
 pyav==13.0.0
+av
 scikit-image
 pandas
 tqdm

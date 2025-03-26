@@ -31,6 +31,7 @@ class Wam(nn.Module):
         scaling_w: float = 1.0,
         scaling_i: float = 1.0,
         clamp: bool = True,
+        round: bool = True,
         img_size: int = 256,
         blending_method: str = "additive",
     ) -> None:
@@ -61,6 +62,7 @@ class Wam(nn.Module):
         self.blender = Blender(scaling_i, scaling_w, blending_method)
         self.attenuation = attenuation
         self.clamp = clamp
+        self.round = round
 
     def get_random_msg(self, bsz: int = 1, nb_repetitions=1) -> torch.Tensor:
         return self.embedder.get_random_msg(bsz, nb_repetitions)  # b x k
@@ -108,6 +110,8 @@ class Wam(nn.Module):
             imgs_w = self.attenuation(imgs, imgs_w)
         if self.clamp:
             imgs_w = torch.clamp(imgs_w, 0, 1)
+        if self.round:
+            imgs_w = (torch.round(imgs_w * 255) / 255 - imgs_w).detach() + imgs_w
         # augment
         imgs_aug, masks, selected_aug = self.augmenter(
             imgs_w, imgs, masks, is_video=False, do_resize=False)
@@ -136,6 +140,7 @@ class Wam(nn.Module):
         imgs: torch.Tensor,
         msgs: torch.Tensor = None,
         interpolation: dict = {"mode": "bilinear", "align_corners": False, "antialias": True},
+        lowres_attenuation: bool = False,
     ) -> dict:
         """
         Generates watermarked images from the input images and messages (used for inference).
@@ -143,6 +148,9 @@ class Wam(nn.Module):
         Args:
             imgs (torch.Tensor): Batched images with shape BxCxHxW.
             msgs (torch.Tensor): Optional messages with shape BxK.
+            interpolation (dict): Interpolation parameters.
+            lowres_attenuation (bool): Whether to attenuate the watermark at low resolution,
+                which is more memory efficient for high-resolution images.
         Returns:
             dict: A dictionary with the following keys:
                 - msgs (torch.Tensor): Original messages with shape BxK.
@@ -162,91 +170,41 @@ class Wam(nn.Module):
 
         # generate watermarked images
         if self.embedder.yuv:  # take y channel only
-            imgs_res = self.rgb2yuv(imgs_res)[:, 0:1]
-        preds_w = self.embedder(
-            imgs_res, msgs.to(self.device))
+            preds_w = self.embedder(
+                self.rgb2yuv(imgs_res)[:, 0:1],
+                msgs.to(self.device)
+            )
+        else:
+            preds_w = self.embedder(imgs_res, msgs.to(self.device))
+
+        # attenuate at low resolution if needed
+        if self.attenuation is not None and lowres_attenuation:
+            self.attenuation.to(imgs_res.device)
+            hmaps = self.attenuation.heatmaps(imgs_res)
+            preds_w = hmaps * preds_w
 
         # interpolate back
         if imgs.shape[-2:] != (self.img_size, self.img_size):
             preds_w = F.interpolate(preds_w, size=imgs.shape[-2:],
                                     **interpolation)
         preds_w = preds_w.to(imgs.device)
-        imgs_w = self.blender(imgs, preds_w)
-
-        # apply attenuation and clamp
-        if self.attenuation is not None:
+        
+        # apply attenuation
+        if self.attenuation is not None and not lowres_attenuation:
             self.attenuation.to(imgs.device)
-            imgs_w = self.attenuation(imgs, imgs_w)
-        if self.clamp:
-            imgs_w = torch.clamp(imgs_w, 0, 1)
-
-        outputs = {
-            "msgs": msgs,  # original messages: b k
-            "preds_w": preds_w,  # predicted watermarks: b c h w
-            "imgs_w": imgs_w,  # watermarked images: b c h w
-        }
-        return outputs
-
-    @torch.no_grad()
-    def embed_lowres_attenuation(
-        self,
-        imgs: torch.Tensor,
-        msgs: torch.Tensor = None,
-        interpolation: dict = {"mode": "bilinear", "align_corners": False, "antialias": True},
-    ) -> dict:
-        """
-        Generates watermarked images from the input images and messages (used for inference).
-        Images may be arbitrarily sized.
-        This variant applies attenuation in low resolution before upscaling, which is more memory efficient
-        for high-resolution images.
-        
-        Args:
-            imgs (torch.Tensor): Batched images with shape BxCxHxW.
-            msgs (torch.Tensor): Optional messages with shape BxK.
-        Returns:
-            dict: A dictionary with the following keys:
-                - msgs (torch.Tensor): Original messages with shape BxK.
-                - imgs_w (torch.Tensor): Watermarked images with shape BxCxHxW.
-        """
-        # optionally create message
-        if msgs is None:
-            msgs = self.get_random_msg(imgs.shape[0])  # b x k
-
-        # interpolate to processing size
-        imgs_res = imgs.clone()
-        if imgs.shape[-2:] != (self.img_size, self.img_size):
-            imgs_res = F.interpolate(imgs, size=(self.img_size, self.img_size),
-                                     **interpolation)
-        imgs_res = imgs_res.to(self.device)
-
-        # generate watermark in low resolution
-        if self.embedder.yuv:  # take y channel only
-            preds_w = self.embedder(
-                self.rgb2yuv(imgs_res)[:, 0:1], 
-                msgs.to(self.device)
-            )
-        else:
-            preds_w = self.embedder(imgs_res, msgs.to(self.device))
-        
-        # attenuate in low resolution if needed
-        if self.attenuation is not None:
-            self.attenuation.to(imgs_res.device)
-            hmaps = self.attenuation.heatmaps(imgs_res)
+            hmaps = self.attenuation.heatmaps(imgs)
             preds_w = hmaps * preds_w
-            
-        # interpolate back to original size
-        preds_w = preds_w.to(imgs.device)
-        if imgs.shape[-2:] != (self.img_size, self.img_size):
-            preds_w = F.interpolate(preds_w, size=imgs.shape[-2:],
-                                    **interpolation)
 
         # blend and clamp
         imgs_w = self.blender(imgs, preds_w)
         if self.clamp:
             imgs_w = torch.clamp(imgs_w, 0, 1)
+        if self.round:
+            imgs_w = (torch.round(imgs_w * 255) / 255 - imgs_w).detach() + imgs_w
 
         outputs = {
             "msgs": msgs,  # original messages: b k
+            "preds_w": preds_w,  # predicted watermarks: b c h w
             "imgs_w": imgs_w,  # watermarked images: b c h w
         }
         return outputs

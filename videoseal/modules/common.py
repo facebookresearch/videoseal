@@ -140,10 +140,10 @@ class LayerNorm(nn.Module):
             raise NotImplementedError 
         self.normalized_shape = (normalized_shape, )
     
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         if self.data_format == "channels_last":
             return F.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
-        elif self.data_format == "channels_first":
+        else:
             u = x.mean(1, keepdim=True)
             s = (x - u).pow(2).mean(1, keepdim=True)
             x = (x - u) / torch.sqrt(s + self.eps)
@@ -175,7 +175,7 @@ class ChanRMSNorm(nn.Module):
         return F.normalize(x, dim = 1) * self.scale * self.gamma
 
 
-def get_normalization(normalization: str):
+def get_normalization(normalization: str) -> nn.Module:
     """ Set the normalization layer """
     if normalization.startswith("batch"):
         norm_layer = nn.BatchNorm2d
@@ -189,7 +189,7 @@ def get_normalization(normalization: str):
         raise NotImplementedError
     return norm_layer
 
-def get_activation(activation: str):
+def get_activation(activation: str) -> nn.Module:
     """ Set the activation layer """
     if activation == "relu":
         act_layer = nn.ReLU
@@ -253,7 +253,8 @@ class Conv2p1dWrapper(nn.Module):
             x = x.permute(0, 2, 1, 3, 4).squeeze(0)
         return x
 
-def get_conv_layer(name: str):
+def get_conv_layer(name: str) -> nn.Module:
+    """ Set the convolution layer """
     if name == "conv2d":
         return nn.Conv2d
     if name == "conv3d":
@@ -262,3 +263,35 @@ def get_conv_layer(name: str):
         return Conv2p1dWrapper
     else:
         raise NotImplementedError
+
+
+class AvgPool3dWrapper(nn.Module):
+    def __init__(self, kernel_size=3, stride=None, padding=0, ceil_mode=True, count_include_pad=False):
+        """
+        Wrapper class for 3D average pooling to handle 4D input tensors. Almost reimplementation of AvgPool3d.
+        Args:
+            kernel_size: Size of pooling kernel
+            stride: Stride of pooling operation 
+            padding: Padding size
+            ceil_mode: Whether to use ceil or floor for computing output size
+            count_include_pad: Whether to include padding in averaging calculation
+        """
+        super().__init__()
+        self.kernel_size = kernel_size
+        self.stride = kernel_size if stride is None else stride
+        self.padding = padding
+        self.ceil_mode = ceil_mode
+        self.count_include_pad = count_include_pad
+
+    def forward(self, x):
+        assert len(x.shape) == 4
+        x = x.unsqueeze(0).permute(0, 2, 1, 3, 4) # change [B, C, H, W] to [1, C, T, H, W]
+        x = F.avg_pool3d(
+            x, 
+            (self.kernel_size, 1, 1),
+            (self.stride, 1, 1),
+            self.padding, 
+            ceil_mode=self.ceil_mode, count_include_pad=self.count_include_pad
+        )
+        x = x.permute(0, 2, 1, 3, 4).squeeze(0)
+        return x

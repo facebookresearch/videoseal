@@ -30,8 +30,8 @@ class VideoCompression(nn.Module):
         self.fps = fps
 
     def _preprocess_frames(self, frames) -> torch.Tensor:
-        frames = frames.clamp(0, 1).permute(0, 2, 3, 1)
-        frames = (frames * 255).to(torch.uint8).detach().cpu().numpy()
+        frames = (frames.clamp(0, 1) * 255).round().permute(0, 2, 3, 1)
+        frames = frames.to(torch.uint8).detach().cpu().numpy()
         return frames
     
     def _postprocess_frames(self, frames) -> torch.Tensor:

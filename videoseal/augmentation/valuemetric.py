@@ -11,7 +11,79 @@ import torchvision.transforms as transforms
 import torchvision.transforms.functional as F
 from PIL import Image
 
-from ..utils.image import jpeg_compress, median_filter
+
+def jpeg_compress(image: torch.Tensor, quality: int) -> torch.Tensor:
+    """
+    Compress a PyTorch image using JPEG compression and return as a PyTorch tensor.
+
+    Parameters:
+        image (torch.Tensor): The input image tensor of shape 3xhxw.
+        quality (int): The JPEG quality factor.
+
+    Returns:
+        torch.Tensor: The compressed image as a PyTorch tensor.
+    """
+    image = torch.clamp(image, 0, 1)  # clamp the pixel values to [0, 1]
+    image = (image * 255).round() / 255 
+    pil_image = transforms.ToPILImage()(image)  # convert to PIL image
+    # Create a BytesIO object and save the PIL image as JPEG to this object
+    buffer = io.BytesIO()
+    pil_image.save(buffer, format='JPEG', quality=quality)
+    # Load the JPEG image from the BytesIO object and convert back to a PyTorch tensor
+    buffer.seek(0)
+    compressed_image = Image.open(buffer)
+    tensor_image = transforms.ToTensor()(compressed_image)
+    return tensor_image
+
+def webp_compress(image: torch.Tensor, quality: int) -> torch.Tensor:
+    """
+    Compress a PyTorch image using WebP compression and return as a PyTorch tensor.
+
+    Parameters:
+        image (torch.Tensor): The input image tensor of shape 3xhxw.
+        quality (int): The WebP quality factor.
+
+    Returns:
+        torch.Tensor: The compressed image as a PyTorch tensor.
+    """
+    image = torch.clamp(image, 0, 1)  # clamp the pixel values to [0, 1]
+    image = (image * 255).round() / 255 
+    pil_image = transforms.ToPILImage()(image)  # convert to PIL image
+    # Create a BytesIO object and save the PIL image as WebP to this object
+    buffer = io.BytesIO()
+    pil_image.save(buffer, format='WebP', quality=quality)
+    # Load the WebP image from the BytesIO object and convert back to a PyTorch tensor
+    buffer.seek(0)
+    compressed_image = Image.open(buffer)
+    tensor_image = transforms.ToTensor()(compressed_image)
+    return tensor_image
+
+def median_filter(images: torch.Tensor, kernel_size: int) -> torch.Tensor:
+    """
+    Apply a median filter to a batch of images.
+
+    Parameters:
+        images (torch.Tensor): The input images tensor of shape BxCxHxW.
+        kernel_size (int): The size of the median filter kernel.
+
+    Returns:
+        torch.Tensor: The filtered images.
+    """
+    # Ensure the kernel size is odd
+    if kernel_size % 2 == 0:
+        raise ValueError("Kernel size must be odd.")
+    # Compute the padding size
+    padding = kernel_size // 2
+    # Pad the images
+    images_padded = torch.nn.functional.pad(
+        images, (padding, padding, padding, padding))
+    # Extract local blocks from the images
+    blocks = images_padded.unfold(2, kernel_size, 1).unfold(
+        3, kernel_size, 1)  # BxCxHxWxKxK
+    # Compute the median of each block
+    medians = blocks.median(dim=-1).values.median(dim=-1).values  # BxCxHxW
+    return medians
+
 
 class JPEG(nn.Module):
     def __init__(self, min_quality=None, max_quality=None, passthrough=True):

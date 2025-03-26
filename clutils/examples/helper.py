@@ -1,39 +1,154 @@
-
-import logging
 import os
+import numpy as np
+import logging
 import socket
 import subprocess
-from typing import Dict
+from PIL import ImageFile
 
 import torch
+import torch.nn as nn
+from torch.utils.data import DataLoader, Subset
 import torch.distributed as dist
+from torchvision import models
+from torchvision.datasets.folder import default_loader, is_image_file
+
+
+ImageFile.LOAD_TRUNCATED_IMAGES = True
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+
+def build_backbone(path, name):
+    """ Build a pretrained torchvision backbone from its name.
+
+    Args:
+        path: path to the checkpoint, can be an URL
+        name: name of the architecture from torchvision (see https://pytorch.org/vision/stable/models.html) 
+        Using other architectures (such as non-convolutional ones) might need changes in the implementation.
+    """
+    if name == 'torchscript':
+        model = torch.jit.load(path)
+        return model
+    if 'dinov2' in name:
+        model = torch.hub.load('facebookresearch/dinov2', name)
+        return model
+    if 'dino' in name:
+        model = torch.hub.load('facebookresearch/dino', name)
+        return model
+    if hasattr(models, name):
+        # Use weights parameter instead of pretrained to avoid deprecation warning
+        model_fn = getattr(models, name)
+        if 'resnet' in name:
+            # For ResNet models, use the specific weights enum
+            weights_enum = getattr(models, f"{name.capitalize()}_Weights").DEFAULT
+            model = model_fn(weights=weights_enum)
+        else:
+            # For other models, just use the function without pretrained
+            model = model_fn(weights="DEFAULT")
+        
+        # Remove classification head
+        model.head = nn.Identity() if hasattr(model, 'head') else model.head
+        model.fc = nn.Identity() if hasattr(model, 'fc') else model.fc
+    else:
+        raise ValueError(f"Model {name} not found in torchvision models")
+    
+    if path is not None and path != "":
+        try:
+            if path.startswith("http"):
+                checkpoint = torch.hub.load_state_dict_from_url(path, progress=False)
+            else:
+                # Use weights_only=True to avoid security warnings
+                checkpoint = torch.load(path, weights_only=True)
+            
+            state_dict = checkpoint
+            for ckpt_key in ['state_dict', 'model_state_dict', 'teacher']:
+                if ckpt_key in checkpoint:
+                    state_dict = checkpoint[ckpt_key]
+            
+            state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
+            state_dict = {k.replace("backbone.", ""): v for k, v in state_dict.items()}
+            msg = model.load_state_dict(state_dict, strict=False)
+            print(msg)
+        except Exception as e:
+            print(f"Error loading checkpoint: {e}")
+    
+    return model.to(device, non_blocking=True)
+
+
+def get_image_paths(path):
+    print(f"Resolving files in: {path}")
+    paths = []
+    for path, _, files in os.walk(path):
+        for filename in files:
+            paths.append(os.path.join(path, filename))
+    return sorted([fn for fn in paths if is_image_file(fn)])
+
+
+def collate_fn(batch):
+    """ Collate function for data loader. Allows to have img of different size"""
+    return batch
+
+
+def get_dataloader(data_dir, transform, batch_size=128, shuffle=False, num_workers=4, collate_fn=collate_fn, chunk_id=None, chunk=None):
+    """ Get dataloader for the images in the data_dir. The data_dir must be of the form: input/0/... """
+    dataset = ImageFolder(data_dir, transform=transform)
+    if chunk_id is not None:
+        selected_imgs = np.array_split(np.arange(len(dataset)), chunk)[chunk_id]
+        dataset = Subset(dataset, selected_imgs)
+    return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers, pin_memory=True, drop_last=False, collate_fn=collate_fn)
+
+
+class ImageFolder:
+    """An image folder dataset intended for self-supervised learning."""
+
+    def __init__(self, path, transform=None, loader=default_loader):
+        self.samples = get_image_paths(path)
+        self.loader = loader
+        self.transform = transform
+
+    def __getitem__(self, idx: int):
+        assert 0 <= idx < len(self)
+        img = self.loader(self.samples[idx])
+        if self.transform:
+            return self.transform(img)
+        return img
+
+    def __len__(self):
+        return len(self.samples)
+
 
 def is_dist_avail_and_initialized():
     return dist.is_available() and dist.is_initialized()
+
 
 def get_rank():
     if not is_dist_avail_and_initialized():
         return 0
     return dist.get_rank()
 
+
 def get_world_size():
     if not is_dist_avail_and_initialized():
         return 1
     return dist.get_world_size()
 
+
 def is_main_process():
     return get_rank() == 0
 
+
 def is_distributed():
     return get_world_size() > 1
+
 
 def all_reduce(tensor: torch.Tensor, op=torch.distributed.ReduceOp.SUM):
     if is_distributed():
         return torch.distributed.all_reduce(tensor, op)
 
+
 def save_on_master(*args, **kwargs):
     if is_main_process():
         torch.save(*args, **kwargs)
+
 
 def setup_logging_for_distributed(is_master):
     """
@@ -68,15 +183,6 @@ def setup_logging_for_distributed(is_master):
     root_logger.addHandler(handler)
     root_logger.propagate = False
 
-    # builtin_stderr_write = sys.stderr.write
-    # def stderr_write(*args, **kwargs):
-        # rank = get_rank()
-        # args = [f"[rank{rank}]: {a}" for a in args]
-        # builtin_stderr_write(*args, **kwargs)
-        # force = kwargs.pop('force', False)
-        # if is_master or force:
-        #     builtin_stderr_write(*args)
-    # sys.stderr.write = stderr_write
 
 def init_distributed_mode(params):
     """
@@ -201,23 +307,20 @@ def init_distributed_mode(params):
         # MASTER_ADDR - required (except for rank 0); address of rank 0 node
         # WORLD_SIZE - required; can be set either here, or in a call to init function
         # RANK - required; can be set either here, or in a call to init function
-        
+
         print("Initializing PyTorch distributed ...")
-        # Initialize CUDA device before process group
-        torch.cuda.set_device(params.local_rank)
         torch.distributed.init_process_group(
             init_method='env://',
             backend='nccl',
         )
 
-        # Remove the separate set_device call since we did it before init_process_group
-        # Use device_ids in barrier
-        dist.barrier(device_ids=[params.local_rank])
+        # set GPU device
+        torch.cuda.set_device(params.local_rank)
+        dist.barrier()
         setup_logging_for_distributed(params.is_master)
 
 
-
-def average_metrics(metrics: Dict[str, float], count=1.):
+def average_metrics(metrics: dict[str, float], count=1.):
     """Average a dictionary of metrics across all workers, using the optional
     `count` as unnormalized weight.
     """

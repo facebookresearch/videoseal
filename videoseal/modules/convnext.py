@@ -145,15 +145,13 @@ class ConvNeXtV2(nn.Module):
             nn.init.constant_(m.bias, 0)
 
     def forward_features(self, x):
-        for i in range(4):
-            x = self.downsample_layers[i](x)
-            x = self.stages[i](x)
+        for ii, (down, stage) in enumerate(zip(self.downsample_layers, self.stages)):
+            x = down(x)
+            x = stage(x)
         return x # no average pooling, (N, C, H, W)
-        # return self.norm(x.mean([-2, -1])) # global average pooling, (N, C, H, W) -> (N, C)
 
     def forward(self, x):
         x = self.forward_features(x)
-        # x = self.head(x)
         return x
 
 def convnextv2_atto(**kwargs):
@@ -196,3 +194,7 @@ if __name__ == '__main__':
     print(y.shape)
     print(model)
     print("ConvNeXtV2 model created successfully.")
+
+    # try scripting
+    scripted_model = torch.jit.script(model)
+    print(scripted_model)
