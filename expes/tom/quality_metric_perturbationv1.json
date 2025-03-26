@@ -10,7 +10,7 @@
         "augmentation_config":      "configs/all_augs_v3.yaml",
         "extractor_model":          "convnext_tiny",
         "embedder_list":            "baseline/trustmark,baseline/cin,baseline/wam,baseline/mbrs",
-        "embedder_list_valid":      "videoseal_1.0",
+        "embedder_list_valid":      "videoseal_1.0_128bits",
         "loss_type":                "bt_nll",
         "grad_perturbation":        true,
         "n_perturbation_steps":     2,
