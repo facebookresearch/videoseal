@@ -204,7 +204,7 @@ def main(params):
     
     if embedder_list[embedder_list_idx].startswith("artificial"):
         assert embedder_list[embedder_list_idx] == "artificial/fft"
-        embedder = FFTWatermark()
+        embedder = FFTWatermark().to(device)
     else:
         embedder = setup_model_from_checkpoint(embedder_list[embedder_list_idx]).to(device)
     

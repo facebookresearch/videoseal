@@ -12,7 +12,7 @@ class FFTWatermark(torch.nn.Module):
         super().__init__()
         self.jnd = JND(in_channels=1, out_channels=3)
 
-    def embed(self, imgs: torch.Tensor):
+    def embed(self, imgs: torch.Tensor, **kwargs):
         # imgs.shape == [N, 3, H, W], in range [0, 1]
         imgs_w = torch.cat([self.blend_watermark(img.unsqueeze(0)) for img in imgs], 0)
         return {"imgs_w": imgs_w.mul_(255).round_().div_(255)}
