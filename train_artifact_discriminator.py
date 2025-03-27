@@ -29,7 +29,7 @@ from videoseal.utils.data import Modalities, parse_dataset_params
 from videoseal.utils.tensorboard import CustomTensorboardWriter
 
 from videoseal.utils.cfg import setup_model_from_checkpoint
-from videoseal.quality_metric.watermark_generators import FFTWatermark
+from videoseal.quality_metric.watermark_generators import FFTWatermarkWaves, FFTWatermarkGaussian, FFTWatermarkLines
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
@@ -203,8 +203,14 @@ def main(params):
     embedder_list_idx = udist.get_rank() % len(embedder_list)
     
     if embedder_list[embedder_list_idx].startswith("artificial"):
-        assert embedder_list[embedder_list_idx] == "artificial/fft"
-        embedder = FFTWatermark().to(device)
+        fft_wm_mapping = {
+            "artificial/fft_waves": FFTWatermarkWaves,
+            "artificial/fft_gaussian": FFTWatermarkGaussian,
+            "artificial/fft_lines": FFTWatermarkLines,
+        }
+        assert embedder_list[embedder_list_idx] in fft_wm_mapping
+        
+        embedder = fft_wm_mapping[embedder_list[embedder_list_idx]]().to(device)
     else:
         embedder = setup_model_from_checkpoint(embedder_list[embedder_list_idx]).to(device)
     
