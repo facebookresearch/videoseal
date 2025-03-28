@@ -11,6 +11,7 @@ sys.path.append("../../")
 from videoseal.quality_metric import thirdparty_metrics
 from videoseal.quality_metric import artifact_discriminator_metric
 
+
 class DummyPairedDataset(Dataset):
 
     def __init__(self, method1, method2=None, max_size=None):
@@ -41,6 +42,7 @@ class DummyPairedDataset(Dataset):
             img1, img2 = img1.resize(new_size), img2.resize(new_size)
 
         return img1, img2
+
 
 class Evaluator:
 
@@ -107,10 +109,13 @@ if __name__ == "__main__":
     evaluator = Evaluator(device="cuda:1")
 
     evaluator.eval_noreference("HIDDEN")
+    evaluator.eval_noreference("TrustMark")
+    evaluator.eval_noreference("MBRS")
+    evaluator.eval_noreference("WAM")
+    evaluator.eval_noreference("CIN")
     evaluator.eval_noreference("VideoSealv1")
     evaluator.eval_noreference("VideoSealv2image")
     evaluator.eval_noreference("VideoSealCVVDP")
-    evaluator.eval_noreference("TrustMark")
     evaluator.eval_noreference("VideoSealv2")
     evaluator.eval_noreference("VideoSealv2pp")
     evaluator.eval_noreference("VideoSealv2pp256bit")
@@ -120,5 +125,8 @@ if __name__ == "__main__":
     evaluator.eval_both("TrustMark", "VideoSealv2")
     evaluator.eval_both("VideoSealv1", "VideoSealv2pp")
     evaluator.eval_both("VideoSealv2", "VideoSealv2pp")
-    evaluator.eval_both("VideoSealCVVDP", "VideoSealv2pp")
+    evaluator.eval_both("TrustMark", "VideoSealv2pp")
+    evaluator.eval_both("MBRS", "VideoSealv2pp")
+    evaluator.eval_both("WAM", "VideoSealv2pp")
+    evaluator.eval_both("CIN", "VideoSealv2pp")
     evaluator.eval_both("VideoSealv2pp", "VideoSealv2pp256bit")

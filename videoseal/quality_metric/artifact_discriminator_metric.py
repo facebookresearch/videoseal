@@ -11,7 +11,8 @@ class MetricArtifactDiscriminator:
 
     def __init__(self, ckpt_path=None, device="cpu"):
         if ckpt_path is None:
-            ckpt_path = "/checkpoint/soucek/2025_logs/quality_test6_btnll_test_videosealv2_largersize768/_seed=75427/checkpoint.pth"
+            # ckpt_path = "/checkpoint/soucek/2025_logs/quality_test6_btnll_test_videosealv2_largersize768/_seed=75427/checkpoint.pth"
+            ckpt_path = "/checkpoint/soucek/2025_logs/quality_test6_btnll_test_videosealv2_largersize768_artificialfft_waves.gauss.lines/expe/checkpoint024.pth"
         
         state_dict = torch.load(ckpt_path, weights_only=True, map_location="cpu")["model"]
         extractor_params = omegaconf.OmegaConf.load(os.path.join(os.path.dirname(ckpt_path), "configs/extractor.yaml"))["convnext_tiny"]

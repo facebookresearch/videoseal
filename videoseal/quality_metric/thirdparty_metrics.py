@@ -8,8 +8,14 @@ import argparse
 import pickle
 import timm
 import piq
+import os
+import cv2
+import tempfile
+import subprocess
 
-sys.path = ["./MANIQA"] + sys.path
+sys.path = ["./uvq/uvq_pytorch"] + sys.path
+from uvq_utils import aggregationnet, compressionnet, contentnet, distortionnet
+sys.path = ["./MANIQA"] + sys.path[1:]
 from MANIQA.models.maniqa import MANIQA as MANIQA_model
 sys.path = ["./TReS"] + sys.path[1:]
 from TReS.models import Net as TReS_model
@@ -447,6 +453,7 @@ class MetricAHIQ:
 
 
 class MetricCVVDP:
+    # https://github.com/gfxdisp/ColorVideoVDP
 
     def __init__(self, device="cpu"):
         self.device = device
@@ -461,6 +468,91 @@ class MetricCVVDP:
         return MetricResult(score.item(), MetricObjective.MAXIMIZE, MetricType.REFERENCE, "CVVDP")
 
 
+class MetricESSIM:
+    # https://github.com/facebookresearch/essim
+    # suggested by Cosmin Stejerean
+
+    def __init__(self, device=None):
+        pass
+
+    @staticmethod
+    def to_yuv(img: Image):
+        fd1, temp_filename1 = tempfile.mkstemp()
+        yuv1 = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2YUV)
+        width, height = img.size
+
+        with open(temp_filename1, "wb") as f:
+            for i in range(height):
+                for j in range(width):
+                    f.write(yuv1[i, j, 0].tobytes()) # Write the Y component
+            for i in range(height // 2):
+                for j in range(width // 2):
+                    f.write(yuv1[2 * i, 2 * j, 1].tobytes()) # Write the U and V components
+                    f.write(yuv1[2 * i, 2 * j, 2].tobytes())
+
+        os.close(fd1)
+        return temp_filename1
+
+    def __call__(self, img: Image, reference: Image):
+        if img.size[0] % 2 != 0 or img.size[1] % 2 != 0:
+            img = img.crop((0, 0, img.size[0] - img.size[0] % 2, img.size[1] - img.size[1] % 2))
+            reference = reference.crop((0, 0, img.size[0] - img.size[0] % 2, img.size[1] - img.size[1] % 2))
+
+        fn1 = self.to_yuv(img)
+        fn2 = self.to_yuv(reference)
+
+        cmd = f"/private/home/soucek/essim/essim/build/bin/essim -r {fn2} -d {fn1} -w {img.size[0]} -h {img.size[1]} -mink 3 -o -"
+        process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        output, error = process.communicate()
+
+        output = output.decode('utf-8').split("\n")[1:]  # remove header (Frame, eSSIM, SSIM)
+        score = np.mean([float(l.split(",")[1]) for l in output if l.strip() != ""])
+        
+        os.remove(fn1)
+        os.remove(fn2)
+
+        return MetricResult(float(score), MetricObjective.MAXIMIZE, MetricType.REFERENCE, "ESSIM")
+
+
+class MetricUVQ:
+    # https://github.com/google/uvq
+    # suggested by Cosmin Stejerean
+
+    def __init__(self, device=None):
+        self.contentnet = contentnet.ContentNetInference()
+        self.compressionnet = compressionnet.CompressionNetInference()
+        self.distotionnet = distortionnet.DistortionNetInference()
+        self.aggregationnet = aggregationnet.AggregationNetInference()
+
+    def __call__(self, img: Image):
+        if img.size[0] < img.size[1]:
+            img = img.transpose(Image.Transpose.ROTATE_90)
+        img_big = np.array(img.resize((1280, 720))).astype(np.float32) / (255/2) - 1
+        img_small = np.array(img.resize((496, 496))).astype(np.float32) / (255/2) - 1
+
+        video_resized1 = np.stack([img_big] * 5, 0)[None].transpose(0, 1, 4, 2, 3)
+        video_resized2 = np.stack([img_small] * 5, 0)[None].transpose(0, 1, 4, 2, 3)
+
+        content_features, content_labels = (
+            self.contentnet.get_labels_and_features_for_all_frames(video=video_resized2)
+        )
+        compression_features, compression_labels = (
+            self.compressionnet.get_labels_and_features_for_all_frames(
+                video=video_resized1,
+            )
+        )
+        distortion_features, distortion_labels = (
+            self.distotionnet.get_labels_and_features_for_all_frames(
+                video=video_resized1,
+            )
+        )
+        results = self.aggregationnet.predict(
+            compression_features, content_features, distortion_features
+        )
+        
+        return MetricResult(results["compression_content_distortion"], MetricObjective.MAXIMIZE, MetricType.NO_REFERENCE, "UVQ")
+
+
 def get_metrics_noref(device):
     return {
         "ARNIQA": MetricARNIQA(device),
@@ -468,6 +560,7 @@ def get_metrics_noref(device):
         "TReS": MetricTReS(device, model="live"),
         "CONTRIQUE": MetricCONTRIQUE(device),
         "CLIP-IQA": MetricCLIPIQA(device),
+        "UVQ": MetricUVQ(),
     }
 
 
@@ -480,6 +573,7 @@ def get_metrics_ref(device):
         "PSNR": MetricPSNR(device),
         "SSIM": MetricSSIM(device),
         "CVVDP": MetricCVVDP(device),
+        "ESSIM": MetricESSIM(),
     }
 
 

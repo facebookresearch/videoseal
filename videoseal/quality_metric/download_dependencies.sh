@@ -37,3 +37,13 @@ cd AHIQ
     gdown https://drive.google.com/uc?id=1Nk-IpjnDNXbWacoh3T69wkSYhYYWip2W -O checkpoints/ahiq_pipal/
     # gdown https://drive.google.com/uc?id=1Jr2nLnhMA0f0uPEjMG7sH-T4WfIEasXn -O checkpoints/ahiq_pipal/
 cd ..
+
+
+# UVQ
+git clone --depth 1 https://github.com/google/uvq.git
+cd uvq/uvq_pytorch
+    mv utils uvq_utils
+    sed 's/from utils import custom_nn_layers/from uvq_utils import custom_nn_layers/' -i uvq_utils/compressionnet.py
+    sed 's/from utils import custom_nn_layers/from uvq_utils import custom_nn_layers/' -i uvq_utils/contentnet.py
+    sed 's/from utils import custom_nn_layers/from uvq_utils import custom_nn_layers/' -i uvq_utils/distortionnet.py
+cd ../..
