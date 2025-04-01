@@ -109,6 +109,8 @@ class Augmenter(nn.Module):
             is_video=True
         )
         self.num_augs = num_augs
+        # Put as module list to allow for to(device).
+        self.augs = nn.ModuleList(self.augs)  
 
     def parse_augmentations(
         self,
@@ -207,12 +209,6 @@ class Augmenter(nn.Module):
         # print the augmentations and their probabilities
         augs = [aug.__class__.__name__ for aug in self.augs]
         return f"Augmenter(augs={augs}, probs={self.aug_probs})"
-
-    def to(self, device: torch.device) -> "Augmenter":
-        super().to(device)
-        for aug in self.augs:
-            aug.to(device)
-        return self
 
 
 if __name__ == "__main__":
