@@ -40,6 +40,7 @@ class VideoWam(Wam):
         scaling_i: float = 1.0,
         img_size: int = 256,
         clamp: bool = True,
+        round: bool = True,
         chunk_size: int = 8,
         step_size: int = 4,
         blending_method: str = "additive",
@@ -69,6 +70,7 @@ class VideoWam(Wam):
             scaling_i=scaling_i,
             img_size=img_size,
             clamp=clamp,
+            round=round,
             blending_method=blending_method
         )
         # video settings
@@ -230,6 +232,8 @@ class VideoWam(Wam):
         # always apply clamping
         if self.clamp:
             imgs_w = torch.clamp(imgs_w, 0, 1)
+        if self.round:
+            imgs_w = (torch.round(imgs_w * 255) / 255 - imgs_w).detach() + imgs_w
 
         # augment
         imgs_aug, masks, selected_aug = self.augmenter(
@@ -342,6 +346,8 @@ class VideoWam(Wam):
         # clamp
         if self.clamp:
             imgs_w = torch.clamp(imgs_w, 0, 1)
+        if self.round:
+            imgs_w = (torch.round(imgs_w * 255) / 255 - imgs_w).detach() + imgs_w
 
         outputs = {
             "imgs_w": imgs_w,  # watermarked imgs: f 3 h w

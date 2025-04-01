@@ -40,7 +40,7 @@
         "lambda_d":                 0.1, 
         "lambda_det":               0.0,
         "lambda_dec":               1.0,
-        "nbits":                    [192, 256],
+        "nbits":                    [128, 256],
         "scaling_i":                1.0,
         "attenuation":              {
             "jnd_1_1": {

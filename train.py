@@ -317,7 +317,7 @@ def main(params):
     # print(f"discriminator: {sum(p.numel() for p in image_detection_loss.discriminator.parameters() if p.requires_grad) / 1e3:.1f}K parameters")
 
     # Build the scaling schedule. Default is none
-    if params.scaling_w_schedule is not None:
+    if params.scaling_w_schedule is not None and params.scaling_w_schedule.lower() != "none":
         scaling_w_schedule = uoptim.parse_params(params.scaling_w_schedule)
         scaling_scheduler = uoptim.ScalingScheduler(
             obj=wam.blender, attribute="scaling_w", scaling_o=params.scaling_w,

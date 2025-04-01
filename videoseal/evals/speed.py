@@ -253,7 +253,7 @@ def main():
 
         # Override the temporal pooling
         if hasattr(model.embedder, 'unet') and hasattr(model.embedder.unet, 'time_pooling'):
-            if args.time_pooling is not None:
+            if args.time_pooling_depth is not None:
                 model.embedder.unet.time_pooling = True
                 model.embedder.unet.time_pooling_depth = args.time_pooling_depth
                 model.embedder.unet.temporal_pool.kernel_size = model.step_size
