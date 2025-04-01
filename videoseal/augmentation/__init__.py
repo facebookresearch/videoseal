@@ -5,7 +5,8 @@ from .video import H264, H264rgb, H265, VP9, AV1, SpeedChange, WindowAveraging, 
 from .neuralcompression import VQGAN1024, VQGAN16384, StableDiffusionVAE, BMSHJ2018Factorized, BMSHJ2018Hyperprior, MBT2018Mean, MBT2018, Cheng2020Anchor, Cheng2020Attn
 
 def get_validation_augs_subset(
-    is_video: bool = False
+    is_video: bool = False,
+    do_neural_compression: bool = False,
 ) -> list:
     """
     Get the validation augmentations.
@@ -27,8 +28,12 @@ def get_validation_augs_subset(
             (Crop(),                    [0.71]),  # size ratio
             (Brightness(),              [0.5]),
             (JPEG(),                    [60]),
-            (VQGAN16384(),              [0]),  # No parameters needed for VQGAN
             (Sequential(JPEG(), Crop(), Brightness()), [(60, 0.71, 0.5)]),
+        ]
+    # Neural compression augmentations
+    if do_neural_compression:
+        augs += [
+            (VQGAN16384(),              [0]),  # No parameters needed for VQGAN
         ]
     return augs
 
@@ -54,7 +59,8 @@ def get_combined_augs(is_video: bool = False) -> list:
 def get_validation_augs(
     is_video: bool = False,
     only_identity: bool = False,
-    only_combined: bool = False
+    only_combined: bool = False,
+    do_neural_compression: bool = False,
 ) -> list:
     """
     Get the validation augmentations.
@@ -119,5 +125,11 @@ def get_validation_augs(
             (Sequential(JPEG(), Crop(), Brightness()), [(40, 0.71, 0.5)]),
             (Sequential(JPEG(), Crop(), Brightness()), [(60, 0.71, 0.5)]),
             (Sequential(JPEG(), Crop(), Brightness()), [(80, 0.71, 0.5)]),
+        ]
+    # Neural compression augmentations
+    if do_neural_compression:
+        augs += [
+            (MBT2018Mean(),          [0]),  # No parameters needed for MBT2018
+            (VQGAN16384(),              [0]),  # No parameters needed for VQGAN
         ]
     return augs
