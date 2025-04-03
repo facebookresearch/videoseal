@@ -104,7 +104,7 @@ def get_parser():
 
     group = parser.add_argument_group('Losses parameters')
     aa('--loss_type', default='bce', type=str,
-       help='Loss to use.', choices=['bce', 'bt_nll'])
+       help='Loss to use.', choices=['bce', 'bt_nll', 'hinge'])
     aa('--grad_perturbation', type=utils.bool_inst, default=False)
     aa('--use_grad_sign_only', type=utils.bool_inst, default=False)
     aa('--use_rand_perturbation', type=utils.bool_inst, default=False)
@@ -156,6 +156,14 @@ def construct_loss(loss_type):
         # https://arxiv.org/pdf/2305.18290, Eq. (2)
         def fc_(real_logits, wm_logits):
             return F.binary_cross_entropy_with_logits(real_logits - wm_logits, torch.ones_like(real_logits))
+        return fc_
+    elif loss_type == "hinge":
+        def fc_(real_logits, wm_logits):
+            # https://paperswithcode.com/method/gan-hinge-loss
+            loss_real = torch.mean(F.relu(1. - real_logits))
+            loss_fake = torch.mean(F.relu(1. + wm_logits))
+            d_loss = 0.5 * (loss_real + loss_fake)
+            return d_loss
         return fc_
     else:
         raise NotImplementedError(f"Loss {loss_type} is not implemented.")
