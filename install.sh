@@ -22,3 +22,6 @@ pip install pandas
 
 git clone https://github.com/facebookresearch/segment-anything-2.git
 cd segment-anything-2 & pip install -e .
+
+git clone https://github.com/fairinternal/omnisealbench.git
+cd omnisealbench & pip install -e .
