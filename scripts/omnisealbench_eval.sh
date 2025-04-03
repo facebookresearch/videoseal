@@ -73,11 +73,12 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 # When using srun, the output and error files specified with --output and --error will only capture 
 # the output and error from the srun command itself, not from the command being run by srun.
-srun /private/home/valeriu/.conda/envs/videoseal/bin/python -m omnisealbench.cli \
+srun omnisealbench.evaluate \
     --eval_type video \
     --dataset "sa-v" \
     --dataset_dir "/large_experiments/meres/sa-v/sav_val_videos/" \
     --batch_size 1 \
+    --num_workers 0 \
     --num_samples 1 \
     --num_workers 1 \
     --save_ids 0-9 \
