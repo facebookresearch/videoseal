@@ -55,7 +55,7 @@ import videoseal.utils.logger as ulogger
 import videoseal.utils.optim as uoptim
 from videoseal.augmentation import (get_validation_augs,
                                     get_validation_augs_subset)
-from videoseal.augmentation.augmenter import Augmenter
+from videoseal.augmentation.augmenter import Augmenter, neural_compression_augs
 from videoseal.data.loader import (get_dataloader_segmentation,
                                    get_video_dataloader)
 from videoseal.data.transforms import get_resize_transform
@@ -269,8 +269,10 @@ def main(params):
     augmenter_cfg.num_augs = params.num_augs
     augmenter = Augmenter(
         **augmenter_cfg,
+    ).to(device)
+    do_neural_compression = any(
+        aug_name in neural_compression_augs for aug_name in augmenter_cfg.augs.keys()
     )
-    print(f'augmenter: {augmenter}')
 
     # Build the extractor model
     extractor_cfg = omegaconf.OmegaConf.load(params.extractor_config)
@@ -459,7 +461,10 @@ def main(params):
 
         for val_loader, modality in val_loaders:
             if val_loader is not None:
-                augs = get_validation_augs(modality == Modalities.VIDEO)
+                augs = get_validation_augs(
+                    modality == Modalities.VIDEO,
+                    do_neural_compression = do_neural_compression,
+                )
 
                 print(f"running eval on {modality} dataset.")
                 val_stats = eval_one_epoch(wam, val_loader, modality, image_detection_loss,
@@ -535,9 +540,15 @@ def main(params):
             for val_modality, epoch_val_loader in val_loaders:
                 if epoch_val_loader is not None:
                     if (epoch % params.full_eval_freq == 0 and epoch > 0) or (epoch == params.epochs-1):
-                        augs = get_validation_augs(val_modality == Modalities.VIDEO)
+                        augs = get_validation_augs(
+                            val_modality == Modalities.VIDEO,
+                            do_neural_compression = do_neural_compression,
+                        )
                     else:
-                        augs = get_validation_augs_subset(val_modality == Modalities.VIDEO)
+                        augs = get_validation_augs_subset(
+                            val_modality == Modalities.VIDEO,
+                            do_neural_compression = do_neural_compression,
+                        )
                     val_stats = eval_one_epoch(wam, epoch_val_loader, val_modality, image_detection_loss,
                                             epoch, augs, validation_masks, params, tensorboard=tensorboard)
                     log_stats = {
@@ -773,9 +784,6 @@ def eval_one_epoch(
         for acc_it in range(accumulation_steps):
             imgs, masks = batch_imgs[acc_it], batch_masks[acc_it]
 
-            imgs = imgs.to(device)
-            masks = masks.to(device)
-
             # forward embedder
             embed_time = time.time()
             outputs = wam.embed(imgs, is_video=is_video, lowres_attenuation=params.lowres_attenuation)
@@ -852,7 +860,7 @@ def eval_one_epoch(
                         if params.nbits > 0:
                             bit_accuracy_ = bit_accuracy(
                                 bit_preds,
-                                msgs,
+                                msgs.to(bit_preds.device),
                                 masks_aug
                             ).nanmean().item()
 

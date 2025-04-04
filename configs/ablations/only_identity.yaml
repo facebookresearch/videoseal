@@ -1,0 +1,13 @@
+# Full masks (e.g. to train bits only)
+masks:
+  kind: none
+
+# The probability of applying the augmentation.
+augs:
+  identity:           1
+
+augs_params:
+  resize:
+    # useless
+    min_size: 0.7
+    max_size: 1.0

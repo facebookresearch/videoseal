@@ -5,6 +5,8 @@
 
 """
 This module contains TorchScript-compatible versions of the Wam and VideoWam classes.
+Run with:
+    python -m videoseal.models.wam_jit
 """
 
 import torch
@@ -99,6 +101,7 @@ class WamJIT(nn.Module):
         imgs: torch.Tensor,  # [b, c, h, w] or [frames, c, h, w]
         msgs: torch.Tensor,
         is_video: bool = False,
+        aggregate: bool = False,
         mode: str = "bilinear",
         align_corners: bool = False,
         antialias: bool = True,
@@ -110,6 +113,7 @@ class WamJIT(nn.Module):
             imgs: Input images or video frames
             msgs: Optional messages to embed
             is_video: Whether the input is a video
+            aggregate: Aggregate the detection results into a single message. Only for video
             mode: Interpolation mode
             align_corners: Whether to align corners in interpolation
             antialias: Whether to use antialiasing in interpolation
@@ -121,7 +125,11 @@ class WamJIT(nn.Module):
         imgs_w = self.embed(imgs, msgs, is_video, mode, align_corners, antialias)
         
         # Detect the message
-        preds = self.detect(imgs_w, is_video, mode, align_corners, antialias)
+        if aggregate:
+            assert is_video, "Aggregation is only supported for videos"
+            preds = self.detect_video_and_aggregate(imgs_w, "avg", mode, align_corners, antialias)
+        else:
+            preds = self.detect(imgs_w, is_video, mode, align_corners, antialias)
         
         return imgs_w, preds
 
@@ -475,7 +483,8 @@ class WamJIT(nn.Module):
         elif aggregation == "l2norm_avg":
             frame_weights = torch.norm(bit_preds, p=2, dim=1).unsqueeze(1)  # f 1
             decoded_msg = (bit_preds * frame_weights).mean(dim=0)
-            
+        else:
+            raise ValueError(f"Unknown aggregation method: {aggregation}")
         msg = (decoded_msg > 0).squeeze().unsqueeze(0)  # 1 k
         return msg
 
@@ -492,6 +501,10 @@ def test_model_jit():
     # Set device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
+
+    # Output directory
+    output_dir = "outputs"
+    os.makedirs(output_dir, exist_ok=True)
 
     # Load image
     file = "/private/home/pfz/_images/tahiti.png"
@@ -510,9 +523,10 @@ def test_model_jit():
 
     # Setup model from checkpoint and configure
     wam = setup_model_from_checkpoint(ckpt)
+    wam.round = False
     wam.blender.scaling_w = 0.2
     wam.eval()
-    wam.to(device)
+    wam.to("cpu")
 
     # Create JIT version
     model_jit = WamJIT(
@@ -523,23 +537,23 @@ def test_model_jit():
         scaling_i=1.0
     )
     model_jit.eval()
-    model_jit.to(device)
+    model_jit.to("cpu")
 
     # Script the model
     print("Converting model to TorchScript...")
     model_jit = torch.jit.script(model_jit)
-    model_jit.save("outputs/y_256b_img.pt")
-    print(f"Saved model to outputs/y_256b_img.pt")
-    print(f"Size of the model: {os.path.getsize('outputs/y_256b_img.pt') / 1e6:.2f} MB")
+    model_jit.save(f"{output_dir}/y_256b_img.pt")
+    print(f"Saved model to {output_dir}/y_256b_img.pt")
+    print(f"Size of the model: {os.path.getsize(f'{output_dir}/y_256b_img.pt') / 1e6:.2f} MB")
 
     # Test - Compare original and JIT models
     print("Testing model...")
+    wam.to(device)
+    model_jit = torch.jit.load(f"{output_dir}/y_256b_img.pt")
+    model_jit.to(device)
 
-    # Run original model
-    imgs_w = wam.embed(imgs, msgs, lowres_attenuation=True)
-
-    # Load JIT model and run
-    model_jit = torch.jit.load("outputs/y_256b_img.pt")
+    # Run original and jit model
+    imgs_w = wam.embed(imgs, msgs, lowres_attenuation=True)["imgs_w"]
     imgs_w_jit = model_jit.embed(imgs, msgs)
 
     # Compare results
@@ -567,7 +581,7 @@ def test_model_jit():
     plt.show()
 
     # compare detection results
-    preds = wam.detect(imgs_w, is_video=False)
+    preds = wam.detect(imgs_w, is_video=False)["preds"]
     preds_jit = model_jit.detect(imgs_w, is_video=False)
 
     # orint diff between preds_jit and preds
@@ -578,7 +592,6 @@ def test_model_jit():
         print("✅ Test passed: JIT model produces the same predictions as the original model")
     else:
         print("❌ Test failed: JIT model produces different predictions than the original model")
-
 
 
 if __name__ == "__main__":
