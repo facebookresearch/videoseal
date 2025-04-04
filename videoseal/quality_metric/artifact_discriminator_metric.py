@@ -42,7 +42,8 @@ class ArtifactDiscriminatorLoss(torch.nn.Module):
 
     def __init__(self, ckpt_path=None, frozen=True):
         super(ArtifactDiscriminatorLoss, self).__init__()
-        
+
+        self.frozen = frozen
         if ckpt_path is None or ckpt_path.lower() == "none":
             ckpt_path = "/checkpoint/soucek/2025_logs/quality_test6_btnll_test_videosealv2_largersize768_artificialfft_waves.gauss.lines/expe/checkpoint.pth"
         
