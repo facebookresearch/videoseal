@@ -5,7 +5,8 @@ import torchvision
 from PIL import Image
 
 from videoseal.models import build_extractor
-from videoseal.quality_metric.thirdparty_metrics import MetricResult, MetricObjective, MetricType
+from videoseal.quality_metric.metrics_utils import MetricResult, MetricObjective, MetricType
+
 
 class MetricArtifactDiscriminator:
 
