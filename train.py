@@ -61,6 +61,7 @@ from videoseal.data.loader import (get_dataloader_segmentation,
 from videoseal.data.transforms import get_resize_transform
 from videoseal.evals.metrics import accuracy, bit_accuracy, iou, psnr, ssim
 from videoseal.losses.detperceptual import VideosealLoss
+from videoseal.quality_metric.artifact_discriminator_metric import ArtifactDiscriminatorLoss
 from videoseal.models import VideoWam, Wam, build_embedder, build_extractor
 from videoseal.modules.jnd import JND, VarianceBasedJND
 from videoseal.utils.data import Modalities, parse_dataset_params
@@ -185,6 +186,10 @@ def get_parser():
        help='Number of layers for the discriminator')
     aa('--disc_in_channels', default=3, type=int,
          help='Number of input channels for the discriminator')
+    aa('--lambda_artifact_disc', default=0.0, type=float,
+       help='Weight for the artifact discriminator loss')
+    aa('--artifact_disc_ckpt_path', default=None, type=str,
+       help='Checkpoint path for the artifact discriminator loss, if None, it will load the default pretrained model.')
     
     group = parser.add_argument_group('Loading parameters')
     aa('--batch_size', default=32, type=int, help='Batch size')
@@ -316,6 +321,14 @@ def main(params):
         percep_loss=params.perceptual_loss,
     ).to(device)
     print(image_detection_loss)
+
+    artifact_discriminator_loss = lambda *args: 0
+    if params.lambda_artifact_disc > 0:
+        artifact_discriminator_loss = ArtifactDiscriminatorLoss(
+            ckpt_path=params.artifact_disc_ckpt_path,
+            frozen=True
+        ).to(device)
+        print(f"Using Artifact Discriminator Loss with weight {params.lambda_artifact_disc}")
     # print(f"discriminator: {sum(p.numel() for p in image_detection_loss.discriminator.parameters() if p.requires_grad) / 1e3:.1f}K parameters")
 
     # Build the scaling schedule. Default is none
@@ -445,6 +458,9 @@ def main(params):
             wam, device_ids=[params.local_rank])
         image_detection_loss.discriminator = nn.parallel.DistributedDataParallel(
             image_detection_loss.discriminator, device_ids=[params.local_rank])
+        if params.lambda_artifact_disc > 0:
+            artifact_discriminator_loss = nn.parallel.DistributedDataParallel(
+                artifact_discriminator_loss, device_ids=[params.local_rank])
         wam = wam_ddp.module
     else:
         wam_ddp = wam
@@ -528,7 +544,7 @@ def main(params):
             image_detection_loss.balanced = False  # not supported here because embedder is frozen
 
         # train and log
-        train_stats = train_one_epoch(wam_ddp, optimizers, epoch_train_loader, epoch_modality, image_detection_loss, epoch, params, tensorboard=tensorboard)
+        train_stats = train_one_epoch(wam_ddp, optimizers, epoch_train_loader, epoch_modality, image_detection_loss, epoch, params, tensorboard=tensorboard, artifact_discriminator_loss=artifact_discriminator_loss)
         log_stats = {
             'epoch': epoch, 'modality': epoch_modality, 
             **{f'train_{k}': v for k, v in train_stats.items()}
@@ -597,7 +613,8 @@ def train_one_epoch(
     image_detection_loss: VideosealLoss,
     epoch: int,
     params: argparse.Namespace,
-    tensorboard: CustomTensorboardWriter
+    tensorboard: CustomTensorboardWriter,
+    artifact_discriminator_loss: ArtifactDiscriminatorLoss = None
 ) -> dict:
     is_video = (epoch_modality == Modalities.VIDEO)
 
@@ -655,6 +672,10 @@ def train_one_epoch(
                     optimizer_idx, epoch,
                     last_layer=last_layer,
                 )
+                if params.lambda_artifact_disc > 0 and optimizer_idx == 0:
+                    artifact_loss = params.lambda_artifact_disc * artifact_discriminator_loss(outputs["imgs_w"])
+                    logs['artifact_loss'] = artifact_loss.item()
+                    loss += artifact_loss
                 # Scale loss for accumulation so lr is not affected
                 loss = loss / accumulation_steps
                 loss.backward()
