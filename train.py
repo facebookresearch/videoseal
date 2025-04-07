@@ -190,6 +190,8 @@ def get_parser():
        help='Weight for the artifact discriminator loss')
     aa('--artifact_disc_ckpt_path', default=None, type=str,
        help='Checkpoint path for the artifact discriminator loss, if None, it will load the default pretrained model.')
+    aa('--artifact_disc_start_epoch', default=0, type=int,
+       help='Epoch to start using arifact discriminator in the loss.')
     
     group = parser.add_argument_group('Loading parameters')
     aa('--batch_size', default=32, type=int, help='Batch size')
@@ -672,7 +674,7 @@ def train_one_epoch(
                     optimizer_idx, epoch,
                     last_layer=last_layer,
                 )
-                if params.lambda_artifact_disc > 0 and optimizer_idx == 0:
+                if params.lambda_artifact_disc > 0 and optimizer_idx == 0 and epoch >= params.artifact_disc_start_epoch:
                     artifact_loss = params.lambda_artifact_disc * artifact_discriminator_loss(outputs["imgs_w"])
                     logs['artifact_loss'] = artifact_loss.item()
                     loss += artifact_loss
