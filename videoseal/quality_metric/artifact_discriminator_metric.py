@@ -10,7 +10,7 @@ from videoseal.quality_metric.metrics_utils import MetricResult, MetricObjective
 
 class MetricArtifactDiscriminator:
 
-    def __init__(self, ckpt_path=None, device="cpu"):
+    def __init__(self, ckpt_path=None, device="cpu", resolution=768):
         if ckpt_path is None:
             # ckpt_path = "/checkpoint/soucek/2025_logs/quality_test6_btnll_test_videosealv2_largersize768/_seed=75427/checkpoint.pth"
             ckpt_path = "/checkpoint/soucek/2025_logs/quality_test6_btnll_test_videosealv2_largersize768_artificialfft_waves.gauss.lines/expe/checkpoint024.pth"
@@ -23,12 +23,22 @@ class MetricArtifactDiscriminator:
         self.model = self.model.eval().to(device)
         self.device = device
 
-        self.patchify_image = torchvision.transforms.Compose([
-            lambda x: x.convert("RGB"),
-            torchvision.transforms.Resize((768, 768)),
-            torchvision.transforms.ToTensor(),
-            lambda x: x.view(3, 3, 256, 3, 256).permute(3, 1, 0, 2, 4).reshape(9, 3, 256, 256),
-        ])
+        if resolution == 768:
+            self.patchify_image = torchvision.transforms.Compose([
+                lambda x: x.convert("RGB"),
+                torchvision.transforms.Resize((768, 768)),
+                torchvision.transforms.ToTensor(),
+                lambda x: x.view(3, 3, 256, 3, 256).permute(3, 1, 0, 2, 4).reshape(9, 3, 256, 256),
+            ])
+        elif resolution == 1536:
+            self.patchify_image = torchvision.transforms.Compose([
+                lambda x: x.convert("RGB"),
+                torchvision.transforms.Resize((1536, 1536)),
+                torchvision.transforms.ToTensor(),
+                lambda x: x.view(3, 6, 256, 6, 256).permute(3, 1, 0, 2, 4).reshape(36, 3, 256, 256),
+            ])
+        else:
+            raise ValueError("Unsupported resolution: {}. Only 768 and 1536 are supported.".format(resolution))
 
     @torch.no_grad
     def __call__(self, img: Image):

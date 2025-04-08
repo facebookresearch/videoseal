@@ -14,8 +14,11 @@ from videoseal.quality_metric import artifact_discriminator_metric
 
 class DummyPairedDataset(Dataset):
 
-    def __init__(self, method1, method2=None, max_size=None):
+    def __init__(self, method1, method2=None, max_size=None, data_root=None):
         ROOT = "/private/home/soucek/videoseal/metrics"
+        if data_root is not None:
+            ROOT = data_root
+        
         assert os.path.exists(os.path.join(ROOT, method1))
         if method2 is not None:
             assert os.path.exists(os.path.join(ROOT, method2))
@@ -50,12 +53,13 @@ class Evaluator:
         self.noreference_metrics = thirdparty_metrics.get_metrics_noref(device)
         self.reference_metrics = thirdparty_metrics.get_metrics_ref(device)
         self.noreference_metrics = self.noreference_metrics | {
-            "ArtifactDisc": artifact_discriminator_metric.MetricArtifactDiscriminator(device=device)
+            "ArtifactDisc@768px": artifact_discriminator_metric.MetricArtifactDiscriminator(device=device),
+            "ArtifactDisc@1536px": artifact_discriminator_metric.MetricArtifactDiscriminator(device=device, resolution=1536)
         }
 
-    def eval_both(self, method1_name: str, method2_name: str, max_size=None):
-        method1 = DummyPairedDataset(method1_name, max_size=max_size)
-        method2 = DummyPairedDataset(method2_name, max_size=max_size)
+    def eval_both(self, method1_name: str, method2_name: str, max_size=None, data_root: str=None):
+        method1 = DummyPairedDataset(method1_name, max_size=max_size, data_root=data_root)
+        method2 = DummyPairedDataset(method2_name, max_size=max_size, data_root=data_root)
 
         results1 = {k: None for k in self.noreference_metrics.keys()} | {k: None for k in self.reference_metrics.keys()}
         results2 = copy.deepcopy(results1)
@@ -82,8 +86,8 @@ class Evaluator:
         print("")
 
 
-    def eval_noreference(self, method_name: str, max_size=None):
-        method = DummyPairedDataset(method_name, max_size=max_size)
+    def eval_noreference(self, method_name: str, max_size=None, data_root: str=None):
+        method = DummyPairedDataset(method_name, max_size=max_size, data_root=data_root)
 
         results1 = {k: None for k in self.noreference_metrics.keys()}
         results2 = copy.deepcopy(results1)
@@ -107,6 +111,9 @@ class Evaluator:
 
 if __name__ == "__main__":
     evaluator = Evaluator(device="cuda:1")
+
+    evaluator.eval_noreference("images_in_study", data_root="/private/home/soucek/videoseal/data")
+    evaluator.eval_noreference("images_all", data_root="/private/home/soucek/videoseal/data")
 
     evaluator.eval_noreference("HIDDEN")
     evaluator.eval_noreference("TrustMark")
