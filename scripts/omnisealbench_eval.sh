@@ -79,10 +79,9 @@ srun omnisealbench.evaluate \
     --dataset_dir "/large_experiments/meres/sa-v/sav_val_videos/" \
     --batch_size 1 \
     --num_workers 0 \
-    --num_samples 1 \
-    --num_workers 1 \
     --save_ids 0-9 \
     --postprocess_fn_device "cpu" \
+    --skip_quality_metrics_on_attacks \
     --results_dir results/${OUTPUT_DIR_PREFIX}-${OUTPUT_DIR} \
     --model "videoseal" \
     --model__videoseal__additional_arguments__checkpoint ${CKPT} \
