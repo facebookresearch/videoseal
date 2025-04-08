@@ -148,7 +148,7 @@ def optimize_multiple(img: Image, model, device="cuda:0", num_steps=[100], lr=0.
 
 
 if __name__ == "__main__":
-    assert len(sys.argv) >= 2, "Usage: python remove_watermark_sgd.py <image_dir> [output_dir]"
+    assert len(sys.argv) >= 2, "Usage: python artifact_discriminator_watermark_removal.py <image_dir> [output_dir]"
     image_dir = sys.argv[1]
     output_dir = os.path.normpath(sys.argv[2] if len(sys.argv) > 2 else "output")
 
