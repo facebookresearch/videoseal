@@ -1,5 +1,6 @@
 import os
 import torch
+import random
 import omegaconf
 import torchvision
 from PIL import Image
@@ -75,21 +76,20 @@ class ArtifactDiscriminatorLoss(torch.nn.Module):
         _, _, H, W = imgs_w.shape
         assert H >= 256 and W >= 256, "ArtifactDiscriminatorLoss has been trained on 256x256 patches, input images should be at least 256x256."
         if H > 256 or W > 256:
-            # compute the loss on the four corner crops and the center crop of the input images
-            top_left = imgs_w[:, :, :256, :256]
-            top_right = imgs_w[:, :, :256, -256:]
-            bottom_left = imgs_w[:, :, -256:, :256]
-            bottom_right = imgs_w[:, :, -256:, -256:]
-            center = imgs_w[:, :, (H-256)//2:(H+256)//2, (W-256)//2:(W+256)//2]
-            imgs_w = torch.cat([top_left, top_right, bottom_left, bottom_right, center], dim=0)
+            # compute the loss on 5 random patches
+            patches, patches_ori = [], []
+            for i in range(5):
+                from_y, from_x = random.randint(0, H - 1), random.randint(0, W - 1)
+                patch256x256 = imgs_w[:, :, from_y:from_y+256, from_x:from_x+256]
+                patches.append(patch256x256)
 
+                if imgs_ori is not None:
+                    patch256x256_ori = imgs_ori[:, :, from_y:from_y+256, from_x:from_x+256]
+                    patches_ori.append(patch256x256_ori)
+
+            imgs_w = torch.cat(patches, dim=0)
             if imgs_ori is not None:
-                top_left_ori = imgs_ori[:, :, :256, :256]
-                top_right_ori = imgs_ori[:, :, :256, -256:]
-                bottom_left_ori = imgs_ori[:, :, -256:, :256]
-                bottom_right_ori = imgs_ori[:, :, -256:, -256:]
-                center_ori = imgs_ori[:, :, (H-256)//2:(H+256)//2, (W-256)//2:(W+256)//2]
-                imgs_ori = torch.cat([top_left_ori, top_right_ori, bottom_left_ori, bottom_right_ori, center_ori], dim=0)
+                imgs_ori = torch.cat(patches_ori, dim=0)
 
         if imgs_ori is not None:
             wm_logits = self.model(imgs_w)
