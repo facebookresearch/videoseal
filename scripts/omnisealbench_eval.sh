@@ -80,7 +80,7 @@ srun omnisealbench.evaluate \
     --batch_size 1 \
     --num_workers 0 \
     --save_ids 0-9 \
-    --postprocess_fn_device "cpu" \
+    --postprocess_fn_device "cuda" \
     --skip_quality_metrics_on_attacks \
     --results_dir results/${OUTPUT_DIR_PREFIX}-${OUTPUT_DIR} \
     --model "videoseal" \
