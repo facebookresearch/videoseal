@@ -1,3 +1,13 @@
+"""
+Example command to run the training:
+    OMP_NUM_THREADS=40 torchrun --nproc_per_node=2 train.py --local_rank 0 \
+        --scheduler None --optimizer AdamW,lr=5e-5 --saveckpt_freq 2 --num_augs 2 --batch_size_video_eval 1 --batch_size_video 1 --batch_size_eval 16 --batch_size 16 --workers 3
+        --epochs 60 --iter_per_valid 50 --iter_per_epoch 1000 --img_size_proc 256 --img_size_val 768 --img_size 768 
+        --grad_matching False --watermark_strength_contrasting False --ramdomly_invert_watermark True
+        --max_perturbation 0.09 --min_perturbation 0.03 --use_rand_perturbation False --use_grad_sign_only False --n_perturbation_steps 2 --grad_perturbation True
+        --loss_type bt_nll --embedder_list_valid videoseal_1.0_128bits --embedder_list artificial/fft_waves,artificial/fft_gaussian,artificial/fft_lines
+        --extractor_model convnext_tiny --augmentation_config configs/all_augs_v3.yaml --video_dataset none --image_dataset sa-1b-full
+"""
 import argparse
 import datetime
 import json

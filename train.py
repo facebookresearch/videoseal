@@ -460,9 +460,6 @@ def main(params):
             wam, device_ids=[params.local_rank])
         image_detection_loss.discriminator = nn.parallel.DistributedDataParallel(
             image_detection_loss.discriminator, device_ids=[params.local_rank])
-        if params.lambda_artifact_disc > 0 and not artifact_discriminator_loss.frozen:
-            artifact_discriminator_loss = nn.parallel.DistributedDataParallel(
-                artifact_discriminator_loss, device_ids=[params.local_rank])
         wam = wam_ddp.module
     else:
         wam_ddp = wam

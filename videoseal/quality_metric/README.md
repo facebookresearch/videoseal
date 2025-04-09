@@ -72,7 +72,48 @@
     Once the watermarked images are in `data/watermarked_images/<wm_method_name>` and the images with removed watermarks in `data/watermarks_removed_ours/<wm_method_name>`, the following script can be run to forge the watermarks and compute the metrics.
 
     ```bash
-    python -m videoseal.quality_metric.eval_watermark_forging /private/home/soucek/videoseal/data/paste_to_images /large_experiments/omniseal/sa-1b-full/test/test
+    python -m videoseal.quality_metric.eval_watermark_forging
+              /private/home/soucek/videoseal/data/paste_to_images
+              /large_experiments/omniseal/sa-1b-full/test/test
     ```
 
-    The script uses two folders with clean non-watermarked images: The forged watermarks are pasted onto the images in the first folder. The images from the second folder are used to compute the mean watermark (by substracting many watermarked and non-watermarked images).
+    The script uses two folders with clean non-watermarked images: The forged watermarks are pasted into the images in the first folder. The images from the second folder are used to compute the mean watermark (by substracting and averaging many watermarked and non-watermarked images).
+
+
+# Quality Metrics
+
+1. **Generate watermarked images for multiple methods.**
+
+    (see above)
+
+2. **Download other no-reference and full-reference metrics.**
+
+    Various metrics from related work are implemented in `videoseal/quality_metric/thirdparty_metrics.py`. The required dependencies (github repos and model weights) can be downloaded using the following command.
+
+    ```bash
+    cd videoseal/quality_metric
+    ./download_dependencies.sh
+    ```
+
+3. **Evaluate the metrics on watermarking data.**
+
+    The evaluation can be split into no-reference metric evaluation and full-reference metric evaluation. As we do not have user-collected data, our proxy evaluation uses pairs of images where one of the images is presumed to look worse than the other. We measure the metric for both and report the averadged ranking accuracy `1[m(worse) < m(better)]`, where `1[.]` is the indicator function and `m(.)` is the metric value for a given image.
+
+    The no-reference evaluation simply uses original images and their watermarked counterparts. To run it, use the following function. The function expects that the folder `<root_dir>/<method>` contains pairs of images named `*_val_0_ori.png` and `*_val_1_wm.png` containing the original and watermark counterparts respectively.
+
+    ```python
+    Evaluator().eval_noreference("<method>", data_root="<root_dir>")
+    ```
+
+    The full-reference evaluation computes averadged ranking accuracy of `1[m(worse, reference) < m(better, reference)]` and can be called using the following function. It requires that `<root_dir>/<method1>/XXX_val_0_ori.png`, `<root_dir>/<method1>/XXX_val_1_wm.png`, `<root_dir>/<method2>/XXX_val_1_wm.png` exist and contain the same image, potentially with the corresponding watermark.
+
+    ```python
+    Evaluator().eval_both("<method1>", "<method2>", data_root="<root_dir>")
+    ```
+
+    You can run the whole evaluation using the following command.
+
+    ```bash
+    cd videoseal/quality_metric
+    python eval_metrics.py
+    ```
