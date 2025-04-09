@@ -79,7 +79,7 @@ class ArtifactDiscriminatorLoss(torch.nn.Module):
             # compute the loss on 5 random patches
             patches, patches_ori = [], []
             for i in range(5):
-                from_y, from_x = random.randint(0, H - 1), random.randint(0, W - 1)
+                from_y, from_x = random.randint(0, H - 256), random.randint(0, W - 256)
                 patch256x256 = imgs_w[:, :, from_y:from_y+256, from_x:from_x+256]
                 patches.append(patch256x256)
 
