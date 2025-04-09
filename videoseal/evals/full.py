@@ -27,6 +27,7 @@ Arguments invertory:
     
 import argparse
 import os
+import random
 
 import numpy as np
 import omegaconf
@@ -65,6 +66,7 @@ def evaluate(
     interpolation: dict = {"mode": "bilinear", "align_corners": False, "antialias": True},
     lowres_attenuation: bool = False,
     skip_image_metrics: bool = False,
+    use_single_message: bool = False,
 ):
     """
     Gives detailed evaluation metrics for a model on a given dataset.
@@ -87,6 +89,11 @@ def evaluate(
 
     # create lpips
     lpips_loss = LPIPS(net="alex").eval() if not skip_image_metrics else None
+
+    if use_single_message:
+        random_message = model.get_random_msg(1)
+        with open(os.path.join(output_dir, "message.txt"), "w") as f:
+            f.write(','.join(map(str, random_message.squeeze().tolist())))
 
     # save the metrics as csv
     metrics_path = os.path.join(output_dir, "metrics.csv")
@@ -113,7 +120,7 @@ def evaluate(
             # does cpu -> gpu -> cpu when gpu is available
             print(f"embedding")
             timer.start()
-            outputs = model.embed(imgs, is_video=is_video, interpolation=interpolation, lowres_attenuation=lowres_attenuation)
+            outputs = model.embed(imgs, msgs=random_message if use_single_message else None, is_video=is_video, interpolation=interpolation, lowres_attenuation=lowres_attenuation)
             metrics['embed_time'] = timer.end()
             msgs = outputs["msgs"]  # b k
             imgs_w = outputs["imgs_w"]  # b c h w
@@ -293,7 +300,8 @@ def main():
     group.add_argument('--decoding', type=bool_inst, default=True, help='Whether to evaluate decoding metrics')
     group.add_argument('--detection', type=bool_inst, default=False, help='Whether to evaluate detection metrics')
     group.add_argument('--skip_image_metrics', type=bool_inst, default=False, help='Whether to skip computing image quality metrics')
-
+    group.add_argument('--use_single_message', type=bool_inst, default=False, help='All images/videos will use the same random message')
+    
     group = parser.add_argument_group('Interpolation')
     group.add_argument('--interpolation_mode', type=str, default='bilinear',
                       choices=['nearest', 'bilinear', 'bicubic', 'area'],
@@ -379,6 +387,7 @@ def main():
         interpolation = interpolation,
         lowres_attenuation = args.lowres_attenuation,
         skip_image_metrics = args.skip_image_metrics,
+        use_single_message = args.use_single_message,
     )
 
     # Print mean

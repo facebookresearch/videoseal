@@ -94,28 +94,25 @@ class FluxModel:
 
 
 if __name__ == "__main__":
-    assert len(sys.argv) >= 2, "Usage: python thirdparty_watermark_removal.py <image_dir> [output_dir]"
+    assert len(sys.argv) >= 2, "Usage: python thirdparty_watermark_removal.py <image_dir> [output_dir [max_images]]"
     image_dir = sys.argv[1]
     output_dir = os.path.normpath(sys.argv[2] if len(sys.argv) > 2 else "output")
+    max_images = int(sys.argv[3]) if len(sys.argv) > 3 else None
 
-    strengths = [0, 3, 9, 15, 21] #list(range(25))[::3]
+    strengths = [0, 1, 3, 9, 15] #list(range(25))[::3]
     for i in strengths:
         os.makedirs(output_dir + f"_{i:02d}", exist_ok=True)
     
     model = FluxModel(name="flux-dev", device="cuda")
 
-    image_files = glob.glob(os.path.join(image_dir, "*.png"))
+    image_files = sorted(glob.glob(os.path.join(image_dir, "*.png")))
+    image_files = [x for x in image_files if not x.endswith("ori.png") and not x.endswith("diff.png")]
+    if max_images is not None:
+        image_files = image_files[:max_images]
+    
     for image_file in tqdm.tqdm(image_files):
         image_ori = Image.open(image_file)
         
-        # outputs = []
         for i in strengths:
-            image = model.denoise(image=image_ori, step=-2 - i)
+            image = model.denoise(image=image_ori, step=-1 - i)
             image.save(os.path.join(output_dir + f"_{i:02d}", os.path.basename(image_file)))
-            
-            # outputs.append(image)
-        # outputs = [image_ori.resize(outputs[0].size)] + outputs
-        
-        # output_image = Image.fromarray(np.concatenate(
-        #     [np.array(img) for img in outputs], axis=1
-        # )).save(os.path.join(output_dir, os.path.basename(image_file)))

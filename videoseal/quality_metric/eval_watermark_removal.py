@@ -68,16 +68,10 @@ def compute_metrics(wm_image: Image, ref_image: Image, detect_fc):
     }
 
 
-def eval(source_image_dir, altered_image_dir, method_name, original_image_dir=None):
-    detect_fc = get_model(method_name, source_image_dir)
-
-    source_image_files = sorted(glob.glob(os.path.join(source_image_dir, "*.png")))
+def eval(altered_images, watermark_image_dir, original_image_dir, detect_fc):
     results = {}
-
-    for image_file in tqdm.tqdm(source_image_files):
-        altered_image_file = os.path.join(altered_image_dir, os.path.basename(image_file))
-        if not os.path.exists(altered_image_file):
-            continue
+    for altered_image_file in tqdm.tqdm(altered_images):
+        image_file = os.path.join(watermark_image_dir, os.path.basename(altered_image_file))
 
         src_img = Image.open(image_file)
         img = Image.open(altered_image_file)
@@ -93,7 +87,7 @@ def eval(source_image_dir, altered_image_dir, method_name, original_image_dir=No
 
         ori_img = src_img
         if original_image_dir is not None:
-            original_image_file = os.path.join(original_image_dir, os.path.basename(image_file)).replace("_1_wm.png", "_0_ori.png")
+            original_image_file = os.path.join(original_image_dir, os.path.basename(image_file).replace("_1_wm.png", "_0_ori.png"))
             ori_img = Image.open(original_image_file)
         
         metrics = compute_metrics(tgt_img, ori_img, detect_fc)
@@ -103,25 +97,54 @@ def eval(source_image_dir, altered_image_dir, method_name, original_image_dir=No
 
 
 if __name__ == "__main__":
-    method = "baseline/cin"
-    source_image_dir = "input/CIN_100_wm"
-    original_image_dir = "input/CIN_100_ori"
-    altered_image_dirs = sorted(glob.glob("outputs/CIN_100*"))
+    base_dir = "data/watermarked_images"
+    watermarking_methods = [os.path.basename(m) for m in sorted(glob.glob(base_dir + "/*"))]
+
+    method_name_mapping = {
+        "CIN": "baseline/cin",
+        "MBRS": "baseline/mbrs",
+        "TrustMark": "baseline/trustmark",
+        "VideoSealv1": "videoseal_0.0",
+        "VideoSealv2pp256bits": "videoseal_1.0"
+    }
+    removal_methods = sorted(glob.glob("data/watermarks_removed_*/*"))
+
+    print("Running the following evaluations...")
+    run_params = []
+    for method_dir in removal_methods:
+        removal_method = os.path.basename(os.path.dirname(method_dir)).replace("watermarks_removed_", "")
+        wm_method = os.path.basename(method_dir).split("_")[0]
+        additional_params = ",".join(os.path.basename(method_dir).split("_")[1:])
+
+        if wm_method not in method_name_mapping:
+            print(f"  ! Method {wm_method} does not have associated any watermark detection model.")
+            continue
+        if wm_method not in watermarking_methods:
+            print(f"  ! Method {wm_method} does not have any watermarked images.")
+            continue
+
+        print(f"  '{removal_method}' for '{wm_method}' with params: {additional_params}")
+        run_params.append((removal_method, method_dir, wm_method, additional_params))
+    print("-" * 36)
 
     joint_results = []
-    for altered_image_dir in altered_image_dirs:
-        results = eval(source_image_dir, altered_image_dir, method, original_image_dir=original_image_dir)
-        joint_results.append((os.path.basename(altered_image_dir), results))
-        break
+    for _, method_dir, wm_method, _ in run_params:
+        watermark_image_dir = os.path.join(base_dir, wm_method)
+        detect_fc = get_model(method_name_mapping[wm_method], watermark_image_dir)
+
+        altered_images = sorted(glob.glob(os.path.join(method_dir, "*.png")))
+        joint_results.append(
+            eval(altered_images, watermark_image_dir, watermark_image_dir, detect_fc)
+        )
 
     # print results
     metrics = ["bit_acc", "log_pvalue", "psnr", "cvvdp"]
-    HEADER = f"{'TYPE':30}" + "".join([f"{x:>12}" for x in metrics])
+    HEADER = f"{'REMOVAL METHOD':25}{'WATERMARK':15}" + "".join([f"{x:>12}" for x in metrics])
     print(HEADER)
     print("-" * len(HEADER))
 
-    for wm_removal_name, results in joint_results:
-        print(f"{wm_removal_name:30}", end="")
+    for params, results in zip(run_params, joint_results):
+        print(f"{params[0] + ' (' + params[3] + ')':25}{params[2]:15}", end="")
         for metric in metrics:
             r = np.mean([v[metric] for v in results.values()])
             print(f"{r:12.3f}", end="")

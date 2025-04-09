@@ -1,50 +1,12 @@
-import os
 import sys
 import copy
-import glob
 import tqdm
 import numpy as np
-from PIL import Image
-from torch.utils.data import Dataset
 
 sys.path.append("../../")
 from videoseal.quality_metric import thirdparty_metrics
 from videoseal.quality_metric import artifact_discriminator_metric
-
-
-class DummyPairedDataset(Dataset):
-
-    def __init__(self, method1, method2=None, max_size=None, data_root=None):
-        ROOT = "/private/home/soucek/videoseal/metrics"
-        if data_root is not None:
-            ROOT = data_root
-        
-        assert os.path.exists(os.path.join(ROOT, method1))
-        if method2 is not None:
-            assert os.path.exists(os.path.join(ROOT, method2))
-
-        self.files = sorted(glob.glob(os.path.join(ROOT, method1, "*_val_1_wm.png")))
-        self.method1, self.method2 = method1, method2
-        self.max_size = max_size
-
-    def __len__(self):
-        return len(self.files)
-
-    def __getitem__(self, idx):
-        if self.method2 is None:
-            fn1, fn2 = self.files[idx], self.files[idx].replace(f"_val_1_wm.png", f"_val_0_ori.png")
-        else:
-            fn1, fn2 = self.files[idx], self.files[idx].replace(f"/{self.method1}/", f"/{self.method2}/")
-        
-        img1, img2 = Image.open(fn1), Image.open(fn2)
-        assert img1.size == img2.size
-
-        if self.max_size is not None:
-            coef = max(img1.size) / self.max_size
-            new_size = round(img1.size[0] / coef), round(img1.size[1] / coef)
-            img1, img2 = img1.resize(new_size), img2.resize(new_size)
-
-        return img1, img2
+from videoseal.quality_metric.metrics_utils import DummyPairedDataset
 
 
 class Evaluator:

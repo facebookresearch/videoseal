@@ -10,7 +10,7 @@ from PIL import Image, ImageFont, ImageDraw
 
 sys.path.append("../../")
 from videoseal.models import build_extractor
-from videoseal.quality_metric.eval_metrics import DummyPairedDataset
+from videoseal.quality_metric.metrics_utils import DummyPairedDataset
 
 
 patchify_image = torchvision.transforms.Compose([
@@ -148,9 +148,10 @@ def optimize_multiple(img: Image, model, device="cuda:0", num_steps=[100], lr=0.
 
 
 if __name__ == "__main__":
-    assert len(sys.argv) >= 2, "Usage: python artifact_discriminator_watermark_removal.py <image_dir> [output_dir]"
+    assert len(sys.argv) >= 2, "Usage: python artifact_discriminator_watermark_removal.py <image_dir> [output_dir [max_images]]"
     image_dir = sys.argv[1]
     output_dir = os.path.normpath(sys.argv[2] if len(sys.argv) > 2 else "output")
+    max_images = int(sys.argv[3]) if len(sys.argv) > 3 else None
 
     device = "cuda"
     model = get_artifact_discriminator(device=device)
@@ -160,9 +161,13 @@ if __name__ == "__main__":
         os.makedirs(output_dir + f"_{i:03d}", exist_ok=True)
     
     image_files = sorted(glob.glob(os.path.join(image_dir, "*.png")))
+    image_files = [x for x in image_files if not x.endswith("ori.png") and not x.endswith("diff.png")]
+    if max_images is not None:
+        image_files = image_files[:max_images]
+    
     for image_file in tqdm.tqdm(image_files):
         image_ori = Image.open(image_file)
         
-        images = optimize_multiple(image_ori, model, device=device, num_steps=strengths, patchify=True)
+        images = optimize_multiple(image_ori, model, device=device, num_steps=strengths, patchify=False)
         for i, image in zip(strengths, images):
             image.save(os.path.join(output_dir + f"_{i:03d}", os.path.basename(image_file)))
