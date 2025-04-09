@@ -53,3 +53,26 @@
     ```bash
     python -m videoseal.quality_metric.eval_watermark_removal
     ```
+
+
+# Watermark Forging
+
+1. **Generate watermarked images for multiple methods.**
+
+    (see above)
+
+2. **Remove watermark using our _artifact discriminator_.**
+
+    (see above)
+
+3. **Forge the watermarks and compute the metrics.**
+
+    To forge watermarks, besides our method, we also implement simple watermark averaging ([Can Simple Averaging Defeat Modern Watermarks?](https://proceedings.neurips.cc/paper_files/paper/2024/file/67b2e2e895380fa6acd537c2894e490e-Paper-Conference.pdf)) and watermarked noise pasting ([Robustness of AI-Image Detectors: Fundamental Limits and Practical Attacks](https://arxiv.org/pdf/2310.00076)).
+
+    Once the watermarked images are in `data/watermarked_images/<wm_method_name>` and the images with removed watermarks in `data/watermarks_removed_ours/<wm_method_name>`, the following script can be run to forge the watermarks and compute the metrics.
+
+    ```bash
+    python -m videoseal.quality_metric.eval_watermark_forging /private/home/soucek/videoseal/data/paste_to_images /large_experiments/omniseal/sa-1b-full/test/test
+    ```
+
+    The script uses two folders with clean non-watermarked images: The forged watermarks are pasted onto the images in the first folder. The images from the second folder are used to compute the mean watermark (by substracting many watermarked and non-watermarked images).
