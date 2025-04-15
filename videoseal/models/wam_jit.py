@@ -18,7 +18,6 @@ from ..modules.jnd import JND
 from .embedder import Embedder
 from .extractor import Extractor
 
-
 class Blender(nn.Module):
     def __init__(self, scaling_i, scaling_w):
         super(Blender, self).__init__()

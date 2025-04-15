@@ -17,7 +17,7 @@ except ImportError:
     print("CompressAI package not found. Install with pip install compressai")
 
 try:
-    from diffusers import VQModel, AutoencoderKL
+    from diffusers import AutoencoderKL
     DIFFUSERS_AVAILABLE = True
 except ImportError:
     DIFFUSERS_AVAILABLE = False
@@ -54,10 +54,7 @@ def get_model(model_name, quality):
 
 def get_diffusers_model(model_id):
     """Load a model from the Diffusers library"""
-    if 'vqgan' in model_id.lower() or 'vq-' in model_id.lower():
-        model = VQModel.from_pretrained(model_id)
-    else:
-        model = AutoencoderKL.from_pretrained(model_id)
+    model = AutoencoderKL.from_pretrained(model_id)
     return model
 
 
