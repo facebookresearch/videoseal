@@ -1,6 +1,6 @@
 """
 Example usage (cluster 2 gpus):
-    torchrun --nproc_per_node=2 train.py --local_rank 0
+    torchrun --nproc-per-node=2 train.py --local_rank 0
 Example usage (cluster 1 gpu):
     torchrun train.py --debug_slurm
     For eval full only:
@@ -12,7 +12,7 @@ Examples:
 
     1/ image training
 
-    OMP_NUM_THREADS=40 torchrun --nproc_per_node=2 train.py --local_rank 0 \
+    OMP_NUM_THREADS=40 torchrun --nproc-per-node=2 train.py --local_rank 0 \
         --video_dataset none --image_dataset sa-1b-full-resized --workers 8 \
         --extractor_model convnext_tiny --embedder_model unet_small2_yuv_quant --hidden_size_multiplier 1 --nbits 128 \
         --scaling_w_schedule Cosine,scaling_min=0.2,start_epoch=200,epochs=200 --scaling_w 1.0 --scaling_i 1.0 --attenuation jnd_1_1 \
@@ -21,7 +21,7 @@ Examples:
 
     2/ video finetuning
     
-    OMP_NUM_THREADdS=40 torchrun --nproc_per_node=2 train.py --local_rank 0 \
+    OMP_NUM_THREADS=40 torchrun --nproc-per-node=2 train.py --local_rank 0 \
         --video_dataset sa-v --image_dataset none --workers 0 --frames_per_clip 16 \
         --resume_from /checkpoint/pfz/2025_logs/0306_vseal_ydisc_release/_nbits=128/checkpoint600.pth --resume_optimizer_state True --resume_disc True  \
         --videowam_step_size 4 --lowres_attenuation True --img_size_proc 256 --img_size_val 768 --img_size 768 \
