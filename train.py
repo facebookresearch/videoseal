@@ -21,7 +21,7 @@ Examples:
 
     2/ video finetuning
     
-    OMP_NUM_THREADS=40 torchrun --nproc_per_node=2 train.py --local_rank 0 \
+    OMP_NUM_THREADdS=40 torchrun --nproc_per_node=2 train.py --local_rank 0 \
         --video_dataset sa-v --image_dataset none --workers 0 --frames_per_clip 16 \
         --resume_from /checkpoint/pfz/2025_logs/0306_vseal_ydisc_release/_nbits=128/checkpoint600.pth --resume_optimizer_state True --resume_disc True  \
         --videowam_step_size 4 --lowres_attenuation True --img_size_proc 256 --img_size_val 768 --img_size 768 \
@@ -79,7 +79,7 @@ def get_parser():
         group.add_argument(*args, **kwargs)
 
     group = parser.add_argument_group('Dataset parameters')
-    aa("--image_dataset", type=str, 
+    aa("--image_dataset", type=str,
         help="Name of the image dataset.", default="sa-1b")
     aa("--video_dataset", type=str,
         help="Name of the video dataset.", default="sa-v")
