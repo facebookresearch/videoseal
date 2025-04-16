@@ -628,8 +628,6 @@ def train_one_epoch(
 
         # some data loaders return batch_data, masks, frames_positions as well
         batch_imgs, batch_masks = batch_items[0], batch_items[1]
-        
-        breakpoint()
 
         # videos are too big to have a batch of them
         # so we do batch accumulation with bsz = 1
@@ -660,7 +658,7 @@ def train_one_epoch(
 
             # forward
             outputs = wam(imgs, masks, is_video=is_video)
-            ["preds"] /= params.temperature
+            outputs["preds"] /= params.temperature
 
             # last layer is used for gradient scaling
             last_layer = wam.embedder.get_last_layer() if not params.distributed else wam.module.embedder.get_last_layer()
