@@ -9,7 +9,7 @@ ipykernel
 pycocotools
 pandas
 PyWavelets
-pyav==14.0.1
+pyav
 scikit-image
 pandas
 tqdm
