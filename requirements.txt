@@ -9,7 +9,6 @@ ipykernel
 pycocotools
 pandas
 PyWavelets
-pyav
 scikit-image
 pandas
 tqdm
@@ -24,3 +23,4 @@ tqdm
 timm
 scipy
 ffmpeg-python
+av
