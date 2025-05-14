@@ -4,11 +4,14 @@ Test with:
 """
 
 import io
-
+import random
+import typing as tp
 import torch
 import torch.nn as nn
+import torch.nn.functional as _F
 import torchvision.transforms as transforms
 import torchvision.transforms.functional as F
+from torchvision.transforms import v2
 from PIL import Image
 
 
@@ -114,7 +117,7 @@ class JPEG(nn.Module):
         return image, mask
     
     def __repr__(self):
-        return f"JPEG"
+        return "JPEG"
 
 
 class GaussianBlur(nn.Module):
@@ -161,6 +164,30 @@ class MedianFilter(nn.Module):
     
     def __repr__(self):
         return f"MedianFilter"
+
+
+class Pad(nn.Module):
+    def __init__(self, img_size: int, pad_value: tp.Optional[int] = None):
+        super(Pad, self).__init__()
+
+        # If padding is not specified, we get random border
+        if pad_value is None:
+            pad_value = random.randint(0, img_size // 2)
+        self.pad = v2.Pad(padding=pad_value)
+
+    def forward(self, image):
+        pad_image = self.pad(image)
+        adapt_dim = False
+        if len(pad_image.shape) < 4:  # c h w  -> b c h w
+            adapt_dim = True
+            pad_image = pad_image.unsqueeze(0)
+
+        # Resize to original image size
+        h, w = image.size(-2), image.size(-1)
+        pad_image = nn.functional.interpolate(pad_image, size=(h, w), mode="bilinear", align_corners=True)
+        if adapt_dim:
+            pad_image = pad_image.squeeze(0)
+        return pad_image
 
 
 class Brightness(nn.Module):
