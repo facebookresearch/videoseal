@@ -1,8 +1,9 @@
 import matplotlib.pyplot as plt
 import torch
-from torchvision.utils import draw_bounding_boxes, draw_segmentation_masks
+
 from torchvision import tv_tensors
 from torchvision.transforms.v2 import functional as F
+from torchvision.utils import draw_bounding_boxes, draw_segmentation_masks
 
 
 def plot(imgs, row_title=None, **imshow_kwargs):
@@ -37,7 +38,12 @@ def plot(imgs, row_title=None, **imshow_kwargs):
             if boxes is not None:
                 img = draw_bounding_boxes(img, boxes, colors="yellow", width=3)
             if masks is not None:
-                img = draw_segmentation_masks(img, masks.to(torch.bool), colors=["green"] * masks.shape[0], alpha=.65)
+                img = draw_segmentation_masks(
+                    img,
+                    masks.to(torch.bool),
+                    colors=["green"] * masks.shape[0],
+                    alpha=0.65,
+                )
 
             ax = axs[row_idx, col_idx]
             ax.imshow(img.permute(1, 2, 0).numpy(), **imshow_kwargs)
