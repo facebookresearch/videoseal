@@ -8,11 +8,12 @@ import random
 import typing as tp
 import torch
 import torch.nn as nn
-import torch.nn.functional as _F
 import torchvision.transforms as transforms
 import torchvision.transforms.functional as F
 from torchvision.transforms import v2
-from PIL import Image
+from PIL import Image, ImageFont, ImageDraw
+
+from ..data.transforms import default_transform
 
 
 def jpeg_compress(image: torch.Tensor, quality: int) -> torch.Tensor:
@@ -188,6 +189,77 @@ class Pad(nn.Module):
         if adapt_dim:
             pad_image = pad_image.squeeze(0)
         return pad_image
+
+
+class InsertMemeText(nn.Module):
+
+    def __init__(self, text: str, color: str = "white", image_size: int = 256, font_size: int = 24, rel_pos: int = 10):
+        super(InsertMemeText, self).__init__()
+
+        # Get font
+        self.font = self._prepare_font(font_size)
+
+        # Split long text in multiple lines, with space between them
+        self.lines = self._prepare_lines(text, image_size)
+
+        self.rel_pos = rel_pos
+        self.color = color
+
+    def _prepare_font(self, font_size: int = 24):
+        # Get a true type font safely via matplotlib's font_manager.
+        # We could get rid of this and use a separate .ttf file instead, but fonts like Arial
+        # can be tricky due to licensing
+        from matplotlib import font_manager
+        dejavu_font_path = font_manager.findfont(font_manager.FontProperties())
+        return ImageFont.truetype(dejavu_font_path, size=font_size)
+
+    def _prepare_lines(self, text: str, image_size: int = 256):
+
+        # Since all images are of equal size, we can probe one fake image to calculate the wrap text
+        fake_image = transforms.ToPILImage()(torch.rand(3, image_size, image_size))
+        draw = ImageDraw.Draw(fake_image)
+        words = text.split()
+        lines = []
+        line = ""
+        max_width = image_size - 5
+
+        for word in words:
+            _line = f"{line} {word}"
+            if draw.textlength(_line, font=self.font) <= max_width:
+                line = _line
+            else:
+                lines.append(line)
+                line = word
+
+        # flush the last line
+        if line:
+            lines.append(line)
+
+        ascent, descent = self.font.getmetrics()
+        line_height = ascent + descent + 5  # Add spacing
+
+        return lines, line_height
+
+    def meme_single(self, img):
+        pil_image = transforms.ToPILImage()(img)
+        draw = ImageDraw.Draw(pil_image)
+        lines, line_height = self.lines
+        width = pil_image.size[0]
+        x, y = width // 2, self.rel_pos
+        for line in lines:
+            draw.text((x, y), line, font=self.font, fill=self.color, anchor="mm")
+            y += line_height
+
+        return default_transform(pil_image)
+
+    def forward(self, image):
+        """Add the meme text to the image tensor at the relative position"""
+        if len(image.size()) == 4:  # batch mode
+            img_memes = [self.meme_single(i) for i in image]
+        else:
+            img_memes = [self.meme_single(image)]
+
+        return torch.stack(img_memes)
 
 
 class Brightness(nn.Module):
