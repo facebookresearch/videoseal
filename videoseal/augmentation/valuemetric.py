@@ -262,6 +262,30 @@ class InsertMemeText(nn.Module):
         return torch.stack(img_memes)
 
 
+class InsertLogo(nn.Module):
+    def __init__(self, logo_path: str, image_size: int = 256, logo_scale: float = 0.2):
+        super(InsertLogo, self).__init__()
+        logo_image = Image.open(logo_path).convert("RGBA")
+        logo_max_size = int(min(image_size, image_size) * logo_scale)
+        logo_image.thumbnail((logo_max_size, logo_max_size), Image.Resampling.LANCZOS)
+        logo_width, logo_height = logo_image.size
+        self.logo_pos = (image_size - logo_width, image_size - logo_height)
+        self.logo_img = logo_image
+
+    def embed_logo_single(self, img):
+        pil_image = transforms.ToPILImage()(img)
+        pil_image.paste(self.logo_img, self.logo_pos, self.logo_img)
+        return default_transform(pil_image)
+
+    def forward(self, image):
+        if len(image.size()) == 4:  # batch mode
+            img_logos = [self.embed_logo_single(i) for i in image]
+        else:
+            img_logos = [self.embed_logo_single(image)]
+
+        return torch.stack(img_logos)
+
+
 class Brightness(nn.Module):
     def __init__(self, min_factor=None, max_factor=None):
         super(Brightness, self).__init__()

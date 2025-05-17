@@ -15,7 +15,8 @@ from .geometric import (Crop, HorizontalFlip, Identity, Perspective, Resize,
                         Rotate)
 from .masks import get_mask_embedder
 from .valuemetric import (JPEG, Brightness, Contrast, GaussianBlur, Hue,
-                          MedianFilter, Saturation, Pad, InsertMemeText)
+                          MedianFilter, Saturation, Pad, InsertMemeText,
+                          InsertLogo)
 from .video import VideoCompressorAugmenter, DropFrame, H264, H265, H264rgb
 from .neuralcompression import (BMSHJ2018Hyperprior, BMSHJ2018Factorized, 
                                 MBT2018Mean, MBT2018, Cheng2020Anchor, Cheng2020Attn,
@@ -33,6 +34,7 @@ name2aug = {
     'gaussian_blur': GaussianBlur,
     'pad': Pad,
     "meme": InsertMemeText,
+    "logo": InsertLogo,
     'median_filter': MedianFilter,
     'brightness': Brightness,
     'contrast': Contrast,
