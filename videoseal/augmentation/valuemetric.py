@@ -115,7 +115,7 @@ class JPEG(nn.Module):
         else:
             image = self.jpeg_single(image, quality)
         return image, mask
-    
+
     def __repr__(self):
         return "JPEG"
 
@@ -161,13 +161,13 @@ class MedianFilter(nn.Module):
         else:
             image = median_filter(image, kernel_size)
         return image, mask
-    
+
     def __repr__(self):
         return f"MedianFilter"
 
 
 class Pad(nn.Module):
-    def __init__(self, img_size: int, pad_value: tp.Optional[int] = None):
+    def __init__(self, img_size: int = 256, pad_value: tp.Optional[int] = None):
         super(Pad, self).__init__()
 
         # If padding is not specified, we get random border
