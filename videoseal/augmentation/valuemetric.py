@@ -407,7 +407,6 @@ if __name__ == "__main__":
 
     import torch
     from PIL import Image
-    from torchvision.transforms import ToTensor
     from torchvision.utils import save_image
 
     from ..data.transforms import default_transform
