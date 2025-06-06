@@ -95,28 +95,31 @@ message = torch.randint(0, 2, (1, 256)).float().to(device)
 # Embed watermark in video.
 with torch.no_grad():
     # Returns watermarked video directly.
-    watermarked_video = model.embed(video_tensor, message, is_video=True)
+    video_tensor_w = model.embed(video_tensor, message, is_video=True)
 
 # Convert back to uint8 for saving.
-watermarked_video = (watermarked_video.cpu() * 255.0).to(torch.uint8)
+watermarked_video = (video_tensor_w.cpu() * 255.0).to(torch.uint8)
 # Convert back to format expected by write_video [T, H, W, C].
 watermarked_video = watermarked_video.permute(0, 2, 3, 1)
 
 # Save watermarked video with original audio.
-output_path = "watermarked_video.mp4"
-# Get original video fps from metadata.
-fps = metadata["video_fps"]
-write_video(output_path, watermarked_video, audio, fps=fps)
-print(f"Saved watermarked video to {output_path}")
+try:
+    output_path = "watermarked_video.mp4"
+    # Get original video fps from metadata.
+    fps = metadata["video_fps"]
+    write_video(output_path, watermarked_video, fps=fps)
+    print(f"Saved watermarked video to {output_path}")
+except Exception as e:
+    print(e)
 
 # Detect message from watermarked video.
 with torch.no_grad():
     # Returns predictions for each frame.
-    frame_preds = model.detect(video_tensor, is_video=True)
+    frame_preds = model.detect(video_tensor_w, is_video=True)
     
     # Aggregate predictions across frames.
     aggregated_msg = model.detect_video_and_aggregate(
-        video_tensor,
+        video_tensor_w,
         aggregation="avg"  # Options: "avg", "squared_avg", "l1norm_avg", "l2norm_avg"
     )
     
