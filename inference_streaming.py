@@ -20,6 +20,10 @@ from videoseal.models import Videoseal
 from videoseal.evals.metrics import bit_accuracy
 
 
+def get_random_msg(bsz: int = 1, nbits=256) -> torch.Tensor:
+    return torch.randint(0, 2, (bsz, nbits))
+
+
 def embed_video_clip(
     model: Videoseal, clip: np.ndarray, msgs: torch.Tensor
 ) -> np.ndarray:
@@ -75,7 +79,7 @@ def embed_video(
     )
 
     # Create a random message
-    msgs = model.get_random_msg()
+    msgs = get_random_msg()
     with open(output_path.replace(".mp4", ".txt"), "w") as f:
         f.write("".join([str(msg.item()) for msg in msgs[0]]))
 
