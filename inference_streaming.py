@@ -32,7 +32,7 @@ def embed_video_clip(
     outputs = model.embed(
         clip_tensor, msgs=msgs, is_video=True,
     )
-    if not isinstance(outputs, dict):
+    if isinstance(outputs, dict):
         assert "imgs_w" in outputs, "Output should contain 'imgs_w' key"
         processed_clip = outputs["imgs_w"]
     else:
