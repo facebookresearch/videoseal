@@ -15,7 +15,6 @@ import subprocess
 import torch
 import tqdm
 
-import videoseal
 from videoseal.utils.cfg import setup_model_from_checkpoint
 from videoseal.models import Videoseal
 from videoseal.evals.metrics import bit_accuracy
@@ -178,7 +177,7 @@ def main(args):
     video_model.to(device)
 
     # Compile the model if necessary (i.e. model is not already compiled or jitted)
-    if hasattr(video_model, "compile"):
+    if not isinstance(video_model, torch.jit.ScriptModule):
         video_model.compile()
 
     # Create the output directory and path
