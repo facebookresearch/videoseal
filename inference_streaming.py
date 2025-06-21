@@ -29,7 +29,7 @@ def embed_video_clip(
 ) -> np.ndarray:
     clip_tensor = torch.tensor(clip, dtype=torch.float32).permute(0, 3, 1, 2) / 255.0
     outputs = model.embed(
-        clip_tensor, msgs=msgs, is_video=True, lowres_attenuation=True
+        clip_tensor, msgs=msgs, is_video=True,
     )
     processed_clip = outputs["imgs_w"]
     processed_clip = (processed_clip * 255.0).byte().permute(0, 2, 3, 1).numpy()
