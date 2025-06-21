@@ -38,7 +38,7 @@ def embed_video_clip(
     else:
         assert isinstance(outputs, torch.Tensor), f"Output should be a tensor, get {type(outputs)}"
         processed_clip = outputs
-    processed_clip = (processed_clip * 255.0).byte().permute(0, 2, 3, 1).numpy()
+    processed_clip = (processed_clip * 255.0).byte().permute(0, 2, 3, 1).cpu().numpy()
     return processed_clip
 
 
