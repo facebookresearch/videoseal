@@ -20,8 +20,8 @@ from videoseal.models import Videoseal
 from videoseal.evals.metrics import bit_accuracy
 
 
-def get_random_msg(bsz: int = 1, nbits=256) -> torch.Tensor:
-    return torch.randint(0, 2, (bsz, nbits))
+def get_random_msg(bsz: int = 1, nbits=256, device: str = "cpu") -> torch.Tensor:
+    return torch.randint(0, 2, (bsz, nbits), device=device)
 
 
 def embed_video_clip(
@@ -37,7 +37,7 @@ def embed_video_clip(
 
 
 def embed_video(
-    model: Videoseal, input_path: str, output_path: str, chunk_size: int, crf: int = 23
+    model: Videoseal, msgs, input_path: str, output_path: str, chunk_size: int, crf: int = 23
 ) -> None:
     # Read video dimensions
     probe = ffmpeg.probe(input_path)
@@ -77,11 +77,6 @@ def embed_video(
         .overwrite_output()
         .run_async(pipe_stdin=True, pipe_stderr=subprocess.PIPE)
     )
-
-    # Create a random message
-    msgs = get_random_msg()
-    with open(output_path.replace(".mp4", ".txt"), "w") as f:
-        f.write("".join([str(msg.item()) for msg in msgs[0]]))
 
     # Process the video
     frame_size = width * height * 3
@@ -188,8 +183,13 @@ def main(args):
     os.makedirs(args.output_dir, exist_ok=True)
     args.output = os.path.join(args.output_dir, os.path.basename(args.input))
 
+    # Create a random message
+    msgs = get_random_msg(device=device)
+    with open(args.output.replace(".mp4", ".txt"), "w") as f:
+        f.write("".join([str(msg.item()) for msg in msgs[0]]))
+
     # Embed the video
-    msgs_ori = embed_video(video_model, args.input, args.output, 16)
+    msgs_ori = embed_video(video_model, msgs, args.input, args.output, 16)
     print(f"Saved watermarked video to {args.output}")
 
     # Detect the watermark in the video
