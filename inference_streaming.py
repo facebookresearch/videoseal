@@ -32,7 +32,12 @@ def embed_video_clip(
     outputs = model.embed(
         clip_tensor, msgs=msgs, is_video=True,
     )
-    processed_clip = outputs["imgs_w"]
+    if not isinstance(outputs, dict):
+        assert "imgs_w" in outputs, "Output should contain 'imgs_w' key"
+        processed_clip = outputs["imgs_w"]
+    else:
+        assert isinstance(outputs, torch.Tensor), f"Output should be a tensor, get {type(outputs)}"
+        processed_clip = outputs
     processed_clip = (processed_clip * 255.0).byte().permute(0, 2, 3, 1).numpy()
     return processed_clip
 
