@@ -16,6 +16,7 @@ import torch
 import tqdm
 
 import videoseal
+from videoseal.utils.cfg import setup_model_from_checkpoint
 from videoseal.models import Videoseal
 from videoseal.evals.metrics import bit_accuracy
 
@@ -168,10 +169,14 @@ def detect_video(model: Videoseal, input_path: str, chunk_size: int) -> None:
 def main(args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    video_model = videoseal.load("videoseal")
+    video_model = setup_model_from_checkpoint(args.model)
+    # video_model = videoseal.load("videoseal")
     video_model.eval()
     video_model.to(device)
-    video_model.compile()
+
+    # Compile the model if necessary (i.e. model is not already compiled or jitted)
+    if hasattr(video_model, "compile"):
+        video_model.compile()
 
     # Create the output directory and path
     os.makedirs(args.output_dir, exist_ok=True)
@@ -218,6 +223,9 @@ if __name__ == "__main__":
     import videoseal.utils as utils
 
     parser = argparse.ArgumentParser(description="Process a video with Video Seal")
+    parser.add_argument(
+        "--model", type=str, default="videoseal", help="Model name to use"
+    ) 
     parser.add_argument("--input", type=str, help="Input video path")
     parser.add_argument(
         "--output_dir", type=str, help="Output directory", default="outputs"
