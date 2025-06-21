@@ -169,7 +169,10 @@ def detect_video(model: Videoseal, input_path: str, chunk_size: int) -> None:
 def main(args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    video_model = setup_model_from_checkpoint(args.model)
+    if args.model.endswith(".jit"):
+        video_model = torch.jit.load(args.model)
+    else:
+        video_model = setup_model_from_checkpoint(args.model)
     # video_model = videoseal.load("videoseal")
     video_model.eval()
     video_model.to(device)
