@@ -216,35 +216,35 @@ def main(args):
     bit_acc = bit_accuracy(soft_msgs, msgs_ori).item() * 100
     print(f"Binary message extracted with {bit_acc:.1f}% bit accuracy")
 
-    if args.do_audio:
-        # Placeholder to do audio watermarking as well
-        pass
-    else:
-        # Copy just the audio from the original video
-        temp_output = args.output + ".tmp"
-        os.rename(args.output, temp_output)
+    # if args.do_audio:
+    #     # Placeholder to do audio watermarking as well
+    #     pass
+    # else:
+    #     # Copy just the audio from the original video
+    #     temp_output = args.output + ".tmp"
+    #     os.rename(args.output, temp_output)
 
-        audiostream = ffmpeg.input(args.input)
-        videostream = ffmpeg.input(temp_output)
-        process3 = (
-            ffmpeg.output(
-                videostream.video,
-                audiostream.audio,
-                args.output,
-                vcodec="copy",
-                acodec="copy",
-            )
-            .overwrite_output()
-            .run_async(pipe_stderr=subprocess.PIPE)
-        )
-        _, err = process3.communicate()
-        if err:
-            print("Error copying audio:")
-            for line in process3.stderr:
-                print(line.decode("utf-8").strip())
-        process3.wait()
-        os.remove(temp_output)
-        print("Copied audio from the original video")
+    #     audiostream = ffmpeg.input(args.input)
+    #     videostream = ffmpeg.input(temp_output)
+    #     process3 = (
+    #         ffmpeg.output(
+    #             videostream.video,
+    #             audiostream.audio,
+    #             args.output,
+    #             vcodec="copy",
+    #             acodec="copy",
+    #         )
+    #         .overwrite_output()
+    #         .run_async(pipe_stderr=subprocess.PIPE)
+    #     )
+    #     _, err = process3.communicate()
+    #     if err:
+    #         print("Error copying audio:")
+    #         for line in process3.stderr:
+    #             print(line.decode("utf-8").strip())
+    #     process3.wait()
+    #     os.remove(temp_output)
+    #     print("Copied audio from the original video")
 
 
 if __name__ == "__main__":
