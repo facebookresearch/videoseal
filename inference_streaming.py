@@ -89,15 +89,17 @@ def embed_video(
     chunk = np.zeros((chunk_size, height, width, 3), dtype=np.uint8)
     frames_in_chunk = 0
 
-    for in_bytes in tqdm.tqdm(
-        iter(lambda: process1.stdout.read(frame_size), b""),
+    _pbar = tqdm.tqdm(
         total=num_frames,
         desc="Watermark embedding",
-    ):
+    )
+
+    for in_bytes in iter(lambda: process1.stdout.read(frame_size), b""):
         # Convert bytes to frame and add to chunk
         frame = np.frombuffer(in_bytes, np.uint8).reshape([height, width, 3])
         chunk[frames_in_chunk] = frame
         frames_in_chunk += 1
+        _pbar.update(1)
 
         # Process chunk when full
         if frames_in_chunk == chunk_size:
@@ -109,8 +111,11 @@ def embed_video(
     # Process final partial chunk if any
     if frames_in_chunk > 0:
         print(f"Flushing remaining {frames_in_chunk} frames")
+        _pbar.update(frames_in_chunk)
         processed_frames = embed_video_clip(model, chunk[:frames_in_chunk], msgs)
         process2.stdin.write(processed_frames.tobytes())
+    
+    _pbar.close()
 
     process1.stdout.close()
     process2.stdin.close()
