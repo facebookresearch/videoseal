@@ -68,7 +68,7 @@ def embed_video(
             s="{}x{}".format(width, height),
             r=fps,
         )
-        .run_async(pipe_stdout=True, pipe_stderr=subprocess.PIPE)
+        .run_async(pipe_stdout=True, pipe_stderr=False)
     )
     # Open the output video with optimal thread usage.
     process2 = (
@@ -81,7 +81,7 @@ def embed_video(
         )
         .output(output_path, vcodec=codec, pix_fmt="yuv420p", r=fps)
         .overwrite_output()
-        .run_async(pipe_stdin=True, pipe_stderr=subprocess.PIPE)
+        .run_async(pipe_stdin=True, pipe_stderr=False)
     )
 
     # Process the video
@@ -160,7 +160,7 @@ def detect_video(model: Videoseal, input_path: str, chunk_size: int) -> None:
     process1 = (
         ffmpeg.input(input_path)
         .output("pipe:", format="rawvideo", pix_fmt="rgb24")
-        .run_async(pipe_stdout=True, pipe_stderr=subprocess.PIPE)
+        .run_async(pipe_stdout=True, pipe_stderr=False)
     )
 
     # Process the video
@@ -220,35 +220,35 @@ def main(args):
     bit_acc = bit_accuracy(soft_msgs, msgs_ori).item() * 100
     print(f"Binary message extracted with {bit_acc:.1f}% bit accuracy")
 
-    # if args.do_audio:
-    #     # Placeholder to do audio watermarking as well
-    #     pass
-    # else:
-    #     # Copy just the audio from the original video
-    #     temp_output = args.output + ".tmp"
-    #     os.rename(args.output, temp_output)
+    if args.do_audio:
+        # Placeholder to do audio watermarking as well
+        pass
+    else:
+        # Copy just the audio from the original video
+        temp_output = args.output + ".tmp"
+        os.rename(args.output, temp_output)
 
-    #     audiostream = ffmpeg.input(args.input)
-    #     videostream = ffmpeg.input(temp_output)
-    #     process3 = (
-    #         ffmpeg.output(
-    #             videostream.video,
-    #             audiostream.audio,
-    #             args.output,
-    #             vcodec="copy",
-    #             acodec="copy",
-    #         )
-    #         .overwrite_output()
-    #         .run_async(pipe_stderr=subprocess.PIPE)
-    #     )
-    #     _, err = process3.communicate()
-    #     if err:
-    #         print("Error copying audio:")
-    #         for line in process3.stderr:
-    #             print(line.decode("utf-8").strip())
-    #     process3.wait()
-    #     os.remove(temp_output)
-    #     print("Copied audio from the original video")
+        audiostream = ffmpeg.input(args.input)
+        videostream = ffmpeg.input(temp_output)
+        process3 = (
+            ffmpeg.output(
+                videostream.video,
+                audiostream.audio,
+                args.output,
+                vcodec="copy",
+                acodec="copy",
+            )
+            .overwrite_output()
+            .run_async(pipe_stdout=True, pipe_stderr=False)
+        )
+        _, err = process3.communicate()
+        if err:
+            print("Error copying audio:")
+            for line in process3.stderr:
+                print(line.decode("utf-8").strip())
+        process3.wait()
+        os.remove(temp_output)
+        print("Copied audio from the original video")
 
 
 if __name__ == "__main__":
