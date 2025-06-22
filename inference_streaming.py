@@ -108,11 +108,19 @@ def embed_video(
 
     # Process final partial chunk if any
     if frames_in_chunk > 0:
+        print(f"Flushing remaining {frames_in_chunk} frames")
         processed_frames = embed_video_clip(model, chunk[:frames_in_chunk], msgs)
         process2.stdin.write(processed_frames.tobytes())
 
     process1.stdout.close()
     process2.stdin.close()
+    
+    _, err2 = process2.communicate()
+    if err2:
+        print("Error during video processing:")
+        for line in process2.stderr:
+            print(line.decode("utf-8").strip())
+
     process1.wait()
     process2.wait()
 
@@ -224,6 +232,11 @@ def main(args):
             .overwrite_output()
             .run_async(pipe_stderr=subprocess.PIPE)
         )
+        _, err = process3.communicate()
+        if err:
+            print("Error copying audio:")
+            for line in process3.stderr:
+                print(line.decode("utf-8").strip())
         process3.wait()
         os.remove(temp_output)
         print("Copied audio from the original video")
