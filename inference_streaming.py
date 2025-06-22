@@ -114,12 +114,16 @@ def embed_video(
         _pbar.update(frames_in_chunk)
         processed_frames = embed_video_clip(model, chunk[:frames_in_chunk], msgs)
         process2.stdin.write(processed_frames.tobytes())
-    
+
     _pbar.close()
 
     process1.stdout.close()
     process2.stdin.close()
-    
+    _, err1 = process1.communicate()
+    if err1:
+        print("Error during video reading:")
+        for line in process1.stderr:
+            print(line.decode("utf-8").strip())
     _, err2 = process2.communicate()
     if err2:
         print("Error during video processing:")
