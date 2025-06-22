@@ -119,16 +119,6 @@ def embed_video(
 
     process1.stdout.close()
     process2.stdin.close()
-    _, err1 = process1.communicate()
-    if err1:
-        print("Error during video reading:")
-        for line in process1.stderr:
-            print(line.decode("utf-8").strip())
-    _, err2 = process2.communicate()
-    if err2:
-        print("Error during video processing:")
-        for line in process2.stderr:
-            print(line.decode("utf-8").strip())
 
     process1.wait()
     process2.wait()
@@ -241,11 +231,6 @@ def main(args):
             .overwrite_output()
             .run_async(pipe_stdout=True, pipe_stderr=False)
         )
-        _, err = process3.communicate()
-        if err:
-            print("Error copying audio:")
-            for line in process3.stderr:
-                print(line.decode("utf-8").strip())
         process3.wait()
         os.remove(temp_output)
         print("Copied audio from the original video")
