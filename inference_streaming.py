@@ -79,7 +79,7 @@ def embed_video(
             s="{}x{}".format(width, height),
             r=fps,
         )
-        .output(output_path, vcodec="libx264", pix_fmt="yuv420p", r=fps)
+        .output(output_path, vcodec=codec, pix_fmt="yuv420p", r=fps)
         .overwrite_output()
         .run_async(pipe_stdin=True, pipe_stderr=subprocess.PIPE)
     )
