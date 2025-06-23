@@ -204,7 +204,7 @@ def main(args):
         f.write("".join([str(msg.item()) for msg in msgs[0]]))
 
     # Embed the video
-    msgs_ori = embed_video(video_model, msgs, args.input, args.output, 16, device=device)
+    msgs_ori = embed_video(video_model, msgs, args.input, args.output, 16)
     print(f"Saved watermarked video to {args.output}")
 
     # Detect the watermark in the video
