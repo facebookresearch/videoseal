@@ -130,9 +130,13 @@ def detect_video_clip(model: Videoseal, clip: np.ndarray, device="cpu") -> torch
     clip_tensor = torch.tensor(clip, dtype=torch.float32).permute(0, 3, 1, 2) / 255.0
     clip_tensor = clip_tensor.to(device)
     outputs = model.detect(clip_tensor, is_video=True)
-    output_bits = outputs["preds"][
-        :, 1:
-    ]  # exclude the first which may be used for detection
+    if isinstance(outputs, dict):
+        assert "preds" in outputs, "Output should contain 'preds' key"
+        # exclude the first which may be used for detection
+        output_bits = outputs["preds"][:, 1:]
+    else:
+        assert isinstance(outputs, torch.Tensor), f"Output should be a tensor, get {type(outputs)}"
+        output_bits = outputs[:, 1:]
     return output_bits
 
 
