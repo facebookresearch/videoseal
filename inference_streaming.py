@@ -68,7 +68,7 @@ def embed_video(
             s="{}x{}".format(width, height),
             r=fps,
         )
-        .run_async(pipe_stdout=True, pipe_stderr=subprocess.PIPE)
+        .run_async(pipe_stdout=True, pipe_stderr=False)
     )
     # Open the output video with optimal thread usage.
     process2 = (
@@ -79,9 +79,9 @@ def embed_video(
             s="{}x{}".format(width, height),
             r=fps,
         )
-        .output(output_path, vcodec="libx264", pix_fmt="yuv420p", r=fps)
+        .output(output_path, vcodec=codec, pix_fmt="yuv420p", r=fps)
         .overwrite_output()
-        .run_async(pipe_stdin=True, pipe_stderr=subprocess.PIPE)
+        .run_async(pipe_stdin=True, pipe_stderr=False)
     )
 
     # Process the video
@@ -89,15 +89,17 @@ def embed_video(
     chunk = np.zeros((chunk_size, height, width, 3), dtype=np.uint8)
     frames_in_chunk = 0
 
-    for in_bytes in tqdm.tqdm(
-        iter(lambda: process1.stdout.read(frame_size), b""),
+    _pbar = tqdm.tqdm(
         total=num_frames,
         desc="Watermark embedding",
-    ):
+    )
+
+    for in_bytes in iter(lambda: process1.stdout.read(frame_size), b""):
         # Convert bytes to frame and add to chunk
         frame = np.frombuffer(in_bytes, np.uint8).reshape([height, width, 3])
         chunk[frames_in_chunk] = frame
         frames_in_chunk += 1
+        _pbar.update(1)
 
         # Process chunk when full
         if frames_in_chunk == chunk_size:
@@ -108,23 +110,33 @@ def embed_video(
 
     # Process final partial chunk if any
     if frames_in_chunk > 0:
+        print(f"Flushing remaining {frames_in_chunk} frames")
+        _pbar.update(frames_in_chunk)
         processed_frames = embed_video_clip(model, chunk[:frames_in_chunk], msgs)
         process2.stdin.write(processed_frames.tobytes())
 
+    _pbar.close()
+
     process1.stdout.close()
     process2.stdin.close()
+
     process1.wait()
     process2.wait()
 
     return msgs
 
 
-def detect_video_clip(model: Videoseal, clip: np.ndarray) -> torch.Tensor:
+def detect_video_clip(model: Videoseal, clip: np.ndarray, device="cpu") -> torch.Tensor:
     clip_tensor = torch.tensor(clip, dtype=torch.float32).permute(0, 3, 1, 2) / 255.0
+    clip_tensor = clip_tensor.to(device)
     outputs = model.detect(clip_tensor, is_video=True)
-    output_bits = outputs["preds"][
-        :, 1:
-    ]  # exclude the first which may be used for detection
+    if isinstance(outputs, dict):
+        assert "preds" in outputs, "Output should contain 'preds' key"
+        # exclude the first which may be used for detection
+        output_bits = outputs["preds"][:, 1:]
+    else:
+        assert isinstance(outputs, torch.Tensor), f"Output should be a tensor, get {type(outputs)}"
+        output_bits = outputs[:, 1:]
     return output_bits
 
 
@@ -143,7 +155,7 @@ def detect_video(model: Videoseal, input_path: str, chunk_size: int) -> None:
     process1 = (
         ffmpeg.input(input_path)
         .output("pipe:", format="rawvideo", pix_fmt="rgb24")
-        .run_async(pipe_stdout=True, pipe_stderr=subprocess.PIPE)
+        .run_async(pipe_stdout=True, pipe_stderr=False)
     )
 
     # Process the video
@@ -152,6 +164,7 @@ def detect_video(model: Videoseal, input_path: str, chunk_size: int) -> None:
     frame_count = 0
     soft_msgs = []
     pbar = tqdm.tqdm(total=num_frames, desc="Watermark extraction")
+    device = next(model.parameters()).device
     while True:
         in_bytes = process1.stdout.read(frame_size)
         if not in_bytes:
@@ -161,7 +174,7 @@ def detect_video(model: Videoseal, input_path: str, chunk_size: int) -> None:
         frame_count += 1
         pbar.update(1)
         if frame_count % chunk_size == 0:
-            soft_msgs.append(detect_video_clip(model, chunk))
+            soft_msgs.append(detect_video_clip(model, chunk, device=device))
     process1.stdout.close()
     process1.wait()
 
@@ -222,7 +235,7 @@ def main(args):
                 acodec="copy",
             )
             .overwrite_output()
-            .run_async(pipe_stderr=subprocess.PIPE)
+            .run_async(pipe_stdout=True, pipe_stderr=False)
         )
         process3.wait()
         os.remove(temp_output)
