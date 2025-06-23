@@ -126,8 +126,9 @@ def embed_video(
     return msgs
 
 
-def detect_video_clip(model: Videoseal, clip: np.ndarray) -> torch.Tensor:
+def detect_video_clip(model: Videoseal, clip: np.ndarray, device="cpu") -> torch.Tensor:
     clip_tensor = torch.tensor(clip, dtype=torch.float32).permute(0, 3, 1, 2) / 255.0
+    clip_tensor = clip_tensor.to(device)
     outputs = model.detect(clip_tensor, is_video=True)
     output_bits = outputs["preds"][
         :, 1:
@@ -159,6 +160,7 @@ def detect_video(model: Videoseal, input_path: str, chunk_size: int) -> None:
     frame_count = 0
     soft_msgs = []
     pbar = tqdm.tqdm(total=num_frames, desc="Watermark extraction")
+    device = next(model.parameters()).device
     while True:
         in_bytes = process1.stdout.read(frame_size)
         if not in_bytes:
@@ -168,7 +170,7 @@ def detect_video(model: Videoseal, input_path: str, chunk_size: int) -> None:
         frame_count += 1
         pbar.update(1)
         if frame_count % chunk_size == 0:
-            soft_msgs.append(detect_video_clip(model, chunk))
+            soft_msgs.append(detect_video_clip(model, chunk, device=device))
     process1.stdout.close()
     process1.wait()
 
@@ -202,7 +204,7 @@ def main(args):
         f.write("".join([str(msg.item()) for msg in msgs[0]]))
 
     # Embed the video
-    msgs_ori = embed_video(video_model, msgs, args.input, args.output, 16)
+    msgs_ori = embed_video(video_model, msgs, args.input, args.output, 16, device=device)
     print(f"Saved watermarked video to {args.output}")
 
     # Detect the watermark in the video
