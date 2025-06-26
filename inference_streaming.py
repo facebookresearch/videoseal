@@ -148,7 +148,6 @@ def detect_video(model: Videoseal, input_path: str, chunk_size: int) -> None:
     )
     width = int(video_info["width"])
     height = int(video_info["height"])
-    codec = video_info["codec_name"]
     num_frames = int(probe["streams"][0]["nb_frames"])
 
     # Open the input video
