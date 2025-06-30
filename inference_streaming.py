@@ -15,35 +15,25 @@ import subprocess
 import torch
 import tqdm
 
-from videoseal.utils.cfg import setup_model_from_checkpoint
+import videoseal
 from videoseal.models import Videoseal
 from videoseal.evals.metrics import bit_accuracy
-
-
-def get_random_msg(bsz: int = 1, nbits=256, device: str = "cpu") -> torch.Tensor:
-    return torch.randint(0, 2, (bsz, nbits), device=device)
 
 
 def embed_video_clip(
     model: Videoseal, clip: np.ndarray, msgs: torch.Tensor
 ) -> np.ndarray:
     clip_tensor = torch.tensor(clip, dtype=torch.float32).permute(0, 3, 1, 2) / 255.0
-    clip_tensor = clip_tensor.to(msgs.device)
     outputs = model.embed(
-        clip_tensor, msgs=msgs, is_video=True,
+        clip_tensor, msgs=msgs, is_video=True, lowres_attenuation=True
     )
-    if isinstance(outputs, dict):
-        assert "imgs_w" in outputs, "Output should contain 'imgs_w' key"
-        processed_clip = outputs["imgs_w"]
-    else:
-        assert isinstance(outputs, torch.Tensor), f"Output should be a tensor, get {type(outputs)}"
-        processed_clip = outputs
-    processed_clip = (processed_clip * 255.0).byte().permute(0, 2, 3, 1).cpu().numpy()
+    processed_clip = outputs["imgs_w"]
+    processed_clip = (processed_clip * 255.0).byte().permute(0, 2, 3, 1).numpy()
     return processed_clip
 
 
 def embed_video(
-    model: Videoseal, msgs, input_path: str, output_path: str, chunk_size: int, crf: int = 23
+    model: Videoseal, input_path: str, output_path: str, chunk_size: int, crf: int = 23
 ) -> None:
     # Read video dimensions
     probe = ffmpeg.probe(input_path)
@@ -83,6 +73,11 @@ def embed_video(
         .overwrite_output()
         .run_async(pipe_stdin=True, pipe_stderr=False)
     )
+
+    # Create a random message
+    msgs = model.get_random_msg()
+    with open(output_path.replace(".mp4", ".txt"), "w") as f:
+        f.write("".join([str(msg.item()) for msg in msgs[0]]))
 
     # Process the video
     frame_size = width * height * 3
@@ -185,29 +180,17 @@ def detect_video(model: Videoseal, input_path: str, chunk_size: int) -> None:
 def main(args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    if args.model.endswith(".jit"):
-        video_model = torch.jit.load(args.model)
-    else:
-        video_model = setup_model_from_checkpoint(args.model)
-    # video_model = videoseal.load("videoseal")
+    video_model = videoseal.load("videoseal")
     video_model.eval()
     video_model.to(device)
-
-    # Compile the model if necessary (i.e. model is not already compiled or jitted)
-    if not isinstance(video_model, torch.jit.ScriptModule):
-        video_model.compile()
+    video_model.compile()
 
     # Create the output directory and path
     os.makedirs(args.output_dir, exist_ok=True)
     args.output = os.path.join(args.output_dir, os.path.basename(args.input))
 
-    # Create a random message
-    msgs = get_random_msg(device=device)
-    with open(args.output.replace(".mp4", ".txt"), "w") as f:
-        f.write("".join([str(msg.item()) for msg in msgs[0]]))
-
     # Embed the video
-    msgs_ori = embed_video(video_model, msgs, args.input, args.output, 16)
+    msgs_ori = embed_video(video_model, args.input, args.output, 16)
     print(f"Saved watermarked video to {args.output}")
 
     # Detect the watermark in the video
@@ -247,9 +230,6 @@ if __name__ == "__main__":
     import videoseal.utils as utils
 
     parser = argparse.ArgumentParser(description="Process a video with Video Seal")
-    parser.add_argument(
-        "--model", type=str, default="videoseal", help="Model name to use"
-    ) 
     parser.add_argument("--input", type=str, help="Input video path")
     parser.add_argument(
         "--output_dir", type=str, help="Output directory", default="outputs"
