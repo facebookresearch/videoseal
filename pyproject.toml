@@ -1,0 +1,72 @@
+[build-system]
+requires = ["flit_core >=3.2,<4", "packaging~=23.1", "setuptools~=67.8", "wheel~=0.40"]
+build-backend = "flit_core.buildapi"
+
+[project]
+name = "videoseal"
+authors = [{name = "Facebook AI Research"}]
+requires-python = ">=3.9"
+dynamic = ["version", "description"]
+
+dependencies = [
+    "PyWavelets",
+    "av",
+    "calflops",
+    "decord",
+    "einops",
+    "lpips",
+    "omegaconf",
+    "opencv-python",
+    "pandas",
+    "pycocotools",
+    "pytorch_msssim",
+    "safetensors",
+    "scikit-image",
+    "scipy",
+    "setuptools",
+    "tensorboard",
+    "timm==0.9.16",
+    "torch>=2.3.1",
+    "tqdm",
+    "transformers",
+]
+
+[project.optional-dependencies]
+  dev = [
+    "black",
+    "conda-pack",
+    "flake8",
+    "func_argparse",
+    "ipykernel",
+    "isort",
+    "pre-commit",
+    "pytest",
+  ]
+
+[tool.flake8]
+extend_ignore = ["E", "Y"]  # Black
+per-file-ignores = [
+    "__init__.py:F401",
+]
+
+[tool.isort]
+profile = "black"
+
+[tool.mypy]
+disable_error_code = "type-abstract,typeddict-unknown-key"
+disallow_untyped_calls = false
+disallow_untyped_defs = false
+disallow_untyped_decorators = false
+ignore_missing_imports = true
+python_version = 3.8
+show_error_codes = true
+show_error_context = true
+strict = false
+warn_unused_configs = false
+warn_unused_ignores = false
+exclude = ["notebooks"]
+
+[pytest]
+norecursedirs = [
+  "notebooks/*",
+]
