@@ -219,6 +219,8 @@ parser_sweep.add_argument("--sample", type=int, default=-1)
 parser_sweep.add_argument("--numeric", action='store_true', dest='numeric')
 parser_sweep.add_argument("--array", type=bool_flag, default=True)
 parser_sweep.add_argument("--pooling", type=int, default=1)
+parser_sweep.add_argument("--local-test", action='store_true', dest="local_test", default=False)
+parser_sweep.add_argument("--exists", type=str, default=None)
 parser_sweep.set_defaults(launch=True, numeric=False)
 
 parser_status = subparsers.add_parser("status")
@@ -278,13 +280,16 @@ if args.command == 'sweep':
     log_dir = join(expdir, "logs")
     continuing = False
     if os.path.exists(log_dir):
-        print(f"Experiment {group_root}/{name} already exists. You can: ")
-        print(f"- Run it anyway. Any output of a previous experiment with the same hyperparameters will be overwritten. The code used will be the existing code and not a fresh clone.")
-        print(
-            f"- Trash existing experiment folder and create a fresh one. The (old) experiment folder will be put in the trash ({args.trash_dir})")
-        print(f"- (default) Abort. Experiment folder will be kpet untouched and new experiments will not be run.")
-        print(f"What do you choose ? [run|trash|abort]")
-        answer = input().lower()
+        if args.exists is not None:
+            answer = args.exists.lower()
+        else:
+            print(f"Experiment {group_root}/{name} already exists. You can: ")
+            print(f"- Run it anyway. Any output of a previous experiment with the same hyperparameters will be overwritten. The code used will be the existing code and not a fresh clone.")
+            print(
+                f"- Trash existing experiment folder and create a fresh one. The (old) experiment folder will be put in the trash ({args.trash_dir})")
+            print(f"- (default) Abort. Experiment folder will be kpet untouched and new experiments will not be run.")
+            print(f"What do you choose ? [run|trash|abort]")
+            answer = input().lower()
         if answer == "run":
             continuing = True
         elif answer == "trash":
@@ -406,6 +411,23 @@ if args.command == 'sweep':
         else:
             print("Chmoding %s" % group_root)
             subprocess.check_output(["chmod -R a+w %s" % expdir], shell=True)
+        
+        if args.local_test:
+            assert args.launch is False, "You cannot test locally and launch to SLURM at the same time."
+            local_cmd = "OMP_NUM_THREADS=40 torchrun --nproc_per_node=2 "
+            with  open(join(expdir, "commands.txt"), "r") as f_cmd:
+                remote_cmd = f_cmd.readlines()[0].strip()
+            # Strip any references to python if in the command
+            remote_cmd = " ".join(el for el in remote_cmd.split(" ") if "python" not in el)
+            # Strip any attempt to set up the master port
+            if "--master_port" in remote_cmd:
+                remote_cmd = remote_cmd.replace("--master_port ", "--master_port=")
+                remote_cmd = " ".join(el for el in remote_cmd.split(" ") if "master_port=" not in el)
+            local_cmd += remote_cmd
+            # Add local_rank=0
+            local_cmd += " --local_rank=0"
+            print(f"To test the first job locally, run the following command:\n{local_cmd}")
+
     else:
         for i_param, params in enumerate(paramset):
             ext = generateExt(params, param_values, to_index=params_to_index)
