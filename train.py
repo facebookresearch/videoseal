@@ -862,9 +862,13 @@ def eval_one_epoch(
                 for transform_instance, strengths in validation_augs:
 
                     for strength in strengths:
-                        imgs_aug, masks_aug = transform_instance(
-                                imgs_masked, masks, strength)
-                        selected_aug = str(transform_instance) + f"_{strength}"
+                        if strength is None:
+                            imgs_aug, masks_aug = transform_instance(imgs_masked.to(device), masks)
+                            selected_aug = str(transform_instance)
+                        else:
+                            imgs_aug, masks_aug = transform_instance(
+                                    imgs_masked.to(device), masks, strength)
+                            selected_aug = str(transform_instance) + f"_{strength}"
                         selected_aug = selected_aug.replace(", ", "_")
 
                         # extract watermark
