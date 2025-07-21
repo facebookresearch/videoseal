@@ -16,6 +16,10 @@ This repository includes pre-trained models, training code, inference code, and 
 - March 2025: New image models, including 256-bit model with strong robustness and imperceptibility. Updates to the codebase for better performance and usability.
 - December 2024: Initial release of Video Seal, including 96-bit model, baselines and video inference and training code.
 
+## Installation:
+
+- To quickly try the stable version: `pip install videoseal`
+- For edge version (preferred for experiments), try to install from source: `pip install -e .`
 
 ## Quick start
 

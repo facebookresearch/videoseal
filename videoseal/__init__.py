@@ -8,7 +8,7 @@
 VideoSeal: Video watermarking library by Facebook AI Research.
 """
 
-__version__ = "1.0"
+__version__ = "1.0.1"
 
 def load(*args, **kwargs):
     # move the import inside a function, so it is only executed when needed,
