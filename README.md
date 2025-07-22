@@ -13,7 +13,7 @@ This repository includes pre-trained models, training code, inference code, and 
 
 ## What's New
 
-- March 2025: New image models, including 256-bit model with strong robustness and imperceptibility. Updates to the codebase for better performance and usability.
+- March 2025: New image models, including 256-bit model with stronger robustness and imperceptibility. Updates to the codebase for better performance and usability.
 - December 2024: Initial release of Video Seal, including 96-bit model, baselines and video inference and training code.
 
 
@@ -103,9 +103,9 @@ model = videoseal.load("videoseal")
 - **Legacy Model (96-bit)**: December 2024 version
   - Model name: `videoseal_0.0`
   - Download: [rgb_96b.pth](https://dl.fbaipublicfiles.com/videoseal/rgb_96b.pth)
-  - More robust but more visible watermarks
+  - More visible watermarks, a bit more robust on heavy crops
 
-Note: Video-optimized models (v1.0) will be released soon. For complete model checkpoints (with optimizer states and discriminator), see [docs/training.md](docs/training.md).
+Note: For complete model checkpoints (with optimizer states and discriminator), see [docs/training.md](docs/training.md). Video-optimized models (v1.0) should be released in the coming months.
 
 
 ### Download the other models used as baselines
