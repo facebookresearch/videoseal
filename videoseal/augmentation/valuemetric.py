@@ -4,6 +4,7 @@ Test with:
 """
 
 import io
+import sys
 import random
 import typing as tp
 import torch
@@ -95,11 +96,13 @@ class JPEG(nn.Module):
         self.min_quality = min_quality
         self.max_quality = max_quality
         self.passthrough = passthrough
+        self.relative_strength = 1.0
 
     def get_random_quality(self):
         if self.min_quality is None or self.max_quality is None:
             raise ValueError("Quality range must be specified")
-        return torch.randint(self.min_quality, self.max_quality + 1, size=(1,)).item()
+        quality = torch.randint(self.min_quality, self.max_quality + 1, size=(1,)).item()
+        return round(quality + (100 - quality) * (1 - self.relative_strength))
 
     def jpeg_single(self, image, quality):
         if self.passthrough:
@@ -126,11 +129,13 @@ class GaussianBlur(nn.Module):
         super(GaussianBlur, self).__init__()
         self.min_kernel_size = min_kernel_size
         self.max_kernel_size = max_kernel_size
+        self.relative_strength = 1.0
 
     def get_random_kernel_size(self):
         if self.min_kernel_size is None or self.max_kernel_size is None:
             raise ValueError("Kernel size range must be specified")
         kernel_size = torch.randint(self.min_kernel_size, self.max_kernel_size + 1, size=(1,)).item()
+        kernel_size = round(kernel_size + (1 - kernel_size) * (1 - self.relative_strength))
         return kernel_size + 1 if kernel_size % 2 == 0 else kernel_size
 
     def forward(self, image, mask, kernel_size=None):
@@ -148,11 +153,13 @@ class MedianFilter(nn.Module):
         self.min_kernel_size = min_kernel_size
         self.max_kernel_size = max_kernel_size
         self.passthrough = passthrough
+        self.relative_strength = 1.0
 
     def get_random_kernel_size(self):
         if self.min_kernel_size is None or self.max_kernel_size is None:
             raise ValueError("Kernel size range must be specified")
         kernel_size = torch.randint(self.min_kernel_size, self.max_kernel_size + 1, size=(1,)).item()
+        kernel_size = round(kernel_size + (1 - kernel_size) * (1 - self.relative_strength))
         return kernel_size + 1 if kernel_size % 2 == 0 else kernel_size
 
     def forward(self, image, mask, kernel_size=None):
@@ -168,16 +175,33 @@ class MedianFilter(nn.Module):
 
 
 class Pad(nn.Module):
-    def __init__(self, img_size: int = 256, pad_value: tp.Optional[int] = None):
+    def __init__(self, img_size: int = 256, pad_value: tp.Optional[int] = None, min_pad: int = None, max_pad: int = None):
         super(Pad, self).__init__()
+        if pad_value is not None:
+            txt_ = f"Warning: Using fixed padding value {pad_value} is deprecated. Please set `min_pad` and `max_pad` instead."
+            print(txt_, file=sys.stderr, flush=True)
+
+        self.min_pad = min_pad
+        self.max_pad = max_pad
+        self.pad = None
 
         # If padding is not specified, we get random border
         if pad_value is None:
             pad_value = random.randint(0, img_size // 2)
-        self.pad = v2.Pad(padding=pad_value)
+            self.pad = v2.Pad(padding=pad_value)
+
+        self.relative_strength = 1.0
 
     def forward(self, image):
-        pad_image = self.pad(image)
+        if self.pad is not None:
+            pad_image = self.pad(image)
+        else:
+            pad_value = self.min_pad + random.randint(self.min_pad, self.max_pad)
+            pad_value = round(pad_value * self.relative_strength)
+            if pad_value == 0:
+                return image
+            pad_image = v2.Pad(padding=pad_value)(image)
+
         adapt_dim = False
         if len(pad_image.shape) < 4:  # c h w  -> b c h w
             adapt_dim = True
@@ -204,6 +228,7 @@ class InsertMemeText(nn.Module):
 
         self.rel_pos = rel_pos
         self.color = color
+        self.relative_strength = 1.0
 
     def _prepare_font(self, font_size: int = 24):
         # Get a true type font safely via matplotlib's font_manager.
@@ -253,6 +278,9 @@ class InsertMemeText(nn.Module):
         return default_transform(pil_image)
 
     def forward(self, image):
+        if self.relative_strength < 0.5:
+            return image
+
         """Add the meme text to the image tensor at the relative position"""
         if len(image.size()) == 4:  # batch mode
             img_memes = [self.meme_single(i) for i in image]
@@ -271,6 +299,7 @@ class InsertLogo(nn.Module):
         logo_width, logo_height = logo_image.size
         self.logo_pos = (image_size - logo_width, image_size - logo_height)
         self.logo_img = logo_image
+        self.relative_strength = 1.0
 
     def embed_logo_single(self, img):
         pil_image = transforms.ToPILImage()(img)
@@ -278,6 +307,9 @@ class InsertLogo(nn.Module):
         return default_transform(pil_image)
 
     def forward(self, image):
+        if self.relative_strength < 0.5:
+            return image
+
         if len(image.size()) == 4:  # batch mode
             img_logos = [self.embed_logo_single(i) for i in image]
         else:
@@ -291,11 +323,13 @@ class Brightness(nn.Module):
         super(Brightness, self).__init__()
         self.min_factor = min_factor
         self.max_factor = max_factor
+        self.relative_strength = 1.0
 
     def get_random_factor(self):
         if self.min_factor is None or self.max_factor is None:
             raise ValueError("min_factor and max_factor must be provided")
-        return torch.rand(1).item() * (self.max_factor - self.min_factor) + self.min_factor
+        factor = torch.rand(1).item() * (self.max_factor - self.min_factor) + self.min_factor
+        return factor + (1 - factor) * (1 - self.relative_strength)
 
     def forward(self, image, mask, factor=None):
         factor = self.get_random_factor() if factor is None else factor
@@ -311,11 +345,13 @@ class Contrast(nn.Module):
         super(Contrast, self).__init__()
         self.min_factor = min_factor
         self.max_factor = max_factor
+        self.relative_strength = 1.0
 
     def get_random_factor(self):
         if self.min_factor is None or self.max_factor is None:
             raise ValueError("min_factor and max_factor must be provided")
-        return torch.rand(1).item() * (self.max_factor - self.min_factor) + self.min_factor
+        factor = torch.rand(1).item() * (self.max_factor - self.min_factor) + self.min_factor
+        return factor + (1 - factor) * (1 - self.relative_strength)
 
     def forward(self, image, mask, factor=None):
         factor = self.get_random_factor() if factor is None else factor
@@ -330,11 +366,13 @@ class Saturation(nn.Module):
         super(Saturation, self).__init__()
         self.min_factor = min_factor
         self.max_factor = max_factor
+        self.relative_strength = 1.0
 
     def get_random_factor(self):
         if self.min_factor is None or self.max_factor is None:
             raise ValueError("Factor range must be specified")
-        return torch.rand(1).item() * (self.max_factor - self.min_factor) + self.min_factor
+        factor = torch.rand(1).item() * (self.max_factor - self.min_factor) + self.min_factor
+        return factor + (1 - factor) * (1 - self.relative_strength)
 
     def forward(self, image, mask, factor=None):
         factor = self.get_random_factor() if factor is None else factor
@@ -349,11 +387,13 @@ class Hue(nn.Module):
         super(Hue, self).__init__()
         self.min_factor = min_factor
         self.max_factor = max_factor
+        self.relative_strength = 1.0
 
     def get_random_factor(self):
         if self.min_factor is None or self.max_factor is None:
             raise ValueError("Factor range must be specified")
-        return torch.rand(1).item() * (self.max_factor - self.min_factor) + self.min_factor
+        factor = torch.rand(1).item() * (self.max_factor - self.min_factor) + self.min_factor
+        return factor * self.relative_strength
 
     def forward(self, image, mask, factor=None):
         factor = self.get_random_factor() if factor is None else factor
@@ -368,11 +408,13 @@ class GaussianNoise(nn.Module):
         super(GaussianNoise, self).__init__()
         self.min_std = min_std
         self.max_std = max_std
+        self.relative_strength = 1.0
 
     def get_random_std(self):
         if self.min_std is None or self.max_std is None:
             raise ValueError("Standard deviation range must be specified")
-        return torch.rand(1).item() * (self.max_std - self.min_std) + self.min_std
+        std = torch.rand(1).item() * (self.max_std - self.min_std) + self.min_std
+        return std * self.relative_strength
 
     def forward(self, image, mask, std=None):
         std = self.get_random_std() if std is None else std
@@ -387,6 +429,7 @@ class GaussianNoise(nn.Module):
 class Grayscale(nn.Module):
     def __init__(self):
         super(Grayscale, self).__init__()
+        self.relative_strength = 1.0
         
     def forward(self, image, mask, *args, **kwargs):
         """
@@ -396,6 +439,7 @@ class Grayscale(nn.Module):
         # Y = 0.299 R + 0.587 G + 0.114 B
         grayscale = 0.299 * image[:, 0:1] + 0.587 * image[:, 1:2] + 0.114 * image[:, 2:3]
         grayscale = grayscale.expand_as(image)
+        grayscale = self.relative_strength * grayscale + (1 - self.relative_strength) * image
         return grayscale, mask
 
     def __repr__(self):

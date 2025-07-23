@@ -21,17 +21,23 @@ class ScalingScheduler:
         obj: object,
         attribute: str,
         name: str,
-        scaling_o: float,
-        scaling_min: float,
-        epochs: int,
+        scaling_o: float = None,
+        scaling_min: float = None,
+        epochs: int = None,
         start_epoch: int = 0,
-        end_epoch: int = None
+        end_epoch: int = None,
+        scaling_start: float = None,
+        scaling_end: float = None,
     ):
+        assert epochs is not None, "Number of epochs must be provided"
+        assert scaling_o is not None or scaling_start is not None, "Either scaling_o or scaling_start must be provided"
+        assert scaling_min is not None or scaling_end is not None, "Either scaling_min or scaling_end must be provided"
+
         self.obj = obj
         self.attribute = attribute
         self.name = name.lower()
-        self.scaling = scaling_o
-        self.scaling_min = scaling_min
+        self.scaling = scaling_o if scaling_o is not None else scaling_start
+        self.scaling_min = scaling_min if scaling_min is not None else scaling_end
         self.epochs = epochs
         self.start_epoch = start_epoch
         self.end_epoch = end_epoch if end_epoch is not None else start_epoch + epochs

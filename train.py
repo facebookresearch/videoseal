@@ -111,6 +111,9 @@ def get_parser():
        help="Path to the augmentation config file")
     aa("--num_augs", type=int, default=1,
        help="Number of augmentations to apply")
+    aa("--augmentation_schedule", type=str, default=None,
+       help="Scaling factor schedule for the augmentation strength. Ex: 'Linear,scaling_start=0.0,scaling_end=1.0,epochs=100,start_epoch=0'")
+
 
     group = parser.add_argument_group('Image and watermark parameters')
     aa("--nbits", type=int, default=32,
@@ -280,6 +283,16 @@ def main(params):
     do_neural_compression = any(
         aug_name in neural_compression_augs for aug_name in augmenter_cfg.augs.keys()
     )
+
+    # Build the scaling schedule. Default is none
+    if params.augmentation_schedule is not None and params.augmentation_schedule.lower() != "none":
+        augmentation_schedule_params = uoptim.parse_params(params.augmentation_schedule)
+        augmentation_scheduler = uoptim.ScalingScheduler(
+            obj=augmenter, attribute="relative_strength",
+            **augmentation_schedule_params
+        )
+    else:
+        augmentation_scheduler = None
 
     # Build the extractor model
     extractor_cfg = omegaconf.OmegaConf.load(params.extractor_config)
@@ -520,6 +533,8 @@ def main(params):
             scheduler_d.step(epoch)
         if scaling_scheduler is not None:
             scaling_scheduler.step(epoch)
+        if augmentation_scheduler is not None:
+            augmentation_scheduler.step(epoch)
 
         if params.distributed:
             epoch_train_loader.sampler.set_epoch(epoch)

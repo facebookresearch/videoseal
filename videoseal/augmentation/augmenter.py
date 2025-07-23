@@ -82,6 +82,7 @@ class Augmenter(nn.Module):
         augs: dict,
         augs_params: dict,
         num_augs: int = 1,
+        relative_strength: float = 1.0,
         **kwargs: dict
     ) -> None:
         """
@@ -115,6 +116,21 @@ class Augmenter(nn.Module):
         self.num_augs = num_augs
         # Put as module list to allow for to(device).
         self.augs = nn.ModuleList(self.augs)  
+        self.relative_strength = relative_strength
+
+        for aug in self.augs + self.augs_video:
+            if not hasattr(aug, 'relative_strength'):
+                print(f"Warning: Augmentation {aug.__class__.__name__} does not have relative_strength attribute.")
+
+    def __setattr__(self, name, value):
+        if name == "relative_strength":
+            for aug in self.augs:
+                if hasattr(aug, 'relative_strength'):
+                    aug.relative_strength = value
+            for aug in self.augs_video:
+                if hasattr(aug, 'relative_strength'):
+                    aug.relative_strength = value
+        return super().__setattr__(name, value)
 
     def parse_augmentations(
         self,

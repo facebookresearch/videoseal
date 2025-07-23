@@ -12,6 +12,7 @@ import torchvision.transforms.functional as F
 class Identity(nn.Module):
     def __init__(self):
         super(Identity, self).__init__()
+        self.relative_strength = 1.0
 
     def forward(self, image, mask=None, *args, **kwargs):
         return image, mask
@@ -29,6 +30,7 @@ class Rotate(nn.Module):
             self.base_angles = torch.tensor([-90, 0, 0, 90])
         else:
             self.base_angles = torch.tensor([0])
+        self.relative_strength = 1.0
 
     def get_random_angle(self):
         if self.min_angle is None or self.max_angle is None:
@@ -36,18 +38,25 @@ class Rotate(nn.Module):
         base_angle = self.base_angles[
             torch.randint(0, len(self.base_angles), size=(1,))
         ].item()
-        return base_angle + torch.randint(self.min_angle, self.max_angle + 1, size=(1,)).item()
+        if self.relative_strength < 0.5:
+            base_angle = 0
+        
+        min_angle = round(self.min_angle * self.relative_strength)
+        max_angle = round(self.max_angle * self.relative_strength)
+        return base_angle, torch.randint(min_angle, max_angle + 1, size=(1,)).item()
 
     def forward(self, image, mask=None, angle=None):
-        angle = angle or self.get_random_angle()
-        base_angle = angle // 90 * 90
-        angle = angle - base_angle
-        # rotate base_angle first with expand=True to avoid cropping
-        image = F.rotate(image, base_angle, expand=True)
-        mask = F.rotate(mask, base_angle, expand=True) if mask is not None else mask
-        # rotate the rest with expand=False
-        image = F.rotate(image, angle)
-        mask = F.rotate(mask, angle) if mask is not None else mask
+        if angle is not None:
+            image = F.rotate(image, angle)
+            mask = F.rotate(mask, angle) if mask is not None else mask
+        else:
+            base_angle, angle = self.get_random_angle()
+            # rotate base_angle first with expand=True to avoid cropping
+            image = F.rotate(image, base_angle, expand=True)
+            mask = F.rotate(mask, base_angle, expand=True) if mask is not None else mask
+            # rotate the rest with expand=False
+            image = F.rotate(image, angle)
+            mask = F.rotate(mask, angle) if mask is not None else mask
         return image, mask
     
     def __repr__(self):
@@ -60,15 +69,18 @@ class Resize(nn.Module):
         # float between 0 and 1, representing the total area of the output image compared to the input image
         self.min_size = min_size
         self.max_size = max_size
+        self.relative_strength = 1.0
 
     def get_random_size(self, h, w):
         if self.min_size is None or self.max_size is None:
             raise ValueError("min_size and max_size must be provided")
+        min_size = self.min_size + (1 - self.min_size) * (1 - self.relative_strength)
+        max_size = self.max_size + (1 - self.max_size) * (1 - self.relative_strength)
         output_size = (
-            torch.randint(int(self.min_size * h),
-                          int(self.max_size * h) + 1, size=(1, )).item(),
-            torch.randint(int(self.min_size * w),
-                          int(self.max_size * w) + 1, size=(1, )).item()
+            torch.randint(int(min_size * h),
+                          int(max_size * h) + 1, size=(1, )).item(),
+            torch.randint(int(min_size * w),
+                          int(max_size * w) + 1, size=(1, )).item()
         )
         return output_size
 
@@ -91,15 +103,18 @@ class Crop(nn.Module):
         super(Crop, self).__init__()
         self.min_size = min_size
         self.max_size = max_size
+        self.relative_strength = 1.0
 
     def get_random_size(self, h, w):
         if self.min_size is None or self.max_size is None:
             raise ValueError("min_size and max_size must be provided")
+        min_size = self.min_size + (1 - self.min_size) * (1 - self.relative_strength)
+        max_size = self.max_size + (1 - self.max_size) * (1 - self.relative_strength)
         output_size = (
-            torch.randint(int(self.min_size * h),
-                          int(self.max_size * h) + 1, size=(1, )).item(),
-            torch.randint(int(self.min_size * w),
-                          int(self.max_size * w) + 1, size=(1, )).item()
+            torch.randint(int(min_size * h),
+                          int(max_size * h) + 1, size=(1, )).item(),
+            torch.randint(int(min_size * w),
+                          int(max_size * w) + 1, size=(1, )).item()
         )
         return output_size
 
@@ -124,13 +139,15 @@ class Perspective(nn.Module):
         super(Perspective, self).__init__()
         self.min_distortion_scale = min_distortion_scale
         self.max_distortion_scale = max_distortion_scale
+        self.relative_strength = 1.0
 
     def get_random_distortion_scale(self):
         if self.min_distortion_scale is None or self.max_distortion_scale is None:
             raise ValueError(
                 "min_distortion_scale and max_distortion_scale must be provided")
-        return self.min_distortion_scale + torch.rand(1).item() * \
+        distortion = self.min_distortion_scale + torch.rand(1).item() * \
             (self.max_distortion_scale - self.min_distortion_scale)
+        return distortion * self.relative_strength
 
     def forward(self, image, mask=None, distortion_scale=None):
         distortion_scale = distortion_scale or self.get_random_distortion_scale()
@@ -181,8 +198,11 @@ class Perspective(nn.Module):
 class HorizontalFlip(nn.Module):
     def __init__(self):
         super(HorizontalFlip, self).__init__()
+        self.relative_strength = 1.0
 
     def forward(self, image, mask=None, *args, **kwargs):
+        if self.relative_strength < 0.5:
+            return image, mask
         image = F.hflip(image)
         mask = F.hflip(mask) if mask is not None else mask
         return image, mask
