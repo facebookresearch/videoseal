@@ -488,16 +488,15 @@ def main(params):
         val_loaders = ((Modalities.IMAGE, image_val_loader),
                        (Modalities.VIDEO, video_val_loader))
 
-        for val_loader, modality in val_loaders:
+        for modality, val_loader in val_loaders:
             if val_loader is not None:
                 augs = get_validation_augs(
-                    modality == Modalities.VIDEO,
+                    is_video=(modality == Modalities.VIDEO),
                     do_neural_compression = do_neural_compression,
                 )
-
                 print(f"running eval on {modality} dataset.")
                 val_stats = eval_one_epoch(wam, val_loader, modality, image_detection_loss,
-                                           0, augs, validation_masks, params)
+                                           0, augs, validation_masks, params, tensorboard=tensorboard)
                 with open(os.path.join(params.output_dir, f'log_only_{modality}_eval.txt'), 'a') as f:
                     f.write(json.dumps(val_stats) + "\n")
         return
