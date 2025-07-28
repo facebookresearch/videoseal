@@ -166,6 +166,7 @@ def get_parser():
        help='If True, also load discriminator weights when resuming from checkpoint')
     aa('--resume_optimizer_state', type=utils.bool_inst, default=False,
        help='If True, also load optimizer state when resuming from checkpoint')
+    aa('--grad_clip', default=-1, type=float, help="Max norm for gradient clipping. Applied only if > 0.")
 
     group = parser.add_argument_group('Losses parameters')
     aa('--temperature', default=1.0, type=float,
@@ -753,6 +754,12 @@ def train_one_epoch(
                         "TRAIN/IMAGES/aug", outputs["imgs_aug"], epoch)
 
         # end accumulate gradients batches
+        # do gradient clipping if needed
+        if params.grad_clip > 0:
+            for optimizer in optimizers:
+                for param_group in optimizer.param_groups:
+                    torch.nn.utils.clip_grad_norm_(param_group['params'], params.grad_clip)
+
         # add optimizer step
         for optimizer_idx in optimizer_ids_for_epoch:
             optimizers[optimizer_idx].step()
