@@ -120,8 +120,8 @@ def get_validation_augs(
             (Grayscale(),         [-1]),  # No parameters needed for grayscale
             (JPEG(),              [40, 50, 60, 70, 80, 90]),
             (GaussianBlur(),      [3, 5, 9, 13, 17]),
-            (VQGAN1024(),         [0]),  # No parameters needed for VQGAN
-            (VQGAN16384(),        [0]),  # No parameters needed for VQGAN
+            # (VQGAN1024(),         [0]),  # No parameters needed for VQGAN
+            # (VQGAN16384(),        [0]),  # No parameters needed for VQGAN
             (Sequential(JPEG(), Crop(), Brightness()), [(40, 0.71, 0.5)]),
             (Sequential(JPEG(), Crop(), Brightness()), [(60, 0.71, 0.5)]),
             (Sequential(JPEG(), Crop(), Brightness()), [(80, 0.71, 0.5)]),
