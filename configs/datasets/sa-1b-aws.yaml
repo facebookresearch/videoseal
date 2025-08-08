@@ -1,0 +1,4 @@
+train_dir: /checkpoint/avseal/datasets/sa-1b-512v2/train/
+val_dir: /checkpoint/avseal/datasets/sa-1b-512v2/val/
+train_annotation_file: null
+val_annotation_file: null

@@ -190,6 +190,10 @@ def get_parser():
        help='Number of layers for the discriminator')
     aa('--disc_in_channels', default=3, type=int,
          help='Number of input channels for the discriminator')
+    aa('--disc_version', default="v1", type=str,
+         help='Version of the discriminator to use. "v1" or "v2". "v2" is the MaskBit discriminator')
+    aa('--disc_scales', default=1, type=int,
+         help='Number of scales for the discriminator.')
     aa('--lambda_artifact_disc', default=0.0, type=float,
        help='Weight for the artifact discriminator loss')
     aa('--artifact_disc_ckpt_path', default=None, type=str,
@@ -333,8 +337,9 @@ def main(params):
         balanced=params.balanced, total_norm=params.total_gnorm,
         disc_weight=params.lambda_d, percep_weight=params.lambda_i,
         detect_weight=params.lambda_det, decode_weight=params.lambda_dec,
-        disc_start=params.disc_start, disc_num_layers=params.disc_num_layers, disc_in_channels=params.disc_in_channels,
-        percep_loss=params.perceptual_loss,
+        disc_start=params.disc_start, disc_num_layers=params.disc_num_layers,
+        disc_in_channels=params.disc_in_channels, disc_version=params.disc_version,
+        disc_scales=params.disc_scales, percep_loss=params.perceptual_loss,
     ).to(device)
     print(image_detection_loss)
 
@@ -456,7 +461,7 @@ def main(params):
         optimizer=optimizer,
         optimizer_d=optimizer_d,
         scheduler=scheduler,
-        scheduler_d=scheduler_d
+        scheduler_d=scheduler_d,
     )
     start_epoch = to_restore["epoch"]
     for param_group in optimizer.param_groups:

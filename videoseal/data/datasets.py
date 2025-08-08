@@ -36,7 +36,10 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 def get_image_paths(path):
-    cache_dir = '/large_experiments/omniseal/cache/videoseal'
+    if path.startswith('/large_experiments') or path.startswith('/datasets01'):
+        cache_dir = '/large_experiments/omniseal/cache/videoseal'
+    else:
+        cache_dir = '/checkpoint/avseal/cache/videoseal'
     cache_file = path.replace('/', '_') + '.json'
     cache_file = os.path.join(cache_dir, cache_file)
     if os.path.exists(cache_file):

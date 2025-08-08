@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ..modules.discriminator import NLayerDiscriminator
+from ..modules.discriminator import build_discriminator
 from ..utils.optim import freeze_grads
 from .perceptual import PerceptualLoss
 
@@ -25,21 +25,13 @@ def adopt_weight(weight, global_step, threshold=0, value=0.):
         weight = value
     return weight
 
-def weights_init(m):
-    classname = m.__class__.__name__
-    if classname.find('Conv') != -1:
-        nn.init.normal_(m.weight.data, 0.0, 0.02)
-    elif classname.find('BatchNorm') != -1:
-        nn.init.normal_(m.weight.data, 1.0, 0.02)
-        nn.init.constant_(m.bias.data, 0)
-
 
 class VideosealLoss(nn.Module):
     def __init__(self,
                  balanced=True, total_norm=0.0,
                  disc_weight=1.0, percep_weight=1.0, detect_weight=1.0, decode_weight=0.0,
-                 disc_start=0, disc_num_layers=3, disc_in_channels=3, disc_loss="hinge", use_actnorm=False,
-                 percep_loss="lpips",
+                 disc_start=0, disc_num_layers=3, disc_in_channels=3, disc_loss="hinge",
+                 disc_version="v1", disc_scales=1, use_actnorm=False, percep_loss="lpips",
                  ):
         super().__init__()
         assert disc_loss in ["hinge", "vanilla"]
@@ -54,9 +46,13 @@ class VideosealLoss(nn.Module):
 
         # self.perceptual_loss = PerceptualLoss(percep_loss=percep_loss).to(torch.device("cuda"))
         self.perceptual_loss = PerceptualLoss(percep_loss=percep_loss)
-
-        self.discriminator = NLayerDiscriminator(
-            input_nc=disc_in_channels, n_layers=disc_num_layers, use_actnorm=use_actnorm).apply(weights_init)
+        self.discriminator = build_discriminator(
+            scales = disc_scales,
+            version = disc_version,
+            in_channels = disc_in_channels,
+            num_layers = disc_num_layers,
+            use_actnorm = use_actnorm,
+        )
         self.discriminator_iter_start = disc_start
         self.disc_loss = hinge_d_loss if disc_loss == "hinge" else nn.BCEWithLogitsLoss()
 
