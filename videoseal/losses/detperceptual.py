@@ -32,6 +32,7 @@ class VideosealLoss(nn.Module):
                  disc_weight=1.0, percep_weight=1.0, detect_weight=1.0, decode_weight=0.0,
                  disc_start=0, disc_num_layers=3, disc_in_channels=3, disc_loss="hinge",
                  disc_version="v1", disc_scales=1, use_actnorm=False, percep_loss="lpips",
+                 disc_norm_in_stem=False, disc_center_input=False
                  ):
         super().__init__()
         assert disc_loss in ["hinge", "vanilla"]
@@ -47,11 +48,13 @@ class VideosealLoss(nn.Module):
         # self.perceptual_loss = PerceptualLoss(percep_loss=percep_loss).to(torch.device("cuda"))
         self.perceptual_loss = PerceptualLoss(percep_loss=percep_loss)
         self.discriminator = build_discriminator(
-            scales = disc_scales,
-            version = disc_version,
-            in_channels = disc_in_channels,
-            num_layers = disc_num_layers,
-            use_actnorm = use_actnorm,
+            scales=disc_scales,
+            version=disc_version,
+            in_channels=disc_in_channels,
+            num_layers=disc_num_layers,
+            use_actnorm=use_actnorm,
+            norm_in_stem=disc_norm_in_stem,
+            center_input=disc_center_input
         )
         self.discriminator_iter_start = disc_start
         self.disc_loss = hinge_d_loss if disc_loss == "hinge" else nn.BCEWithLogitsLoss()

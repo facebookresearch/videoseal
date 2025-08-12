@@ -194,6 +194,10 @@ def get_parser():
          help='Version of the discriminator to use. "v1" or "v2". "v2" is the MaskBit discriminator')
     aa('--disc_scales', default=1, type=int,
          help='Number of scales for the discriminator.')
+    aa('--disc_norm_in_stem', type=utils.bool_inst, default=False,
+       help='If True, the discriminator will use normalization in the stem.')
+    aa('--disc_center_input', type=utils.bool_inst, default=False,
+         help='If True, the discriminator will center the RGB/Y input into the range [-1, 1].')
     aa('--lambda_artifact_disc', default=0.0, type=float,
        help='Weight for the artifact discriminator loss')
     aa('--artifact_disc_ckpt_path', default=None, type=str,
@@ -340,6 +344,7 @@ def main(params):
         disc_start=params.disc_start, disc_num_layers=params.disc_num_layers,
         disc_in_channels=params.disc_in_channels, disc_version=params.disc_version,
         disc_scales=params.disc_scales, percep_loss=params.perceptual_loss,
+        disc_norm_in_stem=params.disc_norm_in_stem, disc_center_input=params.disc_center_input
     ).to(device)
     print(image_detection_loss)
 

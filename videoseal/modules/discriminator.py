@@ -112,7 +112,7 @@ class NLayerDiscriminator(nn.Module):
     --> see https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix/blob/master/models/networks.py
     """
 
-    def __init__(self, input_nc=3, ndf=32, n_layers=3, use_actnorm=False):
+    def __init__(self, input_nc=3, ndf=32, n_layers=3, use_actnorm=False, norm_in_stem=False, center_input=False):
         """Construct a PatchGAN discriminator
         Parameters:
             input_nc (int)  -- the number of channels in input images
@@ -137,13 +137,21 @@ class NLayerDiscriminator(nn.Module):
 
         self.input_nc = input_nc
         self.rgb2yuv = RGB2YUV()
+        self.center_input = center_input
 
         kw = 4
         padw = 1
-        sequence = [
-            nn.Conv2d(input_nc, ndf, kernel_size=kw, stride=2, padding=padw),
-            nn.LeakyReLU(0.2, True),
-        ]
+        if norm_in_stem:
+            sequence = [
+                nn.Conv2d(input_nc, ndf, kernel_size=kw, stride=2, padding=padw),
+                norm_layer(ndf),
+                nn.LeakyReLU(0.2, True),
+            ]
+        else:
+            sequence = [
+                nn.Conv2d(input_nc, ndf, kernel_size=kw, stride=2, padding=padw),
+                nn.LeakyReLU(0.2, True),
+            ]
         nf_mult = 1
         nf_mult_prev = 1
         for n in range(1, n_layers):  # gradually increase the number of filters
@@ -187,6 +195,10 @@ class NLayerDiscriminator(nn.Module):
         # If input has 3 channels but the model is for 1 channel, only use the first channel
         if self.input_nc == 1 and input.shape[1] == 3:
             input = self.rgb2yuv(input)[:, 0:1]
+        if self.center_input:
+            # Center input to [-1, 1]
+            # This works both for RGB and Y inputs as YUV has mean around [0.5, 0.0, 0.0] but the UV components are not used
+            input = input * 2 - 1
         return self.main(input)
 
 
@@ -354,7 +366,8 @@ class NLayerDiscriminatorV2(nn.Module):
         activation_fn: str = "leaky_relu",
         blur_resample: bool = True,
         blur_kernel_size: int = 4,
-        use_maxpool: bool = False,
+        norm_in_stem: bool = False,
+        center_input: bool = False,
     ):
         """Initializes the NLayerDiscriminatorV2. 
         Discriminator taken from the MaskBit paper https://arxiv.org/abs/2409.16211
@@ -374,6 +387,8 @@ class NLayerDiscriminatorV2(nn.Module):
         ), "Blur kernel size must be in [3,5] when sampling]"
         self.input_nc = num_channels
         self.rgb2yuv = RGB2YUV()
+        self.center_input = center_input
+
         in_channel_mult = (1,) + tuple(map(lambda t: 2**t, range(num_stages)))
         init_kernel_size = 5
         if activation_fn == "leaky_relu":
@@ -381,10 +396,18 @@ class NLayerDiscriminatorV2(nn.Module):
         else:
             activation = nn.SiLU
 
-        sequence = [
-            Conv2dSame(num_channels, hidden_channels, kernel_size=init_kernel_size),
-            activation(),
-        ]
+        if norm_in_stem:
+            sequence = [
+                Conv2dSame(num_channels, hidden_channels, kernel_size=init_kernel_size),
+                nn.GroupNorm(32, hidden_channels),
+                activation(),
+            ]
+        else:
+            sequence = [
+                Conv2dSame(num_channels, hidden_channels, kernel_size=init_kernel_size),
+                activation(),
+            ]
+        
 
         BLUR_KERNEL_MAP = {
             3: (1, 2, 1),
@@ -409,9 +432,7 @@ class NLayerDiscriminatorV2(nn.Module):
                 nn.GroupNorm(32, out_channels),
                 activation(),
             ]
-        if use_maxpool:
-            sequence += [nn.AdaptiveMaxPool2d((16, 16))]
-
+        sequence += [nn.AdaptiveMaxPool2d((16, 16))]
         sequence += [
             Conv2dSame(out_channels, out_channels, 1),
             activation(),
@@ -431,6 +452,10 @@ class NLayerDiscriminatorV2(nn.Module):
         # If input has 3 channels but the model is for 1 channel, only use the first channel
         if self.input_nc == 1 and x.shape[1] == 3:
             x = self.rgb2yuv(x)[:, 0:1]
+        if self.center_input:
+            # Center input to [-1, 1]
+            # This works both for RGB and Y inputs as YUV has mean around [0.5, 0.0, 0.0] but the UV components are not used
+            x = x * 2 - 1
         return self.main(x)
 
 
@@ -442,6 +467,8 @@ class MultiscaleDisc(nn.Module):
         in_channels: int = 3,
         num_layers: int = 3,
         use_actnorm: bool = False,
+        norm_in_stem: bool = False,
+        center_input: bool = False,
     ):
         super().__init__()
         self.discriminators = nn.ModuleDict(
@@ -452,6 +479,8 @@ class MultiscaleDisc(nn.Module):
                     in_channels=in_channels,
                     num_layers=num_layers,
                     use_actnorm=use_actnorm,
+                    norm_in_stem=norm_in_stem,
+                    center_input=center_input
                 )
                 for ii in range(disc_scales)
             }
@@ -480,6 +509,8 @@ def build_discriminator(
     in_channels: int = 3,
     num_layers: int = 3,
     use_actnorm: bool = False,
+    norm_in_stem: bool = False,
+    center_input: bool = False,
 ) -> nn.Module:
     """
     Choose which version of the discriminator to use.
@@ -489,20 +520,33 @@ def build_discriminator(
         in_channels: (int) The number of input channels for the discriminator.
         num_layers: (int) The number of layers in the discriminator.
         use_actnorm: (bool) Whether to use ActNorm in the discriminator.
+        norm_in_stem: (bool) Whether to use normalization in the stem of the discriminator.
     """
     if scales == 1:
         if version == "v1":
             return NLayerDiscriminator(
                     input_nc=in_channels,
                     n_layers=num_layers,
-                    use_actnorm=use_actnorm
+                    use_actnorm=use_actnorm,
+                    norm_in_stem=norm_in_stem,
+                    center_input=center_input,
             ).apply(weights_init)
         elif version == "v2":
             return NLayerDiscriminatorV2(
                 num_channels=in_channels,
                 num_stages=num_layers,
+                norm_in_stem=norm_in_stem,
+                center_input=center_input,
             )
         else:
             raise ValueError(f"Unknown discriminator version: {version}")
     else:
-        return MultiscaleDisc(scales)
+        return MultiscaleDisc(
+            scales,
+            version,
+            in_channels,
+            num_layers,
+            use_actnorm,
+            norm_in_stem,
+            center_input
+        )
