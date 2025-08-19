@@ -113,8 +113,13 @@ class Wam(nn.Module):
         if self.round:
             imgs_w = (torch.round(imgs_w * 255) / 255 - imgs_w).detach() + imgs_w
         # augment
-        imgs_aug, masks, selected_aug = self.augmenter(
-            imgs_w, imgs, masks, is_video=False, do_resize=False)
+
+        if isinstance(self.augmenter, Augmenter):
+            imgs_aug, masks, selected_aug = self.augmenter(
+                imgs_w, imgs, masks, is_video=False, do_resize=False)
+        else:
+            imgs_aug = self.augmenter(imgs_w)
+            selected_aug = "NotAvailable"
 
         # interpolate back
         if imgs_aug.shape[-2:] != (self.img_size, self.img_size):

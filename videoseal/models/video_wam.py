@@ -236,8 +236,12 @@ class VideoWam(Wam):
             imgs_w = (torch.round(imgs_w * 255) / 255 - imgs_w).detach() + imgs_w
 
         # augment
-        imgs_aug, masks, selected_aug = self.augmenter(
-            imgs_w, imgs, masks, is_video=True, do_resize=False)
+        if isinstance(self.augmenter, Augmenter):
+            imgs_aug, masks, selected_aug = self.augmenter(
+                imgs_w, imgs, masks, is_video=True, do_resize=False)
+        else:
+            imgs_aug = self.augmenter(imgs_w.permute(1, 0, 2, 3).unsqueeze(0))  # [1, c, frames, h, w]
+            selected_aug = "NotAvailable"
 
         # interpolate augmented images to processing size for detection
         if imgs.shape[-2:] != (self.img_size, self.img_size):

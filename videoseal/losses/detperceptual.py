@@ -17,6 +17,29 @@ def hinge_d_loss(logits_real, logits_fake):
     d_loss = 0.5 * (loss_real + loss_fake)
     return d_loss
 
+
+def compute_lecam_loss(
+    logits_real_mean: torch.Tensor,
+    logits_fake_mean: torch.Tensor,
+    ema_logits_real_mean: torch.Tensor,
+    ema_logits_fake_mean: torch.Tensor
+) -> torch.Tensor:
+    """Computes the LeCam loss for the given average real and fake logits.
+
+    Args:
+        logits_real_mean -> torch.Tensor: The average real logits.
+        logits_fake_mean -> torch.Tensor: The average fake logits.
+        ema_logits_real_mean -> torch.Tensor: The EMA of the average real logits.
+        ema_logits_fake_mean -> torch.Tensor: The EMA of the average fake logits.
+
+    Returns:
+        lecam_loss -> torch.Tensor: The LeCam loss.
+    """
+    lecam_loss = torch.mean(torch.pow(F.relu(logits_real_mean - ema_logits_fake_mean), 2))
+    lecam_loss += torch.mean(torch.pow(F.relu(ema_logits_real_mean - logits_fake_mean), 2))
+    return lecam_loss
+
+
 def adopt_weight(weight, global_step, threshold=0, value=0.):
     """
     Adopt weight if global step is less than threshold
@@ -31,8 +54,9 @@ class VideosealLoss(nn.Module):
                  balanced=True, total_norm=0.0,
                  disc_weight=1.0, percep_weight=1.0, detect_weight=1.0, decode_weight=0.0,
                  disc_start=0, disc_num_layers=3, disc_in_channels=3, disc_loss="hinge",
-                 disc_version="v1", disc_scales=1, use_actnorm=False, percep_loss="lpips",
-                 disc_norm_in_stem=False, disc_center_input=False
+                 disc_version="v1", disc_scales=1, use_actnorm=False, percep_loss="lpips", disc_wm_boost=1.0,
+                 lecam_weight=0.0, lecam_ema_decay=0.999, disc_norm_in_stem=False, disc_center_input=False,
+                 disc_spectral_norm=False,
                  ):
         super().__init__()
         assert disc_loss in ["hinge", "vanilla"]
@@ -44,6 +68,7 @@ class VideosealLoss(nn.Module):
         self.detect_weight = detect_weight
         self.disc_weight = disc_weight
         self.decode_weight = decode_weight
+        self.disc_wm_boost = disc_wm_boost
 
         # self.perceptual_loss = PerceptualLoss(percep_loss=percep_loss).to(torch.device("cuda"))
         self.perceptual_loss = PerceptualLoss(percep_loss=percep_loss)
@@ -54,13 +79,20 @@ class VideosealLoss(nn.Module):
             num_layers=disc_num_layers,
             use_actnorm=use_actnorm,
             norm_in_stem=disc_norm_in_stem,
-            center_input=disc_center_input
+            center_input=disc_center_input,
+            spectral_norm=disc_spectral_norm,
         )
         self.discriminator_iter_start = disc_start
         self.disc_loss = hinge_d_loss if disc_loss == "hinge" else nn.BCEWithLogitsLoss()
 
         self.detection_loss = torch.nn.BCEWithLogitsLoss(reduction="none")
         self.decoding_loss = torch.nn.BCEWithLogitsLoss(reduction="none")
+
+        self.lecam_weight = lecam_weight
+        self.lecam_ema_decay = lecam_ema_decay
+        if self.lecam_weight > 0.0:
+            self.ema_real_logits_mean = 0
+            self.ema_fake_logits_mean = 0
 
     @torch.no_grad()
     def calculate_adaptive_weights(
@@ -124,7 +156,10 @@ class VideosealLoss(nn.Module):
 
                 with freeze_grads(self.discriminator):
                     disc_factor = adopt_weight(1.0, global_step, threshold=self.discriminator_iter_start)
-                    logits_fake = self.discriminator(reconstructions.contiguous())
+                    reconstructions_input = reconstructions.contiguous()
+                    if self.disc_wm_boost != 1.0:
+                        reconstructions_input = inputs + (reconstructions_input - inputs) * self.disc_wm_boost
+                    logits_fake = self.discriminator(reconstructions_input)
                     losses["disc"] = - logits_fake.mean()
                     weights["disc"] = disc_factor * self.disc_weight
 
@@ -184,26 +219,46 @@ class VideosealLoss(nn.Module):
             return total_loss, log
 
         if optimizer_idx == 1:  # discriminator update
+            reconstructions_input = reconstructions.contiguous().detach()
+            if self.disc_wm_boost != 1.0:
+                reconstructions_input = inputs + (reconstructions_input - inputs) * self.disc_wm_boost
+            
             if cond is None:
                 # detach here prevents gradient leakage to any module other than the discriminator
                 logits_real = self.discriminator(
                     inputs.contiguous().detach())
                 logits_fake = self.discriminator(
-                    reconstructions.contiguous().detach())
+                    reconstructions_input)
             else:
                 logits_real = self.discriminator(
                     torch.cat((inputs.contiguous().detach(), cond), dim=1))
                 logits_fake = self.discriminator(
-                    torch.cat((reconstructions.contiguous().detach(), cond), dim=1))
+                    torch.cat((reconstructions_input, cond), dim=1))
 
             disc_factor = adopt_weight(
                 1.0, global_step, threshold=self.discriminator_iter_start)
             d_loss = disc_factor * self.disc_loss(logits_real, logits_fake)
 
+            lecam_loss = torch.zeros((), device=inputs.device)
+            if self.lecam_weight > 0.0:
+                # Update the EMA of the real and fake logits.
+                self.ema_real_logits_mean = self.ema_real_logits_mean * self.lecam_ema_decay + torch.mean(logits_real).detach()  * (1 - self.lecam_ema_decay)
+                self.ema_fake_logits_mean = self.ema_fake_logits_mean * self.lecam_ema_decay + torch.mean(logits_fake).detach()  * (1 - self.lecam_ema_decay)
+
+                lecam_loss = disc_factor * compute_lecam_loss(
+                    torch.mean(logits_real),
+                    torch.mean(logits_fake),
+                    self.ema_real_logits_mean,
+                    self.ema_fake_logits_mean
+                ) * self.lecam_weight
+            
+            d_loss += lecam_loss
+
             log = {"disc_loss": d_loss.clone().detach().mean(),
                    "disc_factor": disc_factor,
                    "logits_real": logits_real.detach().mean(),
-                   "logits_fake": logits_fake.detach().mean()
+                   "logits_fake": logits_fake.detach().mean(),
+                   "lecam_loss": lecam_loss.detach().mean(),
                    }
             return d_loss, log
 

@@ -112,7 +112,7 @@ class NLayerDiscriminator(nn.Module):
     --> see https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix/blob/master/models/networks.py
     """
 
-    def __init__(self, input_nc=3, ndf=32, n_layers=3, use_actnorm=False, norm_in_stem=False, center_input=False):
+    def __init__(self, input_nc=3, ndf=32, n_layers=3, use_actnorm=False, norm_in_stem=False, center_input=False, spectral_norm=False):
         """Construct a PatchGAN discriminator
         Parameters:
             input_nc (int)  -- the number of channels in input images
@@ -139,17 +139,21 @@ class NLayerDiscriminator(nn.Module):
         self.rgb2yuv = RGB2YUV()
         self.center_input = center_input
 
+        conv_layer = nn.Conv2d
+        if spectral_norm:
+            conv_layer = lambda *args, **kwargs: torch.nn.utils.parametrizations.spectral_norm(nn.Conv2d(*args, **kwargs))
+
         kw = 4
         padw = 1
         if norm_in_stem:
             sequence = [
-                nn.Conv2d(input_nc, ndf, kernel_size=kw, stride=2, padding=padw),
+                conv_layer(input_nc, ndf, kernel_size=kw, stride=2, padding=padw),
                 norm_layer(ndf),
                 nn.LeakyReLU(0.2, True),
             ]
         else:
             sequence = [
-                nn.Conv2d(input_nc, ndf, kernel_size=kw, stride=2, padding=padw),
+                conv_layer(input_nc, ndf, kernel_size=kw, stride=2, padding=padw),
                 nn.LeakyReLU(0.2, True),
             ]
         nf_mult = 1
@@ -158,7 +162,7 @@ class NLayerDiscriminator(nn.Module):
             nf_mult_prev = nf_mult
             nf_mult = min(2**n, 8)
             sequence += [
-                nn.Conv2d(
+                conv_layer(
                     ndf * nf_mult_prev,
                     ndf * nf_mult,
                     kernel_size=kw,
@@ -173,7 +177,7 @@ class NLayerDiscriminator(nn.Module):
         nf_mult_prev = nf_mult
         nf_mult = min(2**n_layers, 8)
         sequence += [
-            nn.Conv2d(
+            conv_layer(
                 ndf * nf_mult_prev,
                 ndf * nf_mult,
                 kernel_size=kw,
@@ -186,7 +190,7 @@ class NLayerDiscriminator(nn.Module):
         ]
 
         sequence += [
-            nn.Conv2d(ndf * nf_mult, 1, kernel_size=kw, stride=1, padding=padw)
+            conv_layer(ndf * nf_mult, 1, kernel_size=kw, stride=1, padding=padw)
         ]  # output 1 channel prediction map
         self.main = nn.Sequential(*sequence)
 
@@ -368,6 +372,7 @@ class NLayerDiscriminatorV2(nn.Module):
         blur_kernel_size: int = 4,
         norm_in_stem: bool = False,
         center_input: bool = False,
+        spectral_norm: bool = False,
     ):
         """Initializes the NLayerDiscriminatorV2. 
         Discriminator taken from the MaskBit paper https://arxiv.org/abs/2409.16211
@@ -396,15 +401,19 @@ class NLayerDiscriminatorV2(nn.Module):
         else:
             activation = nn.SiLU
 
+        conv_layer = Conv2dSame
+        if spectral_norm:
+            conv_layer = lambda *args, **kwargs: torch.nn.utils.parametrizations.spectral_norm(Conv2dSame(*args, **kwargs))
+
         if norm_in_stem:
             sequence = [
-                Conv2dSame(num_channels, hidden_channels, kernel_size=init_kernel_size),
+                conv_layer(num_channels, hidden_channels, kernel_size=init_kernel_size),
                 nn.GroupNorm(32, hidden_channels),
                 activation(),
             ]
         else:
             sequence = [
-                Conv2dSame(num_channels, hidden_channels, kernel_size=init_kernel_size),
+                conv_layer(num_channels, hidden_channels, kernel_size=init_kernel_size),
                 activation(),
             ]
         
@@ -419,7 +428,7 @@ class NLayerDiscriminatorV2(nn.Module):
             in_channels = hidden_channels * in_channel_mult[i_level]
             out_channels = hidden_channels * in_channel_mult[i_level + 1]
             sequence += [
-                Conv2dSame(
+                conv_layer(
                     in_channels,
                     out_channels,
                     kernel_size=3,
@@ -434,9 +443,9 @@ class NLayerDiscriminatorV2(nn.Module):
             ]
         sequence += [nn.AdaptiveMaxPool2d((16, 16))]
         sequence += [
-            Conv2dSame(out_channels, out_channels, 1),
+            conv_layer(out_channels, out_channels, 1),
             activation(),
-            Conv2dSame(out_channels, 1, kernel_size=5),
+            conv_layer(out_channels, 1, kernel_size=5),
         ]
         self.main = nn.Sequential(*sequence)
 
@@ -469,6 +478,7 @@ class MultiscaleDisc(nn.Module):
         use_actnorm: bool = False,
         norm_in_stem: bool = False,
         center_input: bool = False,
+        spectral_norm: bool = False,
     ):
         super().__init__()
         self.discriminators = nn.ModuleDict(
@@ -480,7 +490,8 @@ class MultiscaleDisc(nn.Module):
                     num_layers=num_layers,
                     use_actnorm=use_actnorm,
                     norm_in_stem=norm_in_stem,
-                    center_input=center_input
+                    center_input=center_input,
+                    spectral_norm=spectral_norm,
                 )
                 for ii in range(disc_scales)
             }
@@ -511,6 +522,7 @@ def build_discriminator(
     use_actnorm: bool = False,
     norm_in_stem: bool = False,
     center_input: bool = False,
+    spectral_norm: bool = False,
 ) -> nn.Module:
     """
     Choose which version of the discriminator to use.
@@ -530,6 +542,7 @@ def build_discriminator(
                     use_actnorm=use_actnorm,
                     norm_in_stem=norm_in_stem,
                     center_input=center_input,
+                    spectral_norm=spectral_norm,
             ).apply(weights_init)
         elif version == "v2":
             return NLayerDiscriminatorV2(
@@ -537,6 +550,7 @@ def build_discriminator(
                 num_stages=num_layers,
                 norm_in_stem=norm_in_stem,
                 center_input=center_input,
+                spectral_norm=spectral_norm,
             )
         else:
             raise ValueError(f"Unknown discriminator version: {version}")
@@ -548,5 +562,6 @@ def build_discriminator(
             num_layers,
             use_actnorm,
             norm_in_stem,
-            center_input
+            center_input,
+            spectral_norm
         )

@@ -29,7 +29,8 @@ class JND(nn.Module):
             in_channels: int = 1,
             out_channels: int = 3,
             blue: bool = False,
-            apply_mode: str = "multiply"
+            apply_mode: str = "multiply",
+            padding_mode: str = "zeros",
     ) -> None:
         super(JND, self).__init__()
 
@@ -63,9 +64,9 @@ class JND(nn.Module):
         kernel_y = kernel_y.repeat(groups, 1, 1, 1)
         kernel_lum = kernel_lum.repeat(groups, 1, 1, 1)
 
-        self.conv_x = nn.Conv2d(3, 3, kernel_size=(3, 3), padding=1, bias=False, groups=groups)
-        self.conv_y = nn.Conv2d(3, 3, kernel_size=(3, 3), padding=1, bias=False, groups=groups)
-        self.conv_lum = nn.Conv2d(3, 3, kernel_size=(5, 5), padding=2, bias=False, groups=groups)
+        self.conv_x = nn.Conv2d(3, 3, kernel_size=(3, 3), padding=1, bias=False, groups=groups, padding_mode=padding_mode)
+        self.conv_y = nn.Conv2d(3, 3, kernel_size=(3, 3), padding=1, bias=False, groups=groups, padding_mode=padding_mode)
+        self.conv_lum = nn.Conv2d(3, 3, kernel_size=(5, 5), padding=2, bias=False, groups=groups, padding_mode=padding_mode)
 
         self.conv_x.weight = nn.Parameter(kernel_x, requires_grad=False)
         self.conv_y.weight = nn.Parameter(kernel_y, requires_grad=False)

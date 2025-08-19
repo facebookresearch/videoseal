@@ -2,6 +2,11 @@ jnd_1_1:
   in_channels: 1
   out_channels: 1
 
+jnd_1_1_reflect:
+  in_channels: 1
+  out_channels: 1
+  padding_mode: "reflect"
+
 jnd_1_1_clamp:
   in_channels: 1
   out_channels: 1

@@ -39,6 +39,7 @@ import json
 import os
 import time
 from typing import List
+import random
 
 import numpy as np
 import omegaconf
@@ -47,6 +48,7 @@ import torch
 import torch.distributed
 import torch.distributed as dist
 import torch.nn as nn
+from torch.nn import functional as F
 from torchvision.utils import save_image
 
 import videoseal.utils as utils
@@ -56,6 +58,7 @@ import videoseal.utils.optim as uoptim
 from videoseal.augmentation import (get_validation_augs,
                                     get_validation_augs_subset)
 from videoseal.augmentation.augmenter import Augmenter, neural_compression_augs
+from videoseal.augmentation.batched import BatchedAugmenter
 from videoseal.data.loader import (get_dataloader_segmentation,
                                    get_video_dataloader)
 from videoseal.data.transforms import get_resize_transform
@@ -64,6 +67,7 @@ from videoseal.losses.detperceptual import VideosealLoss
 from videoseal.quality_metric.artifact_discriminator_metric import ArtifactDiscriminatorLoss
 from videoseal.models import VideoWam, Wam, build_embedder, build_extractor
 from videoseal.modules.jnd import JND, VarianceBasedJND
+from videoseal.modules.ema import EMAModel
 from videoseal.utils.data import Modalities, parse_dataset_params
 from videoseal.utils.display import save_vid
 from videoseal.utils.image import create_diff_img
@@ -119,7 +123,7 @@ def get_parser():
     aa("--nbits", type=int, default=32,
        help="Number of bits used to generate the message. If 0, no message is used.")
     aa("--hidden_size_multiplier", type=float, default=2,
-         help="Hidden size multiplier for the message processor")
+       help="Hidden size multiplier for the message processor")
     aa("--img_size", type=int, default=256,
        help="Size of the input images for data preprocessing, used at loading time for training.")
     aa("--img_size_val", type=int, default=256,
@@ -127,7 +131,7 @@ def get_parser():
     aa("--img_size_proc", type=int, default=256, 
        help="Size of the input images for interpolation in the embedder/extractor models")
     aa("--resize_only", type=utils.bool_inst, default=False,
-         help="If True, only resize the image no crop is applied at loading time (without preserving aspect ratio)")
+       help="If True, only resize the image no crop is applied at loading time (without preserving aspect ratio)")
     aa("--attenuation", type=str, default="None", help="Attenuation model to use")
     aa("--blending_method", type=str, default="additive",
        help="The blending method to use. Options include: additive, multiplicative ..etc see Blender Class for more")
@@ -144,6 +148,8 @@ def get_parser():
        help="The number of frames to propagate the watermark to.")
     aa("--lowres_attenuation", type=utils.bool_inst, default=False,
        help="Apply attenuation at low resolution for high-res images (more memory efficient)")
+    aa('--dynamic_input_size', default=None, type=str,
+       help="If not none, the augmentations are done on a random resolution in range 'min,max', e.g., '512,1024'")
 
     group = parser.add_argument_group('Optimizer parameters')
     aa("--optimizer", type=str, default="AdamW,lr=1e-4",
@@ -166,7 +172,11 @@ def get_parser():
        help='If True, also load discriminator weights when resuming from checkpoint')
     aa('--resume_optimizer_state', type=utils.bool_inst, default=False,
        help='If True, also load optimizer state when resuming from checkpoint')
-    aa('--grad_clip', default=-1, type=float, help="Max norm for gradient clipping. Applied only if > 0.")
+    aa('--grad_clip', default="0", type=str,
+       help="Max norm for gradient clipping. Applied only if > 0. " \
+            "Multiple values can be provided for different optimizers, e.g., '1.0,0.5' for 2 optimizers.")
+    aa('--use_ema', type=utils.bool_inst, default=False,
+       help='If True, use Exponential Moving Average for model weights')
 
     group = parser.add_argument_group('Losses parameters')
     aa('--temperature', default=1.0, type=float,
@@ -186,24 +196,39 @@ def get_parser():
        help='Perceptual loss to use. "lpips", "watson_vgg" or "watson_fft"')
     aa('--disc_start', default=0, type=float,
        help='Weight for the discriminator loss')
+    aa('--disc_lr_schedule_offset', type=utils.bool_inst, default=False,
+       help='If True, the discriminator learning rate schedule is delayed by `disc_start` epochs')
+    aa('--disc_weight_schedule', type=str, default=None,
+        help="Scaling factor schedule for the WAM discriminator loss. Always use start_epoch >= disc_start. " \
+             "Ex: 'Linear,scaling_start=0.001,scaling_end=0.1,epochs=20,start_epoch=40'")
     aa('--disc_num_layers', default=2, type=int,
        help='Number of layers for the discriminator')
     aa('--disc_in_channels', default=3, type=int,
-         help='Number of input channels for the discriminator')
+       help='Number of input channels for the discriminator')
     aa('--disc_version', default="v1", type=str,
-         help='Version of the discriminator to use. "v1" or "v2". "v2" is the MaskBit discriminator')
+       help='Version of the discriminator to use. "v1" or "v2". "v2" is the MaskBit discriminator')
     aa('--disc_scales', default=1, type=int,
          help='Number of scales for the discriminator.')
     aa('--disc_norm_in_stem', type=utils.bool_inst, default=False,
        help='If True, the discriminator will use normalization in the stem.')
     aa('--disc_center_input', type=utils.bool_inst, default=False,
-         help='If True, the discriminator will center the RGB/Y input into the range [-1, 1].')
+       help='If True, the discriminator will center the RGB/Y input into the range [-1, 1].')
+    aa('--disc_wm_boost', default=1.0, type=float,
+       help="Increase the strength of the watermark in the discriminator loss.")
+    aa('--disc_n_updates', default=1, type=int,
+       help="Number of discriminator updates per one watermarking model update.")
+    aa('--disc_spectral_norm', type=utils.bool_inst, default=False,
+       help='If True, spectral normalization will be applied to all layers of the discriminator.')
+    aa('--lecam_weight', type=float, default=0.0,
+       help='Weight for the LeCam regularization loss')
     aa('--lambda_artifact_disc', default=0.0, type=float,
        help='Weight for the artifact discriminator loss')
     aa('--artifact_disc_ckpt_path', default=None, type=str,
        help='Checkpoint path for the artifact discriminator loss, if None, it will load the default pretrained model.')
     aa('--artifact_disc_start_epoch', default=0, type=int,
        help='Epoch to start using arifact discriminator in the loss.')
+    aa('--pixel_rounding', type=utils.bool_inst, default=True,
+       help='If True, the output of the embedder is rounded to the nearest integer pixel value to simulate the real-world watermarking process.')
     
     group = parser.add_argument_group('Loading parameters')
     aa('--batch_size', default=32, type=int, help='Batch size')
@@ -248,6 +273,11 @@ def main(params):
 
     # Convert params to OmegaConf object
     params = omegaconf.OmegaConf.create(vars(params))
+    params.grad_clip = [float(v) for v in params.grad_clip.split(",")]
+    assert len(params.grad_clip) in [1, 2], "grad_clip should be a single value or two values for two optimizers"
+
+    params.dynamic_input_size = tuple([int(x) for x in params.dynamic_input_size.split(",")]) \
+        if isinstance(params.dynamic_input_size, str) else params.dynamic_input_size
 
     # Distributed mode
     udist.init_distributed_mode(params)
@@ -286,12 +316,18 @@ def main(params):
     # build the augmenter
     augmenter_cfg = omegaconf.OmegaConf.load(params.augmentation_config)
     augmenter_cfg.num_augs = params.num_augs
-    augmenter = Augmenter(
-        **augmenter_cfg,
-    ).to(device)
-    do_neural_compression = any(
-        aug_name in neural_compression_augs for aug_name in augmenter_cfg.augs.keys()
-    )
+    if augmenter_cfg.get("batched_augmenter", False):
+        augmenter = BatchedAugmenter(
+            **augmenter_cfg,
+        ).to(device)
+        do_neural_compression = False
+    else:
+        augmenter = Augmenter(
+            **augmenter_cfg,
+        ).to(device)
+        do_neural_compression = any(
+            aug_name in neural_compression_augs for aug_name in augmenter_cfg.augs.keys()
+        )
 
     # Build the scaling schedule. Default is none
     if params.augmentation_schedule is not None and params.augmentation_schedule.lower() != "none":
@@ -332,8 +368,13 @@ def main(params):
                    chunk_size=params.videowam_chunk_size,
                    step_size=params.videowam_step_size,
                    blending_method=params.blending_method,
-                   lowres_attenuation=params.lowres_attenuation)
+                   lowres_attenuation=params.lowres_attenuation,
+                   round=params.pixel_rounding)
     wam = wam.to(device)
+
+    ema_model = None
+    if params.use_ema:
+        ema_model = EMAModel(wam.parameters(), decay=0.999)
     # print(wam)
 
     # build losses
@@ -343,10 +384,20 @@ def main(params):
         detect_weight=params.lambda_det, decode_weight=params.lambda_dec,
         disc_start=params.disc_start, disc_num_layers=params.disc_num_layers,
         disc_in_channels=params.disc_in_channels, disc_version=params.disc_version,
-        disc_scales=params.disc_scales, percep_loss=params.perceptual_loss,
-        disc_norm_in_stem=params.disc_norm_in_stem, disc_center_input=params.disc_center_input
+        disc_scales=params.disc_scales, percep_loss=params.perceptual_loss, disc_wm_boost=params.disc_wm_boost,
+        lecam_weight=params.lecam_weight, disc_norm_in_stem=params.disc_norm_in_stem, disc_center_input=params.disc_center_input,
+        disc_spectral_norm=params.disc_spectral_norm,
     ).to(device)
     print(image_detection_loss)
+
+    if params.disc_weight_schedule is not None and params.disc_weight_schedule.lower() != "none":
+        discriminator_schedule_params = uoptim.parse_params(params.disc_weight_schedule)
+        disc_weight_scheduler = uoptim.ScalingScheduler(
+            obj=image_detection_loss, attribute="disc_weight",
+            **discriminator_schedule_params
+        )
+    else:
+        disc_weight_scheduler = None
 
     artifact_discriminator_loss = lambda *args: 0
     if params.lambda_artifact_disc > 0:
@@ -445,6 +496,8 @@ def main(params):
     # optionally resume training
     if params.resume_from is not None:
         components_to_load = {'model': wam}
+        if params.use_ema:
+            components_to_load['ema_model'] = ema_model
         if params.resume_disc:
             components_to_load['discriminator'] = image_detection_loss.discriminator
         if params.resume_optimizer_state:
@@ -458,6 +511,9 @@ def main(params):
     to_restore = {
         "epoch": 0,
     }
+    additional_components = {}
+    if params.use_ema:
+        additional_components['ema_model'] = ema_model
     uoptim.restart_from_checkpoint(
         os.path.join(params.output_dir, "checkpoint.pth"),
         run_variables=to_restore,
@@ -467,8 +523,11 @@ def main(params):
         optimizer_d=optimizer_d,
         scheduler=scheduler,
         scheduler_d=scheduler_d,
+        **additional_components,
     )
     start_epoch = to_restore["epoch"]
+    if params.use_ema:
+        ema_model.set_step(start_epoch * params.iter_per_epoch)
     for param_group in optimizer.param_groups:
         param_group['lr'] = optim_params['lr']
     for param_group in optimizer_d.param_groups:
@@ -488,9 +547,12 @@ def main(params):
     else:
         wam_ddp = wam
 
-    dummy_img = torch.ones(3, params.img_size_val, params.img_size_val)
-    validation_masks = augmenter.mask_embedder.sample_representative_masks(
-        dummy_img)  # n 1 h w, full of ones or random masks depending on config
+    if hasattr(augmenter, 'mask_embedder'):
+        dummy_img = torch.ones(3, params.img_size_val, params.img_size_val)
+        validation_masks = augmenter.mask_embedder.sample_representative_masks(
+            dummy_img)  # n 1 h w, full of ones or random masks depending on config
+    else:
+        validation_masks = torch.ones((1, 1, params.img_size_val, params.img_size_val))
 
     # evaluation only
     if params.only_eval and udist.is_main_process():
@@ -540,11 +602,13 @@ def main(params):
         # scheduler
         if scheduler is not None:
             scheduler.step(epoch)
-            scheduler_d.step(epoch)
+            scheduler_d.step(max(epoch - params.disc_start, 0) if params.disc_lr_schedule_offset else epoch)
         if scaling_scheduler is not None:
             scaling_scheduler.step(epoch)
         if augmentation_scheduler is not None:
             augmentation_scheduler.step(epoch)
+        if disc_weight_scheduler is not None:
+            disc_weight_scheduler.step(epoch)
 
         if params.distributed:
             epoch_train_loader.sampler.set_epoch(epoch)
@@ -568,7 +632,7 @@ def main(params):
             image_detection_loss.balanced = False  # not supported here because embedder is frozen
 
         # train and log
-        train_stats = train_one_epoch(wam_ddp, optimizers, epoch_train_loader, epoch_modality, image_detection_loss, epoch, params, tensorboard=tensorboard, artifact_discriminator_loss=artifact_discriminator_loss)
+        train_stats = train_one_epoch(wam_ddp, optimizers, epoch_train_loader, epoch_modality, image_detection_loss, epoch, params, tensorboard=tensorboard, artifact_discriminator_loss=artifact_discriminator_loss, ema_model=ema_model)
         log_stats = {
             'epoch': epoch, 'modality': epoch_modality, 
             **{f'train_{k}': v for k, v in train_stats.items()}
@@ -618,6 +682,8 @@ def main(params):
             'scheduler_d': scheduler_d.state_dict() if scheduler_d is not None else None,
             'args': omegaconf.OmegaConf.to_yaml(params),
         }
+        if params.use_ema:
+            save_dict['ema_model'] = ema_model.state_dict()
         udist.save_on_master(save_dict, os.path.join(
             params.output_dir, 'checkpoint.pth'))
         if params.saveckpt_freq and epoch % params.saveckpt_freq == 0:
@@ -638,7 +704,8 @@ def train_one_epoch(
     epoch: int,
     params: argparse.Namespace,
     tensorboard: CustomTensorboardWriter,
-    artifact_discriminator_loss: ArtifactDiscriminatorLoss = None
+    artifact_discriminator_loss: ArtifactDiscriminatorLoss = None,
+    ema_model: EMAModel = None,
 ) -> dict:
     is_video = (epoch_modality == Modalities.VIDEO)
 
@@ -669,7 +736,12 @@ def train_one_epoch(
             if params.sleepwake:  # alternate
                 optimizer_ids_for_epoch = [epoch % 2]
             else:  # both during the same epoch
-                optimizer_ids_for_epoch = [1, 0]
+                if epoch < params.disc_start:  # no disc at the beginning
+                    optimizer_ids_for_epoch = [0]
+                elif it % params.disc_n_updates == 0:
+                    optimizer_ids_for_epoch = [1, 0]
+                else:
+                    optimizer_ids_for_epoch = [1]
 
         # reset the optimizer gradients before accum gradients
         for optimizer_idx in optimizer_ids_for_epoch:
@@ -681,6 +753,13 @@ def train_one_epoch(
             imgs, masks = batch_imgs[acc_it], batch_masks[acc_it]
             imgs = imgs.to(device, non_blocking=True)
 
+            if params.dynamic_input_size is not None:
+                interpolation = {"mode": "bilinear", "align_corners": False, "antialias": True}
+                new_shape = (random.randint(params.dynamic_input_size[0], params.dynamic_input_size[1]) // 2 * 2, \
+                             random.randint(params.dynamic_input_size[0], params.dynamic_input_size[1]) // 2 * 2) # ensure even size for h264 augmentation
+                imgs = F.interpolate(imgs, size=new_shape, **interpolation)
+                masks = F.interpolate(masks, size=new_shape, **interpolation)
+
             # forward
             outputs = wam(imgs, masks, is_video=is_video)
             outputs["preds"] /= params.temperature
@@ -688,6 +767,7 @@ def train_one_epoch(
             # last layer is used for gradient scaling
             last_layer = wam.embedder.get_last_layer() if not params.distributed else wam.module.embedder.get_last_layer()
 
+            log_stats = {}
             # index 1 for discriminator, 0 for embedder/extractor
             for optimizer_idx in optimizer_ids_for_epoch:
                 loss, logs = image_detection_loss(
@@ -703,10 +783,11 @@ def train_one_epoch(
                 # Scale loss for accumulation so lr is not affected
                 loss = loss / accumulation_steps
                 loss.backward()
+                log_stats = {**log_stats, **logs}
 
             # log stats
             log_stats = {
-                **logs,
+                **log_stats,
                 'psnr': psnr(outputs["imgs_w"], imgs).mean().item(),
                 'ssim': ssim(outputs["imgs_w"], imgs).mean().item(),
                 'lr': optimizers[0].param_groups[0]['lr'],
@@ -764,14 +845,18 @@ def train_one_epoch(
 
         # end accumulate gradients batches
         # do gradient clipping if needed
-        if params.grad_clip > 0:
-            for optimizer in optimizers:
-                for param_group in optimizer.param_groups:
-                    torch.nn.utils.clip_grad_norm_(param_group['params'], params.grad_clip)
+        if sum(params.grad_clip) > 0:
+            for optimizer_idx, optimizer in enumerate(optimizers):
+                for group_idx, param_group in enumerate(optimizer.param_groups):
+                    norm_ = torch.nn.utils.clip_grad_norm_(param_group['params'], params.grad_clip[optimizer_idx if len(params.grad_clip) > 1 else 0])
+                    metric_logger.update(**{f'grad_norm_optg{optimizer_idx}_{group_idx}': norm_})
 
         # add optimizer step
         for optimizer_idx in optimizer_ids_for_epoch:
             optimizers[optimizer_idx].step()
+
+        if params.use_ema:
+            ema_model.step(wam.module.parameters() if params.distributed else wam.parameters())
 
     metric_logger.synchronize_between_processes()
     print("Averaged {} stats:".format('train'), metric_logger)
