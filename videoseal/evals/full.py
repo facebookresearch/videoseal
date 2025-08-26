@@ -48,6 +48,7 @@ from ..utils.display import save_vid
 from ..utils.image import create_diff_img
 from ..utils.cfg import setup_dataset, setup_model_from_checkpoint
 from .metrics import accuracy, bit_accuracy, iou, vmaf_on_tensor
+from ..modules.ema import EMAModel
 
 @torch.no_grad()
 def evaluate(
@@ -290,7 +291,9 @@ def main():
                         help='The inference mode for videos')
     group.add_argument('--time_pooling_depth', type=int, default=None,
                         help='The depth of the UNet at which applying the temporal pooling')
-
+    group.add_argument('--use_ema', type=bool_inst, default=False,
+                        help='If True, use Exponential Moving Average for model weights')
+    
     group = parser.add_argument_group('Experiment')
     group.add_argument("--output_dir", type=str, default="output/", help="Output directory for logs and images (Default: /output)")
     group.add_argument('--save_first', type=int, default=-1, help='Number of images/videos to save')
@@ -332,6 +335,12 @@ def main():
     avail_device = 'cuda' if torch.cuda.is_available() else 'cpu'
     device = args.device or avail_device
     model.to(device)
+
+    if args.use_ema:
+        ema_model = EMAModel(model.parameters())
+        ema_state_dict = torch.load(args.checkpoint, map_location='cpu')['ema_model']
+        ema_model.load_state_dict(ema_state_dict)
+        ema_model.copy_to(model.parameters())
 
     # Override the temporal pooling
     if hasattr(model.embedder, 'unet') and hasattr(model.embedder.unet, 'time_pooling'):

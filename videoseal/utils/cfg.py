@@ -14,6 +14,7 @@ import torch
 import torch.distributed as dist
 import torchvision.transforms as transforms
 
+import videoseal.utils.optim as uoptim
 import videoseal.utils.dist as udist
 from videoseal.augmentation.augmenter import get_dummy_augmenter
 from videoseal.data.datasets import CocoImageIDWrapper, ImageFolder, VideoDataset, SimpleVideoDataset
@@ -165,11 +166,21 @@ def setup_model(config: VideoWamConfig, ckpt_path: Path) -> VideoWam:
         step_size=args.videowam_step_size
     )
 
+    scaling_scheduler = None
+    if args.scaling_w_schedule is not None and args.scaling_w_schedule.lower() != "none":
+        scaling_w_schedule = uoptim.parse_params(args.scaling_w_schedule)
+        scaling_scheduler = uoptim.ScalingScheduler(
+            obj=wam.blender, attribute="scaling_w", scaling_o=args.scaling_w,
+            **scaling_w_schedule
+        )
+
     # Load the model weights
     if os.path.exists(ckpt_path):
         checkpoint = torch.load(ckpt_path, map_location='cpu', weights_only=True)
         msg = wam.load_state_dict(checkpoint['model'], strict=False)
         print(f"Model loaded successfully from {ckpt_path} with message: {msg}")
+        if scaling_scheduler is not None:
+            scaling_scheduler.step(checkpoint["epoch"])
     else:
         raise FileNotFoundError(f"Checkpoint path does not exist: {ckpt_path}")
 
