@@ -5,7 +5,7 @@ num_augs: 2
 probabilities:
   geometric: 0.5
   valuemetric: 0.5
-  compression: 0.3
+  compression: 0.15
 
 geometric_params:
   params:
@@ -36,7 +36,7 @@ geometric_params:
     rotate: 1
     perspective: 1
     rotate_and_resize: 1
-    identity: 5
+    identity: 1
   fill: "random_color"
   random_hflip: true
 
@@ -79,7 +79,7 @@ compression_params:
       min_crf: 28
       max_crf: 36
   probs:
-    jpeg: 3
-    h264: 1
-    h264rgb: 1
-    h265: 1
+    jpeg: 1
+    h264: 0
+    h264rgb: 0
+    h265: 0
