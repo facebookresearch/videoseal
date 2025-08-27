@@ -69,6 +69,17 @@ convnext_tiny:
     nbits: 16
     sigmoid_output: False
 
+convnext_base:
+  encoder:
+    depths: [3, 3, 27, 3]
+    dims: [128, 256, 512, 1024]
+  pixel_decoder:
+    pixelwise: False  # return msg per pixel (k h w)
+    upscale_stages: [1]
+    embed_dim: 1024  # = encoder.out_chans
+    nbits: 16
+    sigmoid_output: False
+
 convnext_tiny_pw:
   encoder:
     depths: [3, 3, 9, 3]
