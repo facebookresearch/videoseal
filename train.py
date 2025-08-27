@@ -40,7 +40,7 @@ import os
 import time
 from typing import List
 import random
-
+import contextlib
 import numpy as np
 import omegaconf
 
@@ -258,6 +258,8 @@ def get_parser():
     aa('--debug_slurm', action='store_true')
     aa('--local_rank', default=-1, type=int)
     aa('--master_port', default=-1, type=int)
+    aa('--speedup_options', default="none", type=str,
+       help="Options: none, fastops, bfloat16, compile. Separate options by '+' to use multiple.")
 
     return parser
 
@@ -279,6 +281,11 @@ def main(params):
     params.dynamic_input_size = tuple([int(x) for x in params.dynamic_input_size.split(",")]) \
         if isinstance(params.dynamic_input_size, str) else params.dynamic_input_size
 
+    params.speedup_options = params.speedup_options.lower().split("+")
+    for opt in params.speedup_options:
+        if opt not in ["none", "fastops", "bfloat16", "compile"]:
+            raise ValueError(f"Unknown speedup option: {opt}")
+
     # Distributed mode
     udist.init_distributed_mode(params)
 
@@ -291,6 +298,12 @@ def main(params):
     if params.distributed:
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
+    if "fastops" in params.speedup_options:
+        torch.set_float32_matmul_precision("high")
+        torch.backends.cudnn.deterministic = False
+        torch.backends.cudnn.benchmark = True
+        torch.backends.cudnn.allow_tf32 = True
+        torch.backends.cuda.matmul.allow_tf32 = True
 
     # Print the arguments and add to tensorboard
     print("__git__:{}".format(utils.get_sha()))
@@ -310,6 +323,8 @@ def main(params):
     params.embedder_model = params.embedder_model or embedder_cfg.model
     embedder_params = embedder_cfg[params.embedder_model]
     embedder = build_embedder(params.embedder_model, embedder_params, params.nbits, params.hidden_size_multiplier)
+    if "compile" in params.speedup_options:
+        embedder.compile()
     print(embedder)
     print(f'embedder: {sum(p.numel() for p in embedder.parameters() if p.requires_grad) / 1e6:.1f}M parameters')
 
@@ -344,6 +359,8 @@ def main(params):
     params.extractor_model = params.extractor_model or extractor_cfg.model
     extractor_params = extractor_cfg[params.extractor_model]
     extractor = build_extractor(params.extractor_model, extractor_params, params.img_size_proc, params.nbits)
+    if "compile" in params.speedup_options:
+        extractor.compile()
     print(f'extractor: {sum(p.numel() for p in extractor.parameters() if p.requires_grad) / 1e6:.1f}M parameters')
 
     # build attenuation
@@ -709,6 +726,10 @@ def train_one_epoch(
 ) -> dict:
     is_video = (epoch_modality == Modalities.VIDEO)
 
+    forward_pass_cm = contextlib.nullcontext()
+    if "bfloat16" in params.speedup_options:
+        forward_pass_cm = torch.autocast(device_type="cuda", dtype=torch.bfloat16)
+
     wam.train()
 
     header = f'Train - Epoch: [{epoch}/{params.epochs}] - Modality: {epoch_modality}'
@@ -761,8 +782,9 @@ def train_one_epoch(
                 masks = F.interpolate(masks, size=new_shape, **interpolation)
 
             # forward
-            outputs = wam(imgs, masks, is_video=is_video)
-            outputs["preds"] /= params.temperature
+            with forward_pass_cm:
+                outputs = wam(imgs, masks, is_video=is_video)
+                outputs["preds"] /= params.temperature
 
             # last layer is used for gradient scaling
             last_layer = wam.embedder.get_last_layer() if not params.distributed else wam.module.embedder.get_last_layer()
@@ -770,16 +792,17 @@ def train_one_epoch(
             log_stats = {}
             # index 1 for discriminator, 0 for embedder/extractor
             for optimizer_idx in optimizer_ids_for_epoch:
-                loss, logs = image_detection_loss(
-                    imgs, outputs["imgs_w"],
-                    outputs["masks"], outputs["msgs"], outputs["preds"],
-                    optimizer_idx, epoch,
-                    last_layer=last_layer,
-                )
-                if params.lambda_artifact_disc > 0 and optimizer_idx == 0 and epoch >= params.artifact_disc_start_epoch:
-                    artifact_loss = params.lambda_artifact_disc * artifact_discriminator_loss(outputs["imgs_w"])
-                    logs['artifact_loss'] = artifact_loss.item()
-                    loss += artifact_loss
+                with forward_pass_cm:
+                    loss, logs = image_detection_loss(
+                        imgs, outputs["imgs_w"],
+                        outputs["masks"], outputs["msgs"], outputs["preds"],
+                        optimizer_idx, epoch,
+                        last_layer=last_layer,
+                    )
+                    if params.lambda_artifact_disc > 0 and optimizer_idx == 0 and epoch >= params.artifact_disc_start_epoch:
+                        artifact_loss = params.lambda_artifact_disc * artifact_discriminator_loss(outputs["imgs_w"])
+                        logs['artifact_loss'] = artifact_loss.item()
+                        loss += artifact_loss
                 # Scale loss for accumulation so lr is not affected
                 loss = loss / accumulation_steps
                 loss.backward()
