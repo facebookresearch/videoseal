@@ -152,10 +152,9 @@ class VideosealLoss(nn.Module):
                 weights["percep"] = self.percep_weight
 
             # discriminator loss
-            if self.disc_weight > 0:
-
+            disc_factor = adopt_weight(1.0, global_step, threshold=self.discriminator_iter_start)
+            if self.disc_weight > 0 and disc_factor > 0:
                 with freeze_grads(self.discriminator):
-                    disc_factor = adopt_weight(1.0, global_step, threshold=self.discriminator_iter_start)
                     reconstructions_input = reconstructions.contiguous()
                     if self.disc_wm_boost != 1.0:
                         reconstructions_input = inputs + (reconstructions_input - inputs) * self.disc_wm_boost

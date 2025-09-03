@@ -5,7 +5,7 @@ num_augs: 2
 probabilities:
   geometric: 0.5
   valuemetric: 0.5
-  compression: 0.15
+  compression: 0.1
 
 geometric_params:
   params:
@@ -14,14 +14,14 @@ geometric_params:
       max_size: 1.5
       max_center_deviation: 0.5
     crop:
-      min_size: 0.5
+      min_size: 0.4
       max_size: 1.0
     rotate:
       min_angle: -10
       max_angle: 10
       prob_90deg: 0.5
     perspective:
-      min_distortion_scale: -0.1
+      min_distortion_scale: 0.1
       max_distortion_scale: 0.5
     rotate_and_resize:
       min_angle: -10
@@ -33,10 +33,10 @@ geometric_params:
   probs:
     resize: 1
     crop: 1
-    rotate: 1
+    rotate: 3
     perspective: 1
     rotate_and_resize: 1
-    identity: 1
+    identity: 5
   fill: "random_color"
   random_hflip: true
 
