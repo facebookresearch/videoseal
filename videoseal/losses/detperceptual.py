@@ -56,7 +56,7 @@ class VideosealLoss(nn.Module):
                  disc_start=0, disc_num_layers=3, disc_in_channels=3, disc_loss="hinge",
                  disc_version="v1", disc_scales=1, use_actnorm=False, percep_loss="lpips", disc_wm_boost=1.0,
                  lecam_weight=0.0, lecam_ema_decay=0.999, disc_norm_in_stem=False, disc_center_input=False,
-                 disc_spectral_norm=False,
+                 disc_spectral_norm=False, disc_fixed_size=None,
                  ):
         super().__init__()
         assert disc_loss in ["hinge", "vanilla"]
@@ -69,6 +69,8 @@ class VideosealLoss(nn.Module):
         self.disc_weight = disc_weight
         self.decode_weight = decode_weight
         self.disc_wm_boost = disc_wm_boost
+        self.disc_fixed_size = (disc_fixed_size, disc_fixed_size) \
+            if disc_fixed_size is not None and disc_fixed_size != -1 else None
 
         # self.perceptual_loss = PerceptualLoss(percep_loss=percep_loss).to(torch.device("cuda"))
         self.perceptual_loss = PerceptualLoss(percep_loss=percep_loss)
@@ -158,6 +160,12 @@ class VideosealLoss(nn.Module):
                     reconstructions_input = reconstructions.contiguous()
                     if self.disc_wm_boost != 1.0:
                         reconstructions_input = inputs + (reconstructions_input - inputs) * self.disc_wm_boost
+
+                    # potentially resize input to discriminator to fixed shape, eg. 256x256
+                    if self.disc_fixed_size is not None and reconstructions_input.shape[-2:] != self.disc_fixed_size:
+                        reconstructions_input = F.interpolate(reconstructions_input, size=self.disc_fixed_size,
+                                                              **{"mode": "bilinear", "align_corners": False, "antialias": True})
+                    
                     logits_fake = self.discriminator(reconstructions_input)
                     losses["disc"] = - logits_fake.mean()
                     weights["disc"] = disc_factor * self.disc_weight
@@ -221,16 +229,24 @@ class VideosealLoss(nn.Module):
             reconstructions_input = reconstructions.contiguous().detach()
             if self.disc_wm_boost != 1.0:
                 reconstructions_input = inputs + (reconstructions_input - inputs) * self.disc_wm_boost
+            real_input = inputs.contiguous().detach()
+
+            # potentially resize input to discriminator to fixed shape, eg. 256x256
+            if self.disc_fixed_size is not None and reconstructions_input.shape[-2:] != self.disc_fixed_size:
+                real_input = F.interpolate(real_input, size=self.disc_fixed_size,
+                                           **{"mode": "bilinear", "align_corners": False, "antialias": True})
+                reconstructions_input = F.interpolate(reconstructions_input, size=self.disc_fixed_size,
+                                                      **{"mode": "bilinear", "align_corners": False, "antialias": True})
             
             if cond is None:
                 # detach here prevents gradient leakage to any module other than the discriminator
                 logits_real = self.discriminator(
-                    inputs.contiguous().detach())
+                    real_input)
                 logits_fake = self.discriminator(
                     reconstructions_input)
             else:
                 logits_real = self.discriminator(
-                    torch.cat((inputs.contiguous().detach(), cond), dim=1))
+                    torch.cat((real_input, cond), dim=1))
                 logits_fake = self.discriminator(
                     torch.cat((reconstructions_input, cond), dim=1))
 

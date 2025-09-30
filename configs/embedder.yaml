@@ -50,6 +50,21 @@ unet_small2_yuv_quant:
     z_channels_mults: [1, 2, 4, 8]
     last_tanh: True
 
+unet_base_quant:
+  msg_processor:
+    nbits: 16
+    hidden_size: 32     # nbits * 2
+    msg_processor_type: 'binary+concat'
+  unet:
+    in_channels: 3
+    out_channels: 3
+    z_channels: 16
+    num_blocks: 8
+    activation: 'relu'
+    normalization: 'batch'
+    z_channels_mults: [2, 4, 8, 16]
+    last_tanh: True
+
 unet_base_yuv_quant:
   msg_processor:
     nbits: 16

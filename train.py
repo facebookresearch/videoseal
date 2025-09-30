@@ -219,6 +219,8 @@ def get_parser():
        help="Number of discriminator updates per one watermarking model update.")
     aa('--disc_spectral_norm', type=utils.bool_inst, default=False,
        help='If True, spectral normalization will be applied to all layers of the discriminator.')
+    aa('--disc_fixed_size', default=-1, type=int,
+       help="If not -1, the input to the discriminator will be resized to [disc_fixed_size, disc_fixed_size].")
     aa('--lecam_weight', type=float, default=0.0,
        help='Weight for the LeCam regularization loss')
     aa('--lambda_artifact_disc', default=0.0, type=float,
@@ -403,7 +405,7 @@ def main(params):
         disc_in_channels=params.disc_in_channels, disc_version=params.disc_version,
         disc_scales=params.disc_scales, percep_loss=params.perceptual_loss, disc_wm_boost=params.disc_wm_boost,
         lecam_weight=params.lecam_weight, disc_norm_in_stem=params.disc_norm_in_stem, disc_center_input=params.disc_center_input,
-        disc_spectral_norm=params.disc_spectral_norm,
+        disc_spectral_norm=params.disc_spectral_norm, disc_fixed_size=params.disc_fixed_size,
     ).to(device)
     print(image_detection_loss)
 

@@ -118,7 +118,7 @@ class Wam(nn.Module):
             imgs_aug, masks, selected_aug = self.augmenter(
                 imgs_w, imgs, masks, is_video=False, do_resize=False)
         else:
-            imgs_aug = self.augmenter(imgs_w)
+            imgs_aug = self.augmenter(imgs_w, fill_image=imgs)
             selected_aug = "NotAvailable"
 
         # interpolate back

@@ -106,7 +106,7 @@ def _rand_color(pastel_factor = 0.5):
 
 class BatchedGeometric(nn.Module):
 
-    def __init__(self, params: Dict[str, Dict], probs: Dict[str, float], mode: str = "bilinear", fill: str = "zeros", random_hflip: bool = True):
+    def __init__(self, params: Dict[str, Dict], probs: Dict[str, float], mode: str = "bilinear", fill: str = "zeros", random_hflip: bool = True, grid_type: str = "random"):
         super(BatchedGeometric, self).__init__()
         
         if mode not in ["bilinear", "nearest"]:
@@ -116,6 +116,9 @@ class BatchedGeometric(nn.Module):
             raise ValueError(f"fill must be 'zeros', 'random_color', 'random_image' or 'random' but is {fill}")
         self.fill = fill
         self.random_hflip = random_hflip
+        if grid_type not in ["random", "affine", "perspective"]:
+            raise ValueError(f"mode must be 'random', 'affine or 'perspective' but is {grid_type}")
+        self.grid_type = grid_type
 
         self.aug_params = params
         self.aug_names = sorted(probs.keys())
@@ -130,6 +133,22 @@ class BatchedGeometric(nn.Module):
         # manually add/overwrite identity function
         self.funcs["identity"] = _rand_identity
         self.aug_params["identity"] = {}
+
+    def _affine_grid(self, mats: torch.Tensor, ow: int, oh: int, dtype: torch.dtype, device: torch.device):
+        d = 0.5
+        base_grid = torch.empty(1, oh, ow, 3, dtype=dtype, device=device)
+        x_grid = torch.linspace(-ow * 0.5 + d, ow * 0.5 + d - 1, steps=ow, device=device)
+        base_grid[..., 0].copy_(x_grid)
+        y_grid = torch.linspace(-oh * 0.5 + d, oh * 0.5 + d - 1, steps=oh, device=device).unsqueeze_(-1)
+        base_grid[..., 1].copy_(y_grid)
+        base_grid[..., 2].fill_(1)
+
+        base_grid = base_grid.repeat(len(mats), 1, 1, 1)
+
+        theta = mats[:, :2]
+        rescaled_theta = theta.transpose(1, 2) / torch.tensor([0.5 * ow, 0.5 * oh], dtype=theta.dtype, device=theta.device)
+        output_grid = base_grid.view(-1, oh * ow, 3).bmm(rescaled_theta)
+        return output_grid.view(-1, oh, ow, 2)
 
     def _perspective_grid(self, mats: torch.Tensor, ow: int, oh: int, dtype: torch.dtype, device: torch.device):
         assert tuple(mats.shape[1:]) == (3, 3), f"mats.shape must be (N, 3, 3) but is {tuple(mats.shape)}"
@@ -218,7 +237,10 @@ class BatchedGeometric(nn.Module):
         device = images.device
 
         mats = self._sample_transformations(N, repeat=T, application_mask=application_mask).to(device)
-        output_grid = self._perspective_grid(mats, W, H, dtype=dtype, device=device)
+        if self.grid_type == "affine" or (self.grid_type == "random" and random.random() < 0.5):
+            output_grid = self._affine_grid(mats, W, H, dtype=dtype, device=device)
+        else:
+            output_grid = self._perspective_grid(mats, W, H, dtype=dtype, device=device)
 
         fill = self._get_fill((N, 3, H, W), dtype=dtype, device=device, fill_image=fill_image)
         if fill is not None:
@@ -418,7 +440,7 @@ class BatchedValuemetric(nn.Module):
         target_factors = target_factors.view(-1, 1, 1, 1, 1)
         return (target_factors * images + (1.0 - target_factors) * target_blends).clamp(0, 1).to(images.dtype)
 
-    def forward(self, images: torch.Tensor, application_mask: Optional[torch.Tensor] = None):
+    def forward(self, images: torch.Tensor, application_mask: Optional[torch.Tensor] = None, **kwargs):
         assert 4 <= len(images.shape) <=5 and images.shape[1] == 3, \
             f"images.shape must be (N, 3, H, W) or (N, 3, T, H, W) but is {tuple(images.shape)}"
         assert torch.is_floating_point(images), f"images must be a floating point tensor but is {images.dtype}"
@@ -537,7 +559,7 @@ class BatchedCompression(nn.Module):
         return self._compress_frames(
             images, codec=codec, pixel_format=pixel_format, **{key: factor})
 
-    def forward(self, images: torch.Tensor, application_mask: Optional[torch.Tensor] = None):
+    def forward(self, images: torch.Tensor, application_mask: Optional[torch.Tensor] = None, **kwargs):
         assert 4 <= len(images.shape) <=5 and images.shape[1] == 3, \
             f"images.shape must be (N, 3, H, W) or (N, 3, T, H, W) but is {tuple(images.shape)}"
         assert torch.is_floating_point(images), f"images must be a floating point tensor but is {images.dtype}"
@@ -610,7 +632,7 @@ class BatchedAugmenter(nn.Module):
         self.probabilities = {k: v / sum(self.probabilities.values()) for k, v in self.probabilities.items()}
         self.leftover_counts = {k: 0.0 for k in self.probabilities.keys()}
 
-    def forward(self, images: torch.Tensor):
+    def forward(self, images: torch.Tensor, **kwargs):
         selected_augs = list(self.augmentations.keys())
         random.shuffle(selected_augs)
 
@@ -630,7 +652,7 @@ class BatchedAugmenter(nn.Module):
                 mask_ = torch.zeros(len(images), dtype=torch.int32)
                 mask_[indices] = 1
 
-            images = self.augmentations[aug_name](images, application_mask=mask_.bool())
+            images = self.augmentations[aug_name](images, application_mask=mask_.bool(), **kwargs)
             aug_count += mask_
             # print(f"{aug_name:13}{''.join([str(x) for x in mask_.numpy().tolist()])} {self.leftover_counts[aug_name]:6.3f}", flush=True)
         
