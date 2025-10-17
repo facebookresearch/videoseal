@@ -27,6 +27,8 @@ def build_loss(loss_name):
         return LPIPS(net="vgg").eval()
     elif loss_name == "mse":
         return nn.MSELoss()
+    elif loss_name == "l1":
+        return nn.L1Loss()
     elif loss_name == "yuv":
         return YUVLoss()
     elif loss_name == "focal":

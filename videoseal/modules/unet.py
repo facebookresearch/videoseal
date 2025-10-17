@@ -25,21 +25,38 @@ class ResnetBlock(nn.Module):
         norm_layer: nn.Module, 
         mid_channels: int = None, 
         id_init: bool = False, 
-        conv_layer: nn.Module = nn.Conv2d
+        conv_layer: nn.Module = nn.Conv2d,
+        separable_conv: bool = False
     ) -> None:
         super().__init__()
         if not mid_channels:
             mid_channels = out_channels
-        self.double_conv = nn.Sequential(
-            conv_layer(in_channels, mid_channels,
-                       kernel_size=3, padding=1, bias=False),
-            norm_layer(mid_channels),
-            act_layer(),
-            conv_layer(mid_channels, out_channels,
-                       kernel_size=3, padding=1, bias=False),
-            norm_layer(out_channels),
-            act_layer()
-        )
+        if not separable_conv:
+            self.double_conv = nn.Sequential(
+                conv_layer(in_channels, mid_channels,
+                        kernel_size=3, padding=1, bias=False),
+                norm_layer(mid_channels),
+                act_layer(),
+                conv_layer(mid_channels, out_channels,
+                        kernel_size=3, padding=1, bias=False),
+                norm_layer(out_channels),
+                act_layer()
+            )
+        else:
+            self.double_conv = nn.Sequential(
+                nn.Conv2d(in_channels, in_channels, kernel_size=3, padding=1, groups=in_channels, bias=False),
+                norm_layer(in_channels),
+                act_layer(),
+                nn.Conv2d(in_channels, mid_channels, kernel_size=1, padding=0, bias=False),
+                norm_layer(mid_channels),
+                act_layer(),
+                nn.Conv2d(mid_channels, mid_channels, kernel_size=3, padding=1, groups=mid_channels, bias=False),
+                norm_layer(mid_channels),
+                act_layer(),
+                nn.Conv2d(mid_channels, out_channels, kernel_size=1, padding=0, bias=False),
+                norm_layer(out_channels),
+                act_layer()
+            )
         self.res_conv = conv_layer(in_channels, out_channels, kernel_size=1)
         if id_init:
             self._id_init(self.res_conv)
@@ -121,13 +138,14 @@ class BottleNeck(nn.Module):
         norm_layer: nn.Module,
         id_init: bool = False,
         conv_layer: nn.Module = nn.Conv2d,
+        separable_conv: bool = False,
         *args, **kwargs
     ) -> None:
         super(BottleNeck, self).__init__()
         model = []
         for _ in range(num_blocks):
             model += [ResnetBlock(channels_in, channels_out,
-                                  act_layer, norm_layer, id_init=id_init, conv_layer=conv_layer)]
+                                  act_layer, norm_layer, id_init=id_init, conv_layer=conv_layer, separable_conv=separable_conv)]
             channels_in = channels_out
         self.model = nn.Sequential(*model)
 
@@ -156,6 +174,7 @@ class UNetMsg(nn.Module):
         time_pooling_kernel_size: int = 1,
         time_pooling_depth: int = 1,
         time_pooling_stride: int = None,
+        separable_conv: bool = False,
         *args, **kwargs
     ) -> None:
         super(UNetMsg, self).__init__()
@@ -189,7 +208,7 @@ class UNetMsg(nn.Module):
         # Message mixing and middle blocks
         z_channels_list[-1] = z_channels_list[-1] + self.msg_processor.hidden_size
         self.bottleneck = BottleNeck(
-            num_blocks, z_channels_list[-1], z_channels_list[-1], act_layer, norm_layer, id_init=id_init, conv_layer=conv_layer)
+            num_blocks, z_channels_list[-1], z_channels_list[-1], act_layer, norm_layer, id_init=id_init, conv_layer=conv_layer, separable_conv=separable_conv)
 
         # Upward path
         self.ups = nn.ModuleList()

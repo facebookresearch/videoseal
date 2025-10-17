@@ -181,6 +181,11 @@ class Wam(nn.Module):
             )
         else:
             preds_w = self.embedder(imgs_res, msgs.to(self.device))
+        raw_embedder_output = preds_w.clone()
+        # interpolate back
+        if imgs.shape[-2:] != (self.img_size, self.img_size):
+            raw_embedder_output = F.interpolate(raw_embedder_output, size=imgs.shape[-2:],
+                                    **interpolation)
 
         # attenuate at low resolution if needed
         if self.attenuation is not None and lowres_attenuation:
@@ -211,6 +216,7 @@ class Wam(nn.Module):
             "msgs": msgs,  # original messages: b k
             "preds_w": preds_w,  # predicted watermarks: b c h w
             "imgs_w": imgs_w,  # watermarked images: b c h w
+            "raw_embedder_output": raw_embedder_output,  # raw embedder output
         }
         return outputs
 

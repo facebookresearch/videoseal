@@ -52,6 +52,7 @@ from torch.nn import functional as F
 from torchvision.utils import save_image
 
 import videoseal.utils as utils
+from videoseal.utils.cfg import setup_model_from_checkpoint
 import videoseal.utils.dist as udist
 import videoseal.utils.logger as ulogger
 import videoseal.utils.optim as uoptim
@@ -231,6 +232,12 @@ def get_parser():
        help='Epoch to start using arifact discriminator in the loss.')
     aa('--pixel_rounding', type=utils.bool_inst, default=True,
        help='If True, the output of the embedder is rounded to the nearest integer pixel value to simulate the real-world watermarking process.')
+    aa('--distill_loss', default='mse', type=str,
+       help='Distillation loss to use. "mse"')
+    aa('--distill_weight', default=0.0, type=float,
+       help='Weight of the distillation loss.')
+    aa('--distill_teacher_ckpt_path', default=None, type=str,
+       help='Path of the teacher model.')
     
     group = parser.add_argument_group('Loading parameters')
     aa('--batch_size', default=32, type=int, help='Batch size')
@@ -405,7 +412,8 @@ def main(params):
         disc_in_channels=params.disc_in_channels, disc_version=params.disc_version,
         disc_scales=params.disc_scales, percep_loss=params.perceptual_loss, disc_wm_boost=params.disc_wm_boost,
         lecam_weight=params.lecam_weight, disc_norm_in_stem=params.disc_norm_in_stem, disc_center_input=params.disc_center_input,
-        disc_spectral_norm=params.disc_spectral_norm, disc_fixed_size=params.disc_fixed_size,
+        disc_spectral_norm=params.disc_spectral_norm, disc_fixed_size=params.disc_fixed_size, distill_weight=params.distill_weight, 
+        distill_loss=params.distill_loss, distill_teacher_ckpt_path=params.distill_teacher_ckpt_path
     ).to(device)
     print(image_detection_loss)
 
@@ -552,6 +560,15 @@ def main(params):
     for param_group in optimizer_d.param_groups:
         param_group['lr'] = optim_params_d['lr']
     optimizers = [optimizer, optimizer_d]
+
+    # For distillation, we load and freeze the teacher detector model.
+    if params.distill_weight > 0:
+        teacher_model = setup_model_from_checkpoint(params.distill_teacher_ckpt_path)
+        wam.detector.load_state_dict(teacher_model.detector.state_dict())
+
+        # Remove the grads from the detector.
+        wam.detector.requires_grad_(False)
+        wam.detector.eval()
 
     # specific thing to do if distributed training
     if params.distributed:
@@ -800,6 +817,7 @@ def train_one_epoch(
                         outputs["masks"], outputs["msgs"], outputs["preds"],
                         optimizer_idx, epoch,
                         last_layer=last_layer,
+                        preds_w=outputs["preds_w"],
                     )
                     if params.lambda_artifact_disc > 0 and optimizer_idx == 0 and epoch >= params.artifact_disc_start_epoch:
                         artifact_loss = params.lambda_artifact_disc * artifact_discriminator_loss(outputs["imgs_w"])

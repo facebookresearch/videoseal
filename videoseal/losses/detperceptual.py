@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ..modules.discriminator import build_discriminator
+from ..utils.cfg import setup_model_from_checkpoint
 from ..utils.optim import freeze_grads
 from .perceptual import PerceptualLoss
 
@@ -56,7 +57,8 @@ class VideosealLoss(nn.Module):
                  disc_start=0, disc_num_layers=3, disc_in_channels=3, disc_loss="hinge",
                  disc_version="v1", disc_scales=1, use_actnorm=False, percep_loss="lpips", disc_wm_boost=1.0,
                  lecam_weight=0.0, lecam_ema_decay=0.999, disc_norm_in_stem=False, disc_center_input=False,
-                 disc_spectral_norm=False, disc_fixed_size=None,
+                 disc_spectral_norm=False, disc_fixed_size=None, distill_weight=0.0, distill_loss="mse",
+                 distill_teacher_ckpt_path=None,
                  ):
         super().__init__()
         assert disc_loss in ["hinge", "vanilla"]
@@ -71,9 +73,16 @@ class VideosealLoss(nn.Module):
         self.disc_wm_boost = disc_wm_boost
         self.disc_fixed_size = (disc_fixed_size, disc_fixed_size) \
             if disc_fixed_size is not None and disc_fixed_size != -1 else None
+        self.distill_weight = distill_weight
 
         # self.perceptual_loss = PerceptualLoss(percep_loss=percep_loss).to(torch.device("cuda"))
         self.perceptual_loss = PerceptualLoss(percep_loss=percep_loss)
+        self.distill_loss = PerceptualLoss(percep_loss=distill_loss)
+
+        if distill_teacher_ckpt_path is not None:
+            self.teacher_model = setup_model_from_checkpoint(distill_teacher_ckpt_path)
+            self.teacher_model.eval()
+
         self.discriminator = build_discriminator(
             scales=disc_scales,
             version=disc_version,
@@ -138,7 +147,7 @@ class VideosealLoss(nn.Module):
         inputs: torch.Tensor, reconstructions: torch.Tensor,
         masks: torch.Tensor, msgs: torch.Tensor, preds: torch.Tensor,
         optimizer_idx: int, global_step: int,
-        last_layer=None, cond=None,
+        last_layer=None, cond=None, preds_w: torch.Tensor = None,
     ) -> tuple:
         
         if optimizer_idx == 0:  # embedder update
@@ -203,6 +212,16 @@ class VideosealLoss(nn.Module):
                     ).mean()
                 losses["decode"] = decoding_loss
                 weights["decode"] = self.decode_weight
+
+            # Distillation loss.
+            if self.distill_weight > 0:
+                # Matching the predicted watermark without attenuation.
+                raw_embedder_output = self.teacher_model.embed(inputs, msgs, is_video=False)["raw_embedder_output"]
+                losses["distill"] = self.distill_loss(
+                    imgs=raw_embedder_output.contiguous(),
+                    imgs_w=preds_w.contiguous(),
+                ).mean()
+                weights["distill"] = self.distill_weight
 
             # calculate adaptive weights
             # turn off adaptive weights if any of the detector or embedder losses are turned off
@@ -283,4 +302,7 @@ class VideosealLoss(nn.Module):
         """
         super().to(device)
         self.perceptual_loss = self.perceptual_loss.to(device)
+        if self.distill_weight > 0:
+            self.distill_loss = self.distill_loss.to(device)
+            self.teacher_model = self.teacher_model.to(device)
         return self
