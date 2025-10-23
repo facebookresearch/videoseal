@@ -1,0 +1,69 @@
+# Full masks (e.g. to train bits only)
+masks:
+  kind: none
+
+# The probability of applying the augmentation.
+augs:
+  identity:           1
+  jpeg:               1
+  resize:             1
+  crop:               1
+  rotate:             1
+  hflip:              1
+  perspective:        1
+  gaussian_blur:      1
+  median_filter:      1
+  brightness:         1
+  contrast:           1
+  saturation:         1
+  hue:                1
+  h264:               1
+  h264rgb:            1
+  h265:               1
+
+augs_params:
+  resize:
+    # edge size will be sampled from [min_size, max_size] * original edge size
+    min_size: 0.7
+    max_size: 1.5
+  crop:
+    min_size: 0.5
+    max_size: 1.0
+  rotate:
+    min_angle: -10
+    max_angle: 10
+    do90: True
+  perspective:
+    min_distortion_scale: 0.1
+    max_distortion_scale: 0.5
+  jpeg:
+    min_quality: 40
+    max_quality: 80
+  gaussian_blur:
+    # sigma = 0.3 * ((kernel_size - 1) * 0.5 - 1) + 0.8
+    min_kernel_size: 3
+    max_kernel_size: 17
+  median_filter:
+    min_kernel_size: 3
+    max_kernel_size: 3
+  brightness:
+    min_factor: 0.5
+    max_factor: 2
+  contrast:
+    min_factor: 0.5
+    max_factor: 2.0
+  saturation:
+    min_factor: 0.5
+    max_factor: 2
+  hue:
+    min_factor: -0.1
+    max_factor: 0.1
+  h264:
+    min_crf: 28
+    max_crf: 36
+  h264rgb:
+    min_crf: 28
+    max_crf: 36
+  h265:
+    min_crf: 28
+    max_crf: 36
