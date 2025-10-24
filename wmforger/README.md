@@ -1,12 +1,18 @@
 <div align="center">
 <h1>🖼️🔓 Transferable Black-Box One-Shot Forging of Watermarks via Image Preference Models</h1>
 
-**[NeurIPS 2025 (Spotlight 🏅)](https://arxiv.org/abs/)**
+**[NeurIPS 2025 (Spotlight 🏅)](https://arxiv.org/abs/2510.20468)**
 
 <img src="https://dl.fbaipublicfiles.com/wmforger/overview.jpg" style="width:80%"/>
+
+**[[arXiv](https://arxiv.org/abs/2510.20468)]**
+**[[Colab](https://colab.research.google.com/github/facebookresearch/videoseal/blob/main/wmforger/example.ipynb)]**
+
 </div>
 
 ## 🎮 Usage
+
+See and try our example [jupyter notebook](https://github.com/facebookresearch/videoseal/blob/main/wmforger/example.ipynb) in [Colab](https://colab.research.google.com/github/facebookresearch/videoseal/blob/main/wmforger/example.ipynb) or try the mimimal example of removing watermark localy using the steps below.
 
 1. Install [PyTorch](https://pytorch.org/get-started/) and other [requirements](https://github.com/facebookresearch/videoseal/blob/main/requirements.txt).
 

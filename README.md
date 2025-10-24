@@ -11,10 +11,11 @@ This repository includes pre-trained models, training code, inference code, and 
 [[`Demo`](https://aidemos.meta.com/videoseal)]
 
 
-## What's New
+## ⭐ What's New
 
-- March 2025: New image models, including 256-bit model with stronger robustness and imperceptibility. Updates to the codebase for better performance and usability.
-- December 2024: Initial release of Video Seal, including 96-bit model, baselines and video inference and training code.
+- **October 2025**: Follow-up work on [watermark forging](https://arxiv.org/abs/2510.20468) has been accepted to **NeurIPS 2025** as spotlight 🏅! The code and model are released in the [`wmforger/`](https://github.com/facebookresearch/videoseal/tree/main/wmforger) folder. Try it yourself!
+- **March 2025**: New image models, including 256-bit model with stronger robustness and imperceptibility. Updates to the codebase for better performance and usability.
+- **December 2024**: Initial release of Video Seal, including 96-bit model, baselines and video inference and training code.
 
 
 ## Quick start
