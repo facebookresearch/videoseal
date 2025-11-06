@@ -21,6 +21,13 @@ pip install -r requirements.txt
 ```
 
 
+### Emoji assets
+
+To use emoji overlay augmentations, you can unzip the `twemojis.zip` file into `assets/twemojis` folder, by doing:
+```
+unzip assets/twemojis.zip
+```
+
 ### FFmpeg and VMAF
 
 #### FFmpeg

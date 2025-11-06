@@ -1,0 +1,102 @@
+# Augmentation recipe including new noise, exposure, and zoom-out transforms
+masks:
+  kind: none
+
+augs:
+  identity:           1
+  jpeg:               1
+  resize:             1
+  crop:               1
+  rotate:             1
+  hflip:              1
+  perspective:        1
+  zoom_out:           1
+  gaussian_blur:      1
+  median_filter:      1
+  gaussian_noise:     1
+  impulse_noise:      1
+  shot_noise:         1
+  speckle_noise:      1
+  brightness:         1
+  contrast:           1
+  saturation:         1
+  hue:                1
+  gamma_exposure:     0
+  log_exposure:       0
+  sigmoid_exposure:   0
+  h264:               1
+  h264rgb:            1
+  h265:               1
+
+augs_params:
+  resize:
+    min_size: 0.5
+    max_size: 1.5
+  crop:
+    min_size: 0.2
+    max_size: 1.0
+  rotate:
+    min_angle: -45
+    max_angle: 45
+    do90: true
+  perspective:
+    min_distortion_scale: 0.1
+    max_distortion_scale: 0.5
+  zoom_out:
+    min_factor: 1.1
+    max_factor: 1.6
+  jpeg:
+    min_quality: 40
+    max_quality: 80
+  gaussian_blur:
+    min_kernel_size: 3
+    max_kernel_size: 17
+  median_filter:
+    min_kernel_size: 3
+    max_kernel_size: 5
+  gaussian_noise:
+    min_std: 0.02
+    max_std: 0.15
+  impulse_noise:
+    min_amount: 0.01
+    max_amount: 0.1
+    salt_vs_pepper: 0.5
+  shot_noise:
+    min_scale: 0.5
+    max_scale: 2.0
+  speckle_noise:
+    min_std: 0.02
+    max_std: 0.15
+  brightness:
+    min_factor: 0.5
+    max_factor: 2.0
+  contrast:
+    min_factor: 0.5
+    max_factor: 2.0
+  saturation:
+    min_factor: 0.5
+    max_factor: 2.0
+  hue:
+    min_factor: -0.1
+    max_factor: 0.1
+  gamma_exposure:
+    min_gamma: 0.5
+    max_gamma: 2.0
+    gain: 1.0
+  log_exposure:
+    min_gain: 0.7
+    max_gain: 1.3
+  sigmoid_exposure:
+    min_cutoff: 0.35
+    max_cutoff: 0.65
+    min_gain: 4.0
+    max_gain: 12.0
+  h264:
+    min_crf: 28
+    max_crf: 36
+  h264rgb:
+    min_crf: 28
+    max_crf: 36
+  h265:
+    min_crf: 28
+    max_crf: 36

@@ -5,6 +5,35 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+# From https://github.com/facebookresearch/detectron2/blob/main/detectron2/layers/batch_norm.py # noqa
+# Itself from https://github.com/facebookresearch/ConvNeXt/  # noqa
+
+class LayerNorm(nn.Module):
+    """ LayerNorm that supports two data formats: channels_last (default) or channels_first. 
+    The ordering of the dimensions in the inputs. channels_last corresponds to inputs with 
+    shape (batch_size, height, width, channels) while channels_first corresponds to inputs 
+    with shape (batch_size, channels, height, width).
+    """
+    def __init__(self, normalized_shape, eps=1e-6, data_format="channels_first"):
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(normalized_shape))
+        self.bias = nn.Parameter(torch.zeros(normalized_shape))
+        self.eps = eps
+        self.data_format = data_format
+        if self.data_format not in ["channels_last", "channels_first"]:
+            raise NotImplementedError 
+        self.normalized_shape = (normalized_shape, )
+    
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if self.data_format == "channels_last":
+            return F.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
+        else:
+            u = x.mean(1, keepdim=True)
+            s = (x - u).pow(2).mean(1, keepdim=True)
+            x = (x - u) / torch.sqrt(s + self.eps)
+            x = self.weight[:, None, None] * x + self.bias[:, None, None]
+            return x
+
 
 class Upsample(nn.Module):
 
@@ -15,6 +44,7 @@ class Upsample(nn.Module):
         out_channels: int, 
         up_factor: int, 
         activation: nn.Module, 
+        norm_layer: nn.Module = LayerNorm,
         bias: bool = False
     ) -> None:
         """
@@ -35,7 +65,7 @@ class Upsample(nn.Module):
                 nn.Upsample(scale_factor=up_factor, mode='nearest'),
                 nn.ReflectionPad2d(1),
                 nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding=0, bias=bias),
-                LayerNorm(out_channels, data_format="channels_first"),
+                norm_layer(out_channels),
                 activation(),
             )
         elif upscale_type == 'bilinear':
@@ -43,20 +73,20 @@ class Upsample(nn.Module):
                 nn.Upsample(scale_factor=up_factor, mode='bilinear', align_corners=bias),
                 nn.ReflectionPad2d(1),
                 nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding=0, bias=bias),
-                LayerNorm(out_channels, data_format="channels_first"),
+                norm_layer(out_channels),
                 activation(),
             )
         elif upscale_type == 'conv':
             upsample_block = nn.Sequential(
                 nn.ConvTranspose2d(in_channels, out_channels, kernel_size=up_factor, stride=up_factor),
-                LayerNorm(out_channels, data_format="channels_first"),
+                norm_layer(out_channels),
                 activation(),
             )
         elif upscale_type == 'pixelshuffle':
             conv = nn.Conv2d(in_channels, out_channels * up_factor ** 2, kernel_size=1, bias=False)
             upsample_block = nn.Sequential(
                 conv,
-                LayerNorm(out_channels * up_factor ** 2, data_format="channels_first"),
+                norm_layer(out_channels * up_factor ** 2),
                 activation(),
                 nn.PixelShuffle(up_factor),
             )
@@ -119,36 +149,6 @@ class MLPBlock(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.lin2(self.act(self.lin1(x)))
-
-
-# From https://github.com/facebookresearch/detectron2/blob/main/detectron2/layers/batch_norm.py # noqa
-# Itself from https://github.com/facebookresearch/ConvNeXt/  # noqa
-
-class LayerNorm(nn.Module):
-    """ LayerNorm that supports two data formats: channels_last (default) or channels_first. 
-    The ordering of the dimensions in the inputs. channels_last corresponds to inputs with 
-    shape (batch_size, height, width, channels) while channels_first corresponds to inputs 
-    with shape (batch_size, channels, height, width).
-    """
-    def __init__(self, normalized_shape, eps=1e-6, data_format="channels_first"):
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(normalized_shape))
-        self.bias = nn.Parameter(torch.zeros(normalized_shape))
-        self.eps = eps
-        self.data_format = data_format
-        if self.data_format not in ["channels_last", "channels_first"]:
-            raise NotImplementedError 
-        self.normalized_shape = (normalized_shape, )
-    
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if self.data_format == "channels_last":
-            return F.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
-        else:
-            u = x.mean(1, keepdim=True)
-            s = (x - u).pow(2).mean(1, keepdim=True)
-            x = (x - u) / torch.sqrt(s + self.eps)
-            x = self.weight[:, None, None] * x + self.bias[:, None, None]
-            return x
 
 
 class GRN(nn.Module):

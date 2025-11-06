@@ -19,7 +19,7 @@ import videoseal.utils.dist as udist
 from videoseal.augmentation.augmenter import get_dummy_augmenter
 from videoseal.data.datasets import CocoImageIDWrapper, ImageFolder, VideoDataset, SimpleVideoDataset
 from videoseal.models import VideoWam, build_embedder, build_extractor, build_baseline
-from videoseal.modules.jnd import JND, VarianceBasedJND
+from videoseal.modules.jnd import build_jnd
 
 # in the yaml, allows for
 # vae:
@@ -144,14 +144,8 @@ def setup_model(config: VideoWamConfig, ckpt_path: Path) -> VideoWam:
     augmenter = get_dummy_augmenter()  # does nothing
 
     # Build attenuation
-    if args.attenuation.lower().startswith("jnd"):
-        attenuation_cfg = omegaconf.OmegaConf.load(args.attenuation_config)
-        attenuation = JND(**attenuation_cfg[args.attenuation])
-    elif args.attenuation.lower().startswith("simplified"):
-        attenuation_cfg = omegaconf.OmegaConf.load(args.attenuation_config)
-        attenuation = VarianceBasedJND(**attenuation_cfg[args.attenuation])
-    else:
-        attenuation = None
+    attenuation_cfg = omegaconf.OmegaConf.load(args.attenuation_config)
+    attenuation = build_jnd(args.attenuation, attenuation_cfg)
 
     # Build the complete model
     wam = VideoWam(

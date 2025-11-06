@@ -87,14 +87,15 @@ class UBlock(nn.Module):
         in_channels: int, 
         out_channels: int, 
         act_layer: nn.Module, 
-        norm_layer: nn.Module, 
+        norm_layer: nn.Module,
+        norm_layer_upsample: nn.Module, 
         upsampling_type: str = 'bilinear', 
         id_init: bool = False, 
         conv_layer: nn.Module = nn.Conv2d
     ) -> None:
         super().__init__()
         self.up = Upsample(upsampling_type, in_channels,
-                           out_channels, 2, act_layer)
+                           out_channels, 2, act_layer, norm_layer_upsample)
         self.conv = ResnetBlock(
             out_channels, out_channels, act_layer, norm_layer, id_init=id_init, conv_layer=conv_layer)
 
@@ -174,6 +175,7 @@ class UNetMsg(nn.Module):
         time_pooling_kernel_size: int = 1,
         time_pooling_depth: int = 1,
         time_pooling_stride: int = None,
+        normalization_up: str = 'layer',
         separable_conv: bool = False,
         *args, **kwargs
     ) -> None:
@@ -189,6 +191,7 @@ class UNetMsg(nn.Module):
 
         # select layers and activations
         norm_layer = get_normalization(normalization)
+        norm_layer_upsample = get_normalization(normalization_up) # Ensure backward compatibility for norm_layer without data_format argument
         act_layer = get_activation(activation)
         conv_layer = get_conv_layer(conv_layer)
 
@@ -214,7 +217,7 @@ class UNetMsg(nn.Module):
         self.ups = nn.ModuleList()
         for ii in reversed(range(len(z_channels_list) - 1)):
             self.ups.append(UBlock(
-                2 * z_channels_list[ii + 1], z_channels_list[ii], act_layer, norm_layer, upsampling_type, id_init, conv_layer=conv_layer))
+                2 * z_channels_list[ii + 1], z_channels_list[ii], act_layer, norm_layer, norm_layer_upsample, upsampling_type, id_init, conv_layer=conv_layer))
 
         # Final output convolution
         self.outc = nn.Conv2d(z_channels_list[0], out_channels, 1)

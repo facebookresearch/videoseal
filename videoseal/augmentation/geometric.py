@@ -211,6 +211,73 @@ class HorizontalFlip(nn.Module):
         return f"HorizontalFlip"
 
 
+class ZoomOut(nn.Module):
+    """Zoom out by placing the image on a larger canvas with a random fill color.
+
+    size_factor: how much larger the canvas is relative to original (e.g. 1.2 means 20% border)
+    If size_factor is None, a random factor between min_factor and max_factor is used.
+    """
+    def __init__(self, min_factor=1.1, max_factor=1.5, fill=None):
+        super(ZoomOut, self).__init__()
+        self.min_factor = min_factor
+        self.max_factor = max_factor
+        self.fill = fill  # if None, choose random fill color per call
+        self.relative_strength = 1.0
+
+    def get_random_factor(self):
+        f = torch.rand(1).item() * (self.max_factor - self.min_factor) + self.min_factor
+        return 1.0 + (f - 1.0) * self.relative_strength
+
+    def forward(self, image, mask=None, factor=None):
+        factor = factor or self.get_random_factor()
+        
+        # Determine fill color
+        fill_color = self.fill
+        if fill_color is None:
+            fill_color = torch.rand(3).tolist() if image.dtype.is_floating_point else [0, 0, 0]
+        
+        # Handle dimensions
+        adapt_dim = len(image.shape) == 3
+        if adapt_dim:
+            image = image.unsqueeze(0)
+            if mask is not None and len(mask.shape) == 3:
+                mask = mask.unsqueeze(0)
+        
+        # Get dimensions
+        b, c, h, w = image.shape
+        new_h, new_w = int(round(h * factor)), int(round(w * factor))
+        
+        # Create canvas
+        canvas = torch.zeros((b, c, new_h, new_w), dtype=image.dtype, device=image.device)
+        fill_tensor = torch.tensor(fill_color, dtype=image.dtype, device=image.device)
+        if fill_tensor.numel() == 1:
+            fill_tensor = fill_tensor.expand(c)
+        canvas[:, :, :, :] = fill_tensor.view(1, c, 1, 1)
+        
+        # Random placement
+        top = torch.randint(0, max(new_h - h, 0) + 1, size=(1,)).item() if new_h > h else 0
+        left = torch.randint(0, max(new_w - w, 0) + 1, size=(1,)).item() if new_w > w else 0
+        canvas[:, :, top:top + h, left:left + w] = image
+        
+        # Resize back to original
+        out = nn.functional.interpolate(canvas, size=(h, w), mode='bilinear', align_corners=True)
+        
+        if mask is not None:
+            mask_canvas = torch.zeros((b, c, new_h, new_w), dtype=mask.dtype, device=mask.device)
+            mask_canvas[:, :, top:top + h, left:left + w] = mask
+            out_mask = nn.functional.interpolate(mask_canvas, size=(h, w), mode='nearest')
+            if adapt_dim:
+                return out.squeeze(0), out_mask.squeeze(0)
+            return out, out_mask
+        
+        if adapt_dim:
+            out = out.squeeze(0)
+        return out, mask
+
+    def __repr__(self):
+        return f"ZoomOut"
+
+
 if __name__ == "__main__":
     import os
 
@@ -225,6 +292,7 @@ if __name__ == "__main__":
         (Resize, [0.5, 0.75, 1.0]),      # size ratio
         (Crop, [0.5, 0.75, 1.0]),        # size ratio
         (Perspective, [0.2, 0.5, 0.8]),       # distortion_scale
+        (ZoomOut, [1.2, 1.5, 2.0]),      # size_factor
         (HorizontalFlip, [])             # No parameters needed for flip
     ]
 

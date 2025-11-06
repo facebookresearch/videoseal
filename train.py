@@ -17,7 +17,7 @@ Examples:
         --extractor_model convnext_tiny --embedder_model unet_small2_yuv_quant --hidden_size_multiplier 1 --nbits 128 \
         --scaling_w_schedule Cosine,scaling_min=0.2,start_epoch=200,epochs=200 --scaling_w 1.0 --scaling_i 1.0 --attenuation jnd_1_1 \
         --epochs 601 --iter_per_epoch 1000 --scheduler CosineLRScheduler,lr_min=1e-6,t_initial=601,warmup_lr_init=1e-8,warmup_t=20 --optimizer AdamW,lr=5e-4 \
-        --lambda_dec 1.0 --lambda_d 0.1 --lambda_i 0.1 --perceptual_loss yuv  --num_augs 2 --augmentation_config configs/all_augs_v3.yaml --disc_in_channels 1 --disc_start 50 
+        --lambda_dec 1.0 --lambda_d 0.1 --lambda_i 0.0 --perceptual_loss yuv  --num_augs 2 --augmentation_config configs/all_augs_v3.yaml --disc_in_channels 1 --disc_start 50 
 
     2/ video finetuning
     
@@ -30,8 +30,10 @@ Examples:
         --epochs 601 --iter_per_epoch 100 --scheduler None --optimizer AdamW,lr=1e-5 \
         --lambda_dec 1.0 --lambda_d 0.5 --lambda_i 0.1 --perceptual_loss yuv  --num_augs 2 --augmentation_config configs/all_augs_v3.yaml --disc_in_channels 1 --disc_start 50
 
-        
 """
+
+import sys
+import logging
 
 import argparse
 import datetime
@@ -67,7 +69,7 @@ from videoseal.evals.metrics import accuracy, bit_accuracy, iou, psnr, ssim
 from videoseal.losses.detperceptual import VideosealLoss
 from videoseal.quality_metric.artifact_discriminator_metric import ArtifactDiscriminatorLoss
 from videoseal.models import VideoWam, Wam, build_embedder, build_extractor
-from videoseal.modules.jnd import JND, VarianceBasedJND
+from videoseal.modules.jnd import build_jnd
 from videoseal.modules.ema import EMAModel
 from videoseal.utils.data import Modalities, parse_dataset_params
 from videoseal.utils.display import save_vid
@@ -373,18 +375,8 @@ def main(params):
     print(f'extractor: {sum(p.numel() for p in extractor.parameters() if p.requires_grad) / 1e6:.1f}M parameters')
 
     # build attenuation
-    if params.attenuation.lower() != "none":
-        attenuation_cfg = omegaconf.OmegaConf.load(params.attenuation_config)
-        if params.attenuation.lower().startswith("jnd"):
-            attenuation_cfg = omegaconf.OmegaConf.load(params.attenuation_config)
-            attenuation = JND(**attenuation_cfg[params.attenuation]).to(device)
-        elif params.attenuation.lower().startswith("simplified"):
-            attenuation_cfg = omegaconf.OmegaConf.load(params.attenuation_config)
-            attenuation = VarianceBasedJND(**attenuation_cfg[params.attenuation]).to(device)
-        else:
-            attenuation = None
-    else:
-        attenuation = None
+    attenuation_cfg = omegaconf.OmegaConf.load(params.attenuation_config)
+    attenuation = build_jnd(params.attenuation, attenuation_cfg)
     print(f'attenuation: {attenuation}')
 
     # build the complete model
@@ -656,6 +648,7 @@ def main(params):
             wam.embedder.eval()
             
             # rebuild DDP with unused parameters
+            wam.attenuation.to(device) # embed function may move JND to CPU, move it back to device before DDP
             wam_ddp = nn.parallel.DistributedDataParallel(
                 wam, device_ids=[params.local_rank], find_unused_parameters=True)
 
@@ -754,7 +747,7 @@ def train_one_epoch(
     header = f'Train - Epoch: [{epoch}/{params.epochs}] - Modality: {epoch_modality}'
     metric_logger = ulogger.MetricLogger(delimiter="  ")
 
-    for it, batch_items in enumerate(metric_logger.log_every(train_loader, 10, header)):
+    for it, batch_items in enumerate(metric_logger.log_every(train_loader, 20, header)):
         if it >= params.iter_per_epoch:
             break
 
@@ -825,8 +818,16 @@ def train_one_epoch(
                         loss += artifact_loss
                 # Scale loss for accumulation so lr is not affected
                 loss = loss / accumulation_steps
+                # outputs['imgs_aug'].retain_grad()
+                # outputs['imgs_w'].retain_grad()
                 loss.backward()
                 log_stats = {**log_stats, **logs}
+
+            # # sync
+            # torch.cuda.synchronize()
+            # logging.info(it, outputs['selected_aug'], outputs['imgs_w'].grad.norm(),  outputs['imgs_aug'].grad.norm(), outputs['imgs_w'].norm(),  outputs['imgs_aug'].norm())
+            # sys.stdout.flush()
+            # # flush to make sure everything is printed before the next iteration
 
             # log stats
             log_stats = {

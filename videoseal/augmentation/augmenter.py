@@ -12,11 +12,14 @@ from torchvision.utils import save_image
 
 from ..data.transforms import default_transform
 from .geometric import (Crop, HorizontalFlip, Identity, Perspective, Resize,
-                        Rotate)
+                        Rotate, ZoomOut)
 from .masks import get_mask_embedder
 from .valuemetric import (JPEG, Brightness, Contrast, GaussianBlur, Hue,
-                          MedianFilter, Saturation, Pad, InsertMemeText,
-                          InsertLogo)
+                          MedianFilter, Saturation,
+                          GaussianNoise, ImpulseNoise,
+                          ShotNoise, SpeckleNoise, GammaExposure,
+                          LogExposure, SigmoidExposure)
+from .overlay import InsertMemeText, InsertText, InsertEmoji
 from .video import VideoCompressorAugmenter, DropFrame, H264, H265, H264rgb
 from .neuralcompression import (BMSHJ2018Hyperprior, BMSHJ2018Factorized, 
                                 MBT2018Mean, MBT2018, Cheng2020Anchor, Cheng2020Attn,
@@ -28,13 +31,21 @@ name2aug = {
     'resize': Resize,
     'crop': Crop,
     'perspective': Perspective,
+    'zoom_out': ZoomOut,
     'hflip': HorizontalFlip,
     'identity': Identity,
     'jpeg': JPEG,
     'gaussian_blur': GaussianBlur,
-    'pad': Pad,
+    'gaussian_noise': GaussianNoise,
+    'impulse_noise': ImpulseNoise,
+    'shot_noise': ShotNoise,
+    'speckle_noise': SpeckleNoise,
+    'gamma_exposure': GammaExposure,
+    'log_exposure': LogExposure,
+    'sigmoid_exposure': SigmoidExposure,
     "meme": InsertMemeText,
-    "logo": InsertLogo,
+    "text": InsertText,
+    "emoji": InsertEmoji,
     'median_filter': MedianFilter,
     'brightness': Brightness,
     'contrast': Contrast,

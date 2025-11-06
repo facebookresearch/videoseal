@@ -1,6 +1,10 @@
 from .sequential import Sequential
-from .geometric import Crop, HorizontalFlip, Identity, Perspective, Resize, Rotate
-from .valuemetric import JPEG, Brightness, Contrast, GaussianBlur, Grayscale, Hue, MedianFilter, Saturation
+from .geometric import Crop, HorizontalFlip, Identity, Perspective, Resize, Rotate, ZoomOut
+from .valuemetric import (JPEG, Brightness, Contrast, GaussianBlur, Grayscale,
+                          Hue, MedianFilter, Saturation, GaussianNoise,
+                          ImpulseNoise, ShotNoise, SpeckleNoise,
+                          GammaExposure, LogExposure, SigmoidExposure)
+from .overlay import InsertEmoji, InsertMemeText, InsertText
 from .video import H264, H264rgb, H265, VP9, AV1, SpeedChange, WindowAveraging, DropFrame, TemporalReorder
 from .neuralcompression import VQGAN1024, VQGAN16384, StableDiffusionVAE, BMSHJ2018Factorized, BMSHJ2018Hyperprior, MBT2018Mean, MBT2018, Cheng2020Anchor, Cheng2020Attn
 
@@ -18,6 +22,7 @@ def get_validation_augs_subset(
             (HorizontalFlip(),    [0]),  # No parameters needed for flip
             (Crop(),              [0.71]),  # size ratio
             (Brightness(),        [0.5]),
+            (ZoomOut(),           [1.5]),
             (H264(),              [40]),
             (Sequential(H264(), Crop(), Brightness()), [(40, 0.71, 0.5)]),
         ]
@@ -28,6 +33,7 @@ def get_validation_augs_subset(
             (Crop(),                    [0.71]),  # size ratio
             (Brightness(),              [0.5]),
             (JPEG(),                    [60]),
+            (ZoomOut(),                 [1.5]),
             (Sequential(JPEG(), Crop(), Brightness()), [(60, 0.71, 0.5)]),
         ]
     # Neural compression augmentations
@@ -84,6 +90,7 @@ def get_validation_augs(
             (Resize(),            [0.55, 0.71]),  # size ratio
             (Crop(),              [0.55, 0.71]),  # size ratio
             (Perspective(),       [0.5]),  # distortion_scale
+            (ZoomOut(),           [1.5, 2.0]),
             (Brightness(),        [0.5, 1.5]),
             (Contrast(),          [0.5, 1.5]),
             (Saturation(),        [0.5, 1.5]),
@@ -91,6 +98,13 @@ def get_validation_augs(
             (Grayscale(),         [-1]),  # No parameters needed for grayscale
             (JPEG(),              [40]),
             (GaussianBlur(),      [9]),
+            (GammaExposure(),     [0.5, 1.5, 2.0]),
+            (LogExposure(),       [0.8, 1.0, 1.2]),
+            (SigmoidExposure(),   [(0.3, 6.0), (0.5, 6.0), (0.5, 12.0)]),
+            (GaussianNoise(),     [0.05, 0.1, 0.2]),
+            (ShotNoise(),         [0.5, 1.0, 2.0]),
+            (ImpulseNoise(),      [0.05, 0.1, 0.2]),
+            (SpeckleNoise(),      [0.05, 0.1, 0.2]),
             # (MedianFilter(),      [9]),
             (H264(),              [23, 30, 40, 50]),
             (H264rgb(),           [23, 30, 40, 50]),
@@ -114,12 +128,23 @@ def get_validation_augs(
             (Resize(),            [0.32, 0.45, 0.55, 0.63, 0.71, 0.77, 0.84, 0.89, 0.95, 1.00]),  # size ratio, such 0.1 increment in area ratio
             (Crop(),              [0.32, 0.45, 0.55, 0.63, 0.71, 0.77, 0.84, 0.89, 0.95, 1.00]),  
             (Perspective(),       [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]),  # distortion_scale
+            (ZoomOut(),           [1.5, 2.0]),
             (Brightness(),        [0.1, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0]),
             (Contrast(),          [0.1, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0]),
             (Hue(),               [-0.4, -0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3, 0.4, 0.5]),
             (Grayscale(),         [-1]),  # No parameters needed for grayscale
             (JPEG(),              [40, 50, 60, 70, 80, 90]),
             (GaussianBlur(),      [3, 5, 9, 13, 17]),
+            (GammaExposure(),     [0.5, 1.5, 2.0]),
+            (LogExposure(),       [0.8, 1.0, 1.2]),
+            (SigmoidExposure(),   [(0.3, 6.0), (0.5, 6.0), (0.5, 12.0)]),
+            (GaussianNoise(),     [0.05, 0.1, 0.2]),
+            (ShotNoise(),         [0.5, 1.0, 2.0]),
+            (ImpulseNoise(),      [0.05, 0.1, 0.2]),
+            (SpeckleNoise(),      [0.05, 0.1, 0.2]),
+            (InsertText(),        [18, 24, 36, 48]),
+            (InsertEmoji(),       [32, 48, 64, 96]),
+            (InsertMemeText(),    [0.08, 0.12, 0.16, 0.2]),
             # (VQGAN1024(),         [0]),  # No parameters needed for VQGAN
             # (VQGAN16384(),        [0]),  # No parameters needed for VQGAN
             (Sequential(JPEG(), Crop(), Brightness()), [(40, 0.71, 0.5)]),

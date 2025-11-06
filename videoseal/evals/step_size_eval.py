@@ -23,7 +23,7 @@ from torchvision.utils import save_image
 from .metrics import vmaf_on_tensor, bit_accuracy, iou, accuracy, pvalue, capacity, psnr, ssim, msssim, bd_rate
 from ..augmentation import get_validation_augs
 from ..models import VideoWam
-from ..modules.jnd import JND, VarianceBasedJND
+from ..modules.jnd import build_jnd
 from ..utils import Timer, bool_inst
 from ..utils.display import save_vid
 from ..utils.image import create_diff_img
@@ -116,15 +116,8 @@ def main():
 
     # Override attenuation build
     if args.attenuation is not None:
-        # should be on CPU to operate on high resolution videos
-        if args.attenuation.lower().startswith("jnd"):
-            attenuation_cfg = omegaconf.OmegaConf.load(args.attenuation_config)
-            attenuation = JND(**attenuation_cfg[args.attenuation])
-        elif args.attenuation.lower().startswith("simplified"):
-            attenuation_cfg = omegaconf.OmegaConf.load(args.attenuation_config)
-            attenuation = VarianceBasedJND(**attenuation_cfg[args.attenuation])
-        else:
-            attenuation = None
+        attenuation_cfg = omegaconf.OmegaConf.load(args.attenuation_config)
+        attenuation = build_jnd(args.attenuation, attenuation_cfg)
         model.attenuation = attenuation
 
     # Setup the dataset

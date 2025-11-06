@@ -6,8 +6,11 @@ core*
 *.pth
 *.jit
 *.mp4
+*.png
 
 # Track videos in test directories
 !**/tests/**/*.mp4
 results*
 slurm*
+
+assets/twemojis

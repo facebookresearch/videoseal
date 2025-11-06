@@ -11,8 +11,7 @@ import torch
 import torch.nn as nn
 import torchvision.transforms as transforms
 import torchvision.transforms.functional as F
-from torchvision.transforms import v2
-from PIL import Image, ImageFont, ImageDraw
+from PIL import Image
 
 from ..data.transforms import default_transform
 
@@ -88,6 +87,80 @@ def median_filter(images: torch.Tensor, kernel_size: int) -> torch.Tensor:
     # Compute the median of each block
     medians = blocks.median(dim=-1).values.median(dim=-1).values  # BxCxHxW
     return medians
+
+
+def impulse_noise(image: torch.Tensor, amount: float, salt_vs_pepper: float = 0.5) -> torch.Tensor:
+    """Add per-pixel salt-and-pepper impulse noise."""
+    batched = image.dim() == 4
+    if not batched:
+        image = image.unsqueeze(0)
+    B, C, H, W = image.shape
+
+    # Probability mask for noisy pixels
+    mask = torch.rand((B, 1, H, W), device=image.device) < amount
+
+    # Salt or pepper choice per pixel
+    salt_mask = torch.rand((B, 1, H, W), device=image.device) < salt_vs_pepper
+    noise = torch.where(salt_mask, torch.ones_like(image), torch.zeros_like(image))
+    noisy = torch.where(mask, noise, image)
+    return noisy if batched else noisy.squeeze(0)
+
+
+def shot_noise(image: torch.Tensor, scale: float = 1.0) -> torch.Tensor:
+    """Apply Poisson (shot) noise using a straight-through estimator."""
+    if scale <= 0:
+        return image
+    img = torch.clamp(image, 0, 1)
+    vals = img * 255.0 / scale
+    noisy = vals + (torch.poisson(vals) - vals).detach()
+    noisy = noisy / (255.0 / scale)
+    return torch.clamp(noisy, 0, 1)
+
+
+
+def speckle_noise(image: torch.Tensor, mean: float = 0.0, std: float = 0.1) -> torch.Tensor:
+    """Multiplicative noise: image + image * gaussian_noise"""
+    if std <= 0:
+        return image
+    noise = torch.randn_like(image) * std + mean
+    return torch.clamp(image + image * noise, 0, 1)
+
+def gaussian_noise(image: torch.Tensor, std: float = 0.1, mean: float = 0.0) -> torch.Tensor:
+    """Additive Gaussian noise: image + gaussian_noise"""
+    if std <= 0:
+        return image
+    noise = torch.randn_like(image) * std + mean
+    return torch.clamp(image + noise, 0, 1)
+
+
+def adjust_gamma(x: torch.Tensor, gamma: float = 1.0, gain: float = 1.0) -> torch.Tensor:
+    """
+    Apply gamma correction: y = gain * x ** gamma
+    x is assumed to be in [0,1].
+    """
+    # Clamp to non-negative (to avoid nan from negative ^ non-integer) 
+    # and add a small epsilon to avoid backprop issues at 0
+    x_clamped = torch.clamp(x, min=0.0) + 1e-8
+    return (gain * x_clamped.pow(gamma)).clamp(0, 1)
+
+
+def adjust_log(x: torch.Tensor, gain: float = 1.0) -> torch.Tensor:
+    """
+    Apply logarithmic correction: y = gain * log(1 + x)
+    (assuming base e logs)
+    Note: x is assumed >= 0.
+    """
+    x_clamped = torch.clamp(x, min=0.0)
+    return (gain * torch.log1p(x_clamped)).clamp(0, 1)
+
+
+def adjust_sigmoid(x: torch.Tensor, cutoff: float = 0.5, gain: float = 10.0) -> torch.Tensor:
+    """
+    Sigmoid (contrast) correction:
+    y = 1 / (1 + exp(gain * (cutoff - x)))
+    """
+    y = torch.sigmoid(gain * (x - cutoff))
+    return y.clamp(0, 1)
 
 
 class JPEG(nn.Module):
@@ -172,152 +245,6 @@ class MedianFilter(nn.Module):
 
     def __repr__(self):
         return f"MedianFilter"
-
-
-class Pad(nn.Module):
-    def __init__(self, img_size: int = 256, pad_value: tp.Optional[int] = None, min_pad: int = None, max_pad: int = None):
-        super(Pad, self).__init__()
-        if pad_value is not None:
-            txt_ = f"Warning: Using fixed padding value {pad_value} is deprecated. Please set `min_pad` and `max_pad` instead."
-            print(txt_, file=sys.stderr, flush=True)
-
-        self.min_pad = min_pad
-        self.max_pad = max_pad
-        self.pad = None
-
-        # If padding is not specified, we get random border
-        if pad_value is None:
-            pad_value = random.randint(0, img_size // 2)
-            self.pad = v2.Pad(padding=pad_value)
-
-        self.relative_strength = 1.0
-
-    def forward(self, image):
-        if self.pad is not None:
-            pad_image = self.pad(image)
-        else:
-            pad_value = self.min_pad + random.randint(self.min_pad, self.max_pad)
-            pad_value = round(pad_value * self.relative_strength)
-            if pad_value == 0:
-                return image
-            pad_image = v2.Pad(padding=pad_value)(image)
-
-        adapt_dim = False
-        if len(pad_image.shape) < 4:  # c h w  -> b c h w
-            adapt_dim = True
-            pad_image = pad_image.unsqueeze(0)
-
-        # Resize to original image size
-        h, w = image.size(-2), image.size(-1)
-        pad_image = nn.functional.interpolate(pad_image, size=(h, w), mode="bilinear", align_corners=True)
-        if adapt_dim:
-            pad_image = pad_image.squeeze(0)
-        return pad_image
-
-
-class InsertMemeText(nn.Module):
-
-    def __init__(self, text: str, color: str = "white", image_size: int = 256, font_size: int = 24, rel_pos: int = 10):
-        super(InsertMemeText, self).__init__()
-
-        # Get font
-        self.font = self._prepare_font(font_size)
-
-        # Split long text in multiple lines, with space between them
-        self.lines = self._prepare_lines(text, image_size)
-
-        self.rel_pos = rel_pos
-        self.color = color
-        self.relative_strength = 1.0
-
-    def _prepare_font(self, font_size: int = 24):
-        # Get a true type font safely via matplotlib's font_manager.
-        # We could get rid of this and use a separate .ttf file instead, but fonts like Arial
-        # can be tricky due to licensing
-        from matplotlib import font_manager
-        dejavu_font_path = font_manager.findfont(font_manager.FontProperties())
-        return ImageFont.truetype(dejavu_font_path, size=font_size)
-
-    def _prepare_lines(self, text: str, image_size: int = 256):
-
-        # Since all images are of equal size, we can probe one fake image to calculate the wrap text
-        fake_image = transforms.ToPILImage()(torch.rand(3, image_size, image_size))
-        draw = ImageDraw.Draw(fake_image)
-        words = text.split()
-        lines = []
-        line = ""
-        max_width = image_size - 5
-
-        for word in words:
-            _line = f"{line} {word}"
-            if draw.textlength(_line, font=self.font) <= max_width:
-                line = _line
-            else:
-                lines.append(line)
-                line = word
-
-        # flush the last line
-        if line:
-            lines.append(line)
-
-        ascent, descent = self.font.getmetrics()
-        line_height = ascent + descent + 5  # Add spacing
-
-        return lines, line_height
-
-    def meme_single(self, img):
-        pil_image = transforms.ToPILImage()(img)
-        draw = ImageDraw.Draw(pil_image)
-        lines, line_height = self.lines
-        width = pil_image.size[0]
-        x, y = width // 2, self.rel_pos
-        for line in lines:
-            draw.text((x, y), line, font=self.font, fill=self.color, anchor="mm")
-            y += line_height
-
-        return default_transform(pil_image)
-
-    def forward(self, image):
-        if self.relative_strength < 0.5:
-            return image
-
-        """Add the meme text to the image tensor at the relative position"""
-        if len(image.size()) == 4:  # batch mode
-            img_memes = [self.meme_single(i) for i in image]
-        else:
-            img_memes = [self.meme_single(image)]
-
-        return torch.stack(img_memes)
-
-
-class InsertLogo(nn.Module):
-    def __init__(self, logo_path: str, image_size: int = 256, logo_scale: float = 0.2):
-        super(InsertLogo, self).__init__()
-        logo_image = Image.open(logo_path).convert("RGBA")
-        logo_max_size = int(min(image_size, image_size) * logo_scale)
-        logo_image.thumbnail((logo_max_size, logo_max_size), Image.Resampling.LANCZOS)
-        logo_width, logo_height = logo_image.size
-        self.logo_pos = (image_size - logo_width, image_size - logo_height)
-        self.logo_img = logo_image
-        self.relative_strength = 1.0
-
-    def embed_logo_single(self, img):
-        pil_image = transforms.ToPILImage()(img)
-        pil_image.paste(self.logo_img, self.logo_pos, self.logo_img)
-        return default_transform(pil_image)
-
-    def forward(self, image):
-        if self.relative_strength < 0.5:
-            return image
-
-        if len(image.size()) == 4:  # batch mode
-            img_logos = [self.embed_logo_single(i) for i in image]
-        else:
-            img_logos = [self.embed_logo_single(image)]
-
-        return torch.stack(img_logos)
-
-
 class Brightness(nn.Module):
     def __init__(self, min_factor=None, max_factor=None):
         super(Brightness, self).__init__()
@@ -403,11 +330,13 @@ class Hue(nn.Module):
     def __repr__(self):
         return f"Hue"
 
+
 class GaussianNoise(nn.Module):
-    def __init__(self, min_std=None, max_std=None):
+    def __init__(self, min_std=None, max_std=None, mean=0.0):
         super(GaussianNoise, self).__init__()
         self.min_std = min_std
         self.max_std = max_std
+        self.mean = mean
         self.relative_strength = 1.0
 
     def get_random_std(self):
@@ -418,9 +347,8 @@ class GaussianNoise(nn.Module):
 
     def forward(self, image, mask, std=None):
         std = self.get_random_std() if std is None else std
-        noise = torch.randn_like(image) * std
-        image = image + noise
-        return image, mask
+        out = gaussian_noise(image, std=std, mean=self.mean)
+        return out, mask
 
     def __repr__(self):
         return f"GaussianNoise"
@@ -446,6 +374,136 @@ class Grayscale(nn.Module):
         return f"Grayscale"
 
 
+class ImpulseNoise(nn.Module):
+    def __init__(self, min_amount=0.01, max_amount=0.1, salt_vs_pepper=0.5):
+        super(ImpulseNoise, self).__init__()
+        self.min_amount = min_amount
+        self.max_amount = max_amount
+        self.salt_vs_pepper = salt_vs_pepper
+        self.relative_strength = 1.0
+
+    def get_random_amount(self):
+        amt = torch.rand(1).item() * (self.max_amount - self.min_amount) + self.min_amount
+        return amt * self.relative_strength
+
+    def forward(self, image, mask, amount=None):
+        amount = self.get_random_amount() if amount is None else amount
+        out = impulse_noise(image, amount, self.salt_vs_pepper)
+        return out, mask
+
+    def __repr__(self):
+        return f"ImpulseNoise"
+
+
+class ShotNoise(nn.Module):
+    def __init__(self, min_scale=0.8, max_scale=1.2):
+        super(ShotNoise, self).__init__()
+        self.min_scale = min_scale
+        self.max_scale = max_scale
+        self.relative_strength = 1.0
+
+    def get_random_scale(self):
+        sc = torch.rand(1).item() * (self.max_scale - self.min_scale) + self.min_scale
+        return sc * self.relative_strength
+
+    def forward(self, image, mask, scale=None):
+        scale = self.get_random_scale() if scale is None else scale
+        out = shot_noise(image, scale)
+        return out, mask
+
+    def __repr__(self):
+        return f"ShotNoise"
+
+
+class SpeckleNoise(nn.Module):
+    def __init__(self, min_std=0.01, max_std=0.2):
+        super(SpeckleNoise, self).__init__()
+        self.min_std = min_std
+        self.max_std = max_std
+        self.relative_strength = 1.0
+
+    def get_random_std(self):
+        s = torch.rand(1).item() * (self.max_std - self.min_std) + self.min_std
+        return s * self.relative_strength
+
+    def forward(self, image, mask, std=None):
+        std = self.get_random_std() if std is None else std
+        out = speckle_noise(image, 0.0, std)
+        return out, mask
+
+    def __repr__(self):
+        return f"SpeckleNoise"
+
+
+class GammaExposure(nn.Module):
+    def __init__(self, min_gamma: float = 0.5, max_gamma: float = 2.0, gain: float = 1.0):
+        super().__init__()
+        self.min_gamma = min_gamma
+        self.max_gamma = max_gamma
+        self.gain = gain
+        self.relative_strength = 1.0
+
+    def get_random_gamma(self):
+        gamma = torch.rand(1).item() * (self.max_gamma - self.min_gamma) + self.min_gamma
+        return 1.0 + (gamma - 1.0) * self.relative_strength
+
+    def forward(self, image, mask, gamma=None):
+        gamma = self.get_random_gamma() if gamma is None else gamma
+        adjusted = adjust_gamma(image, gamma=gamma, gain=self.gain)
+        adjusted = self.relative_strength * adjusted + (1 - self.relative_strength) * image
+        return adjusted.clamp(0, 1), mask
+
+    def __repr__(self):
+        return "GammaExposure"
+
+class LogExposure(nn.Module):
+    def __init__(self, min_gain: float = 0.7, max_gain: float = 1.3):
+        super().__init__()
+        self.min_gain = min_gain
+        self.max_gain = max_gain
+        self.relative_strength = 1.0
+
+    def get_random_gain(self):
+        gain = torch.rand(1).item() * (self.max_gain - self.min_gain) + self.min_gain
+        return 1.0 + (gain - 1.0) * self.relative_strength
+
+    def forward(self, image, mask, gain=None):
+        gain = self.get_random_gain() if gain is None else gain
+        adjusted = adjust_log(image, gain=gain)
+        adjusted = self.relative_strength * adjusted + (1 - self.relative_strength) * image
+        return adjusted.clamp(0, 1), mask
+
+    def __repr__(self):
+        return "LogExposure"
+
+
+class SigmoidExposure(nn.Module):
+    def __init__(self, min_cutoff: float = 0.35, max_cutoff: float = 0.65,
+                 min_gain: float = 4.0, max_gain: float = 12.0):
+        super().__init__()
+        self.min_cutoff = min_cutoff
+        self.max_cutoff = max_cutoff
+        self.min_gain = min_gain
+        self.max_gain = max_gain
+        self.relative_strength = 1.0
+
+    def get_random_params(self):
+        cutoff = torch.rand(1).item() * (self.max_cutoff - self.min_cutoff) + self.min_cutoff
+        gain = torch.rand(1).item() * (self.max_gain - self.min_gain) + self.min_gain
+        cutoff = 0.5 + (cutoff - 0.5) * self.relative_strength
+        gain = 1.0 + (gain - 1.0) * self.relative_strength
+        return cutoff, gain
+
+    def forward(self, image, mask, params=None):
+        cutoff, gain = self.get_random_params() if params is None else params
+        adjusted = adjust_sigmoid(image, cutoff=cutoff, gain=gain)
+        adjusted = self.relative_strength * adjusted + (1 - self.relative_strength) * image
+        return adjusted.clamp(0, 1), mask
+
+    def __repr__(self):
+        return "SigmoidExposure"
+
+
 if __name__ == "__main__":
     import os
 
@@ -457,6 +515,8 @@ if __name__ == "__main__":
 
     # Define the transformations and their parameter ranges
     transformations = [
+        # (Brightness, [0.5, 1.5]),
+        # (Contrast, [0.5, 1.5]),
         (Brightness, [0.5, 1.5]),
         (Contrast, [0.5, 1.5]),
         (Saturation, [0.5, 1.5]),
@@ -465,8 +525,13 @@ if __name__ == "__main__":
         (GaussianBlur, [3, 5, 9, 17]),
         (MedianFilter, [3, 5, 9, 17]),
         (GaussianNoise, [0.05, 0.1, 0.15, 0.2]),
-        (Grayscale, [-1]),  # Grayscale doesn't need a strength parameter
-        # (bmshj2018, [2, 4, 6, 8])
+        (ImpulseNoise, [0.01, 0.05, 0.1]),
+        (ShotNoise, [0.1, 0.5, 1.0, 2.0, 4.0]),
+        (SpeckleNoise, [0.05, 0.1, 0.2]),
+        (GammaExposure, [0.5, 1.0, 1.5, 2.0]),
+        (LogExposure, [0.8, 1.0, 1.2]),
+        (SigmoidExposure, [(0.3, 6.0), (0.5, 6.0), (0.5, 12.0)]),
+        (Grayscale, [-1]),
     ]
 
     # Load images
@@ -474,7 +539,7 @@ if __name__ == "__main__":
         Image.open("/private/home/pfz/_images/gauguin_256.png"),
         Image.open("/private/home/pfz/_images/tahiti_256.png")
     ]
-    imgs = torch.stack([default_transform(img) for img in imgs])
+    imgs = torch.stack([default_transform(img) for img in imgs]).to(device='cuda')
 
     # Create the output directory
     output_dir = "outputs"
