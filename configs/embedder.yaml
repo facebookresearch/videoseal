@@ -50,11 +50,7 @@ unet_small2_yuv_quant:
     z_channels_mults: [1, 2, 4, 8]
     last_tanh: True
 
-<<<<<<< HEAD
-unet_small2_yuv_truequant:
-=======
 unet_small2_separable_yuv_quant:
->>>>>>> main
   msg_processor:
     nbits: 16
     hidden_size: 32     # nbits * 2
@@ -66,15 +62,25 @@ unet_small2_separable_yuv_quant:
     num_blocks: 8
     activation: 'relu'
     normalization: 'batch'
-<<<<<<< HEAD
-    normalization_up: 'batch'
-    z_channels_mults: [1, 2, 4, 8]
-    last_tanh: True
-=======
     z_channels_mults: [1, 2, 4, 8]
     last_tanh: True
     separable_conv: True
->>>>>>> main
+
+unet_small2_yuv_truequant:
+  msg_processor:
+    nbits: 16
+    hidden_size: 32     # nbits * 2
+    msg_processor_type: 'binary+concat'
+  unet:
+    in_channels: 1
+    out_channels: 1
+    z_channels: 16
+    num_blocks: 8
+    activation: 'relu'
+    normalization: 'batch'
+    normalization_up: 'batch'
+    z_channels_mults: [1, 2, 4, 8]
+    last_tanh: True
 
 unet_base_quant:
   msg_processor:
