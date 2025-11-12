@@ -270,8 +270,8 @@ class InsertText(nn.Module):
         image_out[:, :, y_start_img:y_end_img, x_start_img:x_end_img] = blended_slice
 
         if mask is not None:
-            mask_out = mask.clone()
-            added_pixels = (mask_slice > 0).to(mask_out.dtype)
+            added_pixels = (mask_slice > 0).to(mask.dtype)
+            mask_out = mask.clone().to(added_pixels.device)
             mask_out[:, :, y_start_img:y_end_img, x_start_img:x_end_img] *= (1 - added_pixels)
             mask = mask_out
 
@@ -364,8 +364,8 @@ class InsertEmoji(nn.Module):
         out[:, :, y0:y1, x0:x1] = out_slice
 
         if mask is not None:
-            mask_out = mask.clone()
-            added_pixels = (stamp_alpha_b > 0).to(mask_out.dtype)
+            added_pixels = (stamp_alpha_b > 0).to(mask.dtype)
+            mask_out = mask.clone().to(added_pixels.device)
             mask_out[:, :, y0:y1, x0:x1] *= (1 - added_pixels)
             mask = mask_out
 
