@@ -161,8 +161,9 @@ def setup_model(config: VideoWamConfig, ckpt_path: Path) -> VideoWam:
     )
 
     scaling_scheduler = None
-    if args.scaling_w_schedule is not None and args.scaling_w_schedule.lower() != "none":
-        scaling_w_schedule = uoptim.parse_params(args.scaling_w_schedule)
+    scaling_w_schedule_value = args.get('scaling_w_schedule', None)
+    if scaling_w_schedule_value is not None and scaling_w_schedule_value.lower() != "none":
+        scaling_w_schedule = uoptim.parse_params(scaling_w_schedule_value)
         scaling_scheduler = uoptim.ScalingScheduler(
             obj=wam.blender, attribute="scaling_w", scaling_o=args.scaling_w,
             **scaling_w_schedule
