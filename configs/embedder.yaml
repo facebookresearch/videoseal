@@ -142,3 +142,18 @@ unet_tiny_yuv_quant:
     normalization: 'batch'
     z_channels_mults: [1, 1, 2, 4, 8]
     last_tanh: True
+
+#chunkyseal embedder
+unet_chunky: # VideoSeal with more capacity after message
+  msg_processor:
+    msg_processor_type: 'binary+concat'
+  unet:
+    in_channels: 3
+    out_channels: 3
+    z_channels: 16
+    num_blocks: 8
+    activation: 'relu'
+    normalization: 'batch'
+    z_channels_mults: [4, 8, 16, 32]
+    last_tanh: True
+  

@@ -101,3 +101,15 @@ convnext_base_pw:
     nbits: 16
     sigmoid_output: False
     pixelwise: True
+
+#chunkyseal extractor
+convnext_chunky: # Larger VideoSeal model (ConvNeXt-Base)
+  proportional_dim: True # Scale the dims proportionally to the number of bits, with the defaults being set for 128 bits.
+  encoder:
+    stem_stride: 2 # Reduce the stride for the first layer to 2 from the original 4
+    depths: [3, 3, 27, 3]
+    dims: [128, 256, 512, 1024]
+  pixel_decoder:
+    pixelwise: False  # return msg per pixel (k h w)
+    upscale_stages: [1]
+    sigmoid_output: False 

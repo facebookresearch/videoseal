@@ -6,7 +6,7 @@ from videoseal.modules.hidden import HiddenDecoder
 from videoseal.modules.pixel_decoder import PixelDecoder
 from videoseal.modules.vit import ImageEncoderViT
 from videoseal.modules.dvmark import DVMarkDecoder
-
+from math import sqrt
 
 class Extractor(nn.Module):
     """
@@ -186,6 +186,19 @@ def build_extractor(name, cfg, img_size, nbits):
     elif name.startswith('convnext'):
         # updates some cfg
         cfg.pixel_decoder.nbits = nbits
+
+        if cfg.get('proportional_dim', False):
+            # Scale the encoder dimensions proportionally to the number of bits.
+            # This adjusts model capacity based on the message length, using 128 bits as baseline.
+            # The square root relationship maintains reasonable growth (e.g., 2x bits → ~1.4x dims).
+            multiplier = sqrt(nbits / 128)
+            cfg.encoder.dims = [int(dim * multiplier) for dim in cfg.encoder.dims]
+        
+        # Set pixel decoder's embedding dimension to match the output of the ConvNeXt encoder.
+        # The encoder outputs features with channel dimension equal to dims[-1] (e.g., 1024 in the config).
+        # This ensures the pixel decoder receives the correct input dimension from the encoder.
+        cfg.pixel_decoder.embed_dim = cfg.encoder.dims[-1]
+
         # build the encoder, decoder and msg processor
         convnext = ConvNeXtV2(**cfg.encoder)
         pixel_decoder = PixelDecoder(**cfg.pixel_decoder)

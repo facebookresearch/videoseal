@@ -1,0 +1,54 @@
+checkpoint_path: /checkpoint/avseal/models/chunkyseal/checkpoint.pth
+# also in /checkpoint/avseal/pfz/2025_logs/0917_chunkyseal_ft_sweep/_optimizer=AdamW,lr=1e-4_image_dataset=sa-1b-aws-ori_resume_from=1/checkpoint.pth
+# also in s3://fairusersglobal/users/AROAZVFNDK3MPX5WVK24S:hadyelsahar/chunkyseal/checkpoint.pth
+args:
+  attenuation_config: configs/attenuation.yaml
+  attenuation: jnd_1_1
+  nbits: 1024
+  hidden_size_multiplier: 2.0
+  img_size_proc: 256
+  blending_method: additive
+  scaling_w: 0.2
+  scaling_i: 1.0
+  videowam_chunk_size: 32
+  videowam_step_size: 8
+
+embedder:
+  model: unet_chunky
+  params:
+    msg_processor:
+      msg_processor_type: binary+concat
+    unet:
+      in_channels: 3
+      out_channels: 3
+      z_channels: 16
+      num_blocks: 8
+      activation: relu
+      normalization: batch
+      z_channels_mults:
+      - 4
+      - 8
+      - 16
+      - 32
+      last_tanh: true
+extractor:
+  model: convnext_chunky
+  params:
+    proportional_dim: true
+    encoder:
+      stem_stride: 2
+      depths:
+      - 3
+      - 3
+      - 27
+      - 3
+      dims:
+      - 128
+      - 256
+      - 512
+      - 1024
+    pixel_decoder:
+      pixelwise: false
+      upscale_stages:
+      - 1
+      sigmoid_output: false

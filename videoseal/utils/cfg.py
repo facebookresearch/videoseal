@@ -21,6 +21,7 @@ from videoseal.data.datasets import CocoImageIDWrapper, ImageFolder, VideoDatase
 from videoseal.models import VideoWam, build_embedder, build_extractor, build_baseline
 from videoseal.modules.jnd import build_jnd
 
+
 # in the yaml, allows for
 # vae:
 #   msg_processor:
@@ -190,18 +191,26 @@ def setup_model_from_checkpoint(ckpt_path: str) -> VideoWam:
     or 
     ckpt_path = 'baseline/wam'
     wam = setup_model_from_checkpoint(ckpt_path)
+    
+    or
+    ckpt_path = 'chunkyseal'  # Load from model card
+    wam = setup_model_from_checkpoint(ckpt_path)
     """
     # load baselines. Should be in the format of "baseline/{method}"
     if "baseline" in ckpt_path:
         method = ckpt_path.split('/')[-1]
         return build_baseline(method)
-    # load videoseal model card
-    elif ckpt_path.startswith('videoseal'):
+    
+    # Check if ckpt_path matches any available model card names
+    cards_dir = Path("videoseal/cards")
+    available_cards = [card.stem for card in cards_dir.glob('*.yaml')]
+    if ckpt_path in available_cards:
+        # load videoseal model card
         return setup_model_from_model_card(ckpt_path)
-    # load videoseal checkpoints
-    else:
-        config = get_config_from_checkpoint(ckpt_path)
-        return setup_model(config, ckpt_path)
+    
+    # load videoseal checkpoints from file path
+    config = get_config_from_checkpoint(ckpt_path)
+    return setup_model(config, ckpt_path)
 
 
 def setup_model_from_model_card(model_card: Path | str) -> VideoWam:
@@ -260,7 +269,7 @@ def setup_model_from_model_card(model_card: Path | str) -> VideoWam:
             repo_id="facebook/video_seal",  # The repository ID
             filename=fname  # Dynamically determined filename
         )
-
+    
     elif is_url(config.checkpoint_path):
         if udist.is_dist_avail_and_initialized():
             # download only on the main process
