@@ -1,4 +1,6 @@
 
+import os
+from typing import Optional
 import torch
 from torchvision import transforms
 
@@ -316,9 +318,94 @@ class BaselineTrustmarkExtractor(Extractor):
         return msgs
 
 
+class BaselineInvismarkEmbedder(Embedder):
+    def __init__(
+        self,
+        encoder_path: str,
+        nbits: int = 94,
+    ) -> None:
+        super(BaselineInvismarkEmbedder, self).__init__()
+        self.encoder = torch.jit.load(encoder_path).eval()
+        self.nbits = nbits
+        # the network is trained with the following normalization
+        self.preprocess = transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
+        self.postprocess = transforms.Normalize(mean=[-1, -1, -1], std=[2, 2, 2])
+
+    def get_random_msg(self, bsz: int = 1, nb_repetitions=1) -> torch.Tensor:
+        rand_msg = torch.randint(0, 2, (bsz, self.nbits))
+        return rand_msg
+
+    def map_msg(self, msgs: torch.Tensor) -> torch.Tensor:
+        assert msgs.size(1) == 94 == self.nbits, (
+            f"Expected message size of 94 bits, but got {msgs.size(1)} bits. "
+            "This model only supports 94-bit messages."
+        )
+
+        # the original model has been trained 100 bits but 6 bits are fixed
+        output = torch.zeros((msgs.size(0), 100), dtype=msgs.dtype, device=msgs.device)
+        # set the fixed bits
+        output[:, [49, 64]] = 1  # output[:, [48, 50, 51, 65]] = 0 is implicit
+
+        output[:, :48] = msgs[:, :48]
+        output[:, 52:64] = msgs[:, 48:60]
+        output[:, 66:] = msgs[:, 60:]
+        return output
+
+    def forward(
+        self,
+        imgs: torch.Tensor,
+        msgs: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        Args:
+            imgs: (torch.Tensor) Batched images with shape BxCxHxW
+            msgs: (torch.Tensor) Batched messages with shape BxL, or empty tensor.
+        Returns:
+            The watermarked images.
+        """
+        msgs = self.map_msg(msgs)
+
+        msgs = msgs.float()
+        imgs_w = self.encoder(self.preprocess(imgs), msgs)
+        imgs_w = torch.clamp(imgs_w, min=-1.0, max=1.0)
+        imgs_w = self.postprocess(imgs_w)
+        return imgs_w - imgs
+
+
+class BaselineInvismarkExtractor(Extractor):
+    def __init__(
+        self,
+        decoder_path: str
+    ) -> None:
+        super(BaselineInvismarkExtractor, self).__init__()
+        self.decoder = torch.jit.load(decoder_path).eval()
+        # the network is trained with the following normalization
+        self.preprocess = transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
+
+    def forward(
+        self,
+        imgs: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        Args:
+            imgs: (torch.Tensor) Batched images with shape BxCxHxW
+        Returns:
+            The extracted messages.
+        """
+        imgs = self.preprocess(imgs)
+        msgs = self.decoder(imgs)  # b k
+
+        # remove the fixed bits
+        msgs = torch.cat([msgs[:, :48], msgs[:, 52:64], msgs[:, 66:]], dim=1)
+
+        # add +1 to the last dimension to make it b k+1 (WAM compatible)
+        msgs = torch.cat([torch.zeros(msgs.size(0), 1).to(msgs.device), msgs], dim=1)
+        return msgs
+
+
 def build_baseline(
         method: str,
-        attenuation: JND = None,
+        attenuation: Optional[JND] = None,
         scaling_w: float = 1.0,
         scaling_i: float = 1.0,
         img_size: int = 256,
@@ -327,50 +414,73 @@ def build_baseline(
         step_size: int = 1,
     ) -> VideoWam:
     # /checkpoint/pfz/projects/videoseal/baselines-watermarking/readme.md
+    if os.path.exists('/checkpoint/pfz/projects/videoseal/baselines-watermarking'):
+        base_path = '/checkpoint/pfz/projects/videoseal/baselines-watermarking'
+    else:
+        base_path = '/checkpoint/avseal/baselines-watermarking'
+
     if method == 'hidden':
         scaling_w = 0.2
-        encoder_path = '/checkpoint/pfz/projects/videoseal/baselines-watermarking/hidden_encoder_48b.pt'
-        decoder_path = '/checkpoint/pfz/projects/videoseal/baselines-watermarking/hidden_decoder_48b.pt'
+        encoder_path = f'{base_path}/hidden_encoder_48b.pt'
+        decoder_path = f'{base_path}/hidden_decoder_48b.pt'
         embedder = BaselineHiddenEmbedder(encoder_path)
         extractor = BaselineHiddenExtractor(decoder_path)
     elif method == 'mbrs':
         scaling_w = 1.0
-        encoder_path = '/checkpoint/pfz/projects/videoseal/baselines-watermarking/mbrs_256_m256_encoder.pt'
-        decoder_path = '/checkpoint/pfz/projects/videoseal/baselines-watermarking/mbrs_256_m256_decoder.pt'
+        encoder_path = f'{base_path}/mbrs_256_m256_encoder.pt'
+        decoder_path = f'{base_path}/mbrs_256_m256_decoder.pt'
         embedder = BaselineMBRSEmbedder(encoder_path)
         extractor = BaselineMBRSExtractor(decoder_path)
     elif method == 'cin':
         scaling_w = 1.0
         img_size = 128
-        encoder_path = '/checkpoint/pfz/projects/videoseal/baselines-watermarking/cin_nsm_encoder.pt'
-        decoder_path = '/checkpoint/pfz/projects/videoseal/baselines-watermarking/cin_nsm_decoder.pt'
+        encoder_path = f'{base_path}/cin_nsm_encoder.pt'
+        decoder_path = f'{base_path}/cin_nsm_decoder.pt'
         embedder = BaselineCINEmbedder(encoder_path)
         extractor = BaselineCINExtractor(decoder_path)
     elif method == 'wam':
         scaling_w = 2.0
         attenuation = JND(in_channels=1, out_channels=3, blue=True)
-        encoder_path = '/checkpoint/pfz/projects/videoseal/baselines-watermarking/wam_encoder.pt'
-        decoder_path = '/checkpoint/pfz/projects/videoseal/baselines-watermarking/wam_decoder.pt'
+        encoder_path = f'{base_path}/wam_encoder.pt'
+        decoder_path = f'{base_path}/wam_decoder.pt'
         embedder = BaselineWAMEmbedder(encoder_path)
         extractor = BaselineWAMExtractor(decoder_path)
     elif method == 'wam_noattenuation':
         scaling_w = 0.01
-        encoder_path = '/checkpoint/pfz/projects/videoseal/baselines-watermarking/wam_encoder.pt'
-        decoder_path = '/checkpoint/pfz/projects/videoseal/baselines-watermarking/wam_decoder.pt'
+        encoder_path = f'{base_path}/wam_encoder.pt'
+        decoder_path = f'{base_path}/wam_decoder.pt'
         embedder = BaselineWAMEmbedder(encoder_path)
         extractor = BaselineWAMExtractor(decoder_path)
     elif method == 'trustmark':
         scaling_w = 0.95
-        encoder_path = '/checkpoint/pfz/projects/videoseal/baselines-watermarking/trustmark_encoder_q.pt'
-        decoder_path = '/checkpoint/pfz/projects/videoseal/baselines-watermarking/trustmark_decoder_q.pt'
+        encoder_path = f'{base_path}/trustmark_encoder_q.pt'
+        decoder_path = f'{base_path}/trustmark_decoder_q.pt'
         embedder = BaselineTrustmarkEmbedder(encoder_path)
         extractor = BaselineTrustmarkExtractor(decoder_path)
     elif method == 'trustmark_scaling0p5':
         scaling_w = 0.5
-        encoder_path = '/checkpoint/pfz/projects/videoseal/baselines-watermarking/trustmark_encoder_q.pt'
-        decoder_path = '/checkpoint/pfz/projects/videoseal/baselines-watermarking/trustmark_decoder_q.pt'
+        encoder_path = f'{base_path}/trustmark_encoder_q.pt'
+        decoder_path = f'{base_path}/trustmark_decoder_q.pt'
         embedder = BaselineTrustmarkEmbedder(encoder_path)
         extractor = BaselineTrustmarkExtractor(decoder_path)
+    elif method == 'trustmark_p':
+        scaling_w = 0.95
+        encoder_path = f'{base_path}/trustmark_encoder_p.pt'
+        decoder_path = f'{base_path}/trustmark_decoder_p.pt'
+        embedder = BaselineTrustmarkEmbedder(encoder_path)
+        extractor = BaselineTrustmarkExtractor(decoder_path)
+    elif method == 'trustmark_p_scaling0p5':
+        scaling_w = 0.5
+        encoder_path = f'{base_path}/trustmark_encoder_p.pt'
+        decoder_path = f'{base_path}/trustmark_decoder_p.pt'
+        embedder = BaselineTrustmarkEmbedder(encoder_path)
+        extractor = BaselineTrustmarkExtractor(decoder_path)
+    elif method == 'invismark':
+        scaling_w = 1.0
+        encoder_path = f'{base_path}/invismark_encoder.pt'
+        decoder_path = f'{base_path}/invismark_decoder.pt'
+        embedder = BaselineInvismarkEmbedder(encoder_path)
+        extractor = BaselineInvismarkExtractor(decoder_path)
     else:
         raise ValueError(f'Unknown method: {method}')
     return VideoWam(
