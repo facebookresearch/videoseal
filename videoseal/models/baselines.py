@@ -417,7 +417,7 @@ def build_baseline(
     if os.path.exists('/checkpoint/pfz/projects/videoseal/baselines-watermarking'):
         base_path = '/checkpoint/pfz/projects/videoseal/baselines-watermarking'
     else:
-        base_path = '/checkpoint/avseal/baselines-watermarking'
+        base_path = '/checkpoint/avseal/models/baselines-watermarking'
 
     if method == 'hidden':
         scaling_w = 0.2
