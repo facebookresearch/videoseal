@@ -5,19 +5,16 @@ from lpips import LPIPS
 
 from .watson_fft import ColorWrapper, WatsonDistanceFft
 from .watson_vgg import WatsonDistanceVgg
-from .compression import CompressionLoss
 from .dists import DISTS
 from .jndloss import JNDLoss
-from .regularizer import MMDLoss, WassersteinLoss
 from .focal import FocalFrequencyLoss
-from .pattern_complexity import PCLoss
 from .ssim import SSIM, MSSSIM
 from .yuvloss import YUVLoss
 
 loss_weights_paths = {
-    "dists": "/checkpoint/pfz/projects/videoseal/weights/loss_weights/dists_ckpt.pth",
-    "watson_vgg": "/checkpoint/pfz/projects/videoseal/weights/loss_weights/rgb_watson_vgg_trial0.pth",
-    "watson_dft": "/checkpoint/pfz/projects/videoseal/weights/loss_weights/rgb_watson_fft_trial0.pth",
+    "dists": "/path/to/loss_weights/dists_ckpt.pth",
+    "watson_vgg": "/path/to/loss_weights/rgb_watson_vgg_trial0.pth",
+    "watson_dft": "/path/to/loss_weights/rgb_watson_fft_trial0.pth",
 }
 
 def build_loss(loss_name):
@@ -27,8 +24,6 @@ def build_loss(loss_name):
         return LPIPS(net="vgg").eval()
     elif loss_name == "mse":
         return nn.MSELoss()
-    elif loss_name == "l1":
-        return nn.L1Loss()
     elif loss_name == "yuv":
         return YUVLoss()
     elif loss_name == "focal":

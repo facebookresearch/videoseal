@@ -1,12 +1,19 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+# This source code is licensed under the license found in the
+# LICENSE file in the root directory of this source tree.
+
+from math import sqrt
 
 import torch
 from torch import nn
-from videoseal.modules.convnext import ConvNeXtV2
-from videoseal.modules.hidden import HiddenDecoder
-from videoseal.modules.pixel_decoder import PixelDecoder
-from videoseal.modules.vit import ImageEncoderViT
-from videoseal.modules.dvmark import DVMarkDecoder
-from math import sqrt
+
+from ..modules.convnext import ConvNeXtV2
+from ..modules.hidden import HiddenDecoder
+from ..modules.pixel_decoder import PixelDecoder
+from ..modules.vit import ImageEncoderViT
+from ..modules.dvmark import DVMarkDecoder
+
 
 class Extractor(nn.Module):
     """
@@ -15,12 +22,8 @@ class Extractor(nn.Module):
 
     def __init__(self) -> None:
         super(Extractor, self).__init__()
-
-    def preprocess(self, imgs: torch.Tensor) -> torch.Tensor:
-        return imgs * 2 - 1
-    
-    def postprocess(self, imgs: torch.Tensor) -> torch.Tensor:
-        return (imgs + 1) / 2
+        self.preprocess = lambda x: x * 2 - 1
+        self.postprocess = lambda x: (x + 1) / 2
 
     def forward(
         self,

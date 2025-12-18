@@ -9,42 +9,38 @@ requires-python = ">=3.9"
 dynamic = ["version", "description"]
 
 dependencies = [
-    "setuptools",
-    "torch>=2.3.1",
-    "pandas",
-    "opencv-python",
-    "omegaconf",
-    "einops",
-    "lpips",
-    "timm==0.9.16",
-    "pre-commit",
-    "ipykernel",
-    "pycocotools",
-    "pandas",
     "PyWavelets",
     "av",
-    "pyav",
-    "scipy",
-    "scikit-image",
-    "decord",
-    "pandas",
-    "tqdm",
-    "pytorch_msssim",
-    "tensorboard",
     "calflops",
-    "transformers",
+    "decord",
+    "einops",
+    "lpips",
+    "omegaconf",
+    "opencv-python",
+    "pandas",
+    "pycocotools",
+    "pytorch_msssim",
     "safetensors",
+    "scikit-image",
+    "scipy",
+    "setuptools",
+    "tensorboard",
+    "timm==0.9.16",
+    "torch>=2.3.1",
+    "tqdm",
+    "transformers",
 ]
 
 [project.optional-dependencies]
   dev = [
-    "func_argparse",
-    "pytest",
     "black",
-    "isort",
-    "flake8",
-    "pre-commit",
     "conda-pack",
+    "flake8",
+    "func_argparse",
+    "ipykernel",
+    "isort",
+    "pre-commit",
+    "pytest",
   ]
 
 [tool.flake8]
@@ -70,7 +66,7 @@ warn_unused_configs = false
 warn_unused_ignores = false
 exclude = ["notebooks"]
 
-
+[pytest]
 norecursedirs = [
   "notebooks/*",
 ]

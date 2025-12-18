@@ -1,3 +1,7 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+# This source code is licensed under the license found in the
+# LICENSE file in the root directory of this source tree.
 
 import logging
 import os
@@ -201,19 +205,18 @@ def init_distributed_mode(params):
         # MASTER_ADDR - required (except for rank 0); address of rank 0 node
         # WORLD_SIZE - required; can be set either here, or in a call to init function
         # RANK - required; can be set either here, or in a call to init function
-        
+
         print("Initializing PyTorch distributed ...")
-        # Initialize CUDA device before process group
-        torch.cuda.set_device(params.local_rank)
         torch.distributed.init_process_group(
             init_method='env://',
             backend='nccl',
         )
 
-        # Remove the separate set_device call since we did it before init_process_group
-        # Use device_ids in barrier
-        dist.barrier(device_ids=[params.local_rank])
+        # set GPU device
+        torch.cuda.set_device(params.local_rank)
+        dist.barrier()
         setup_logging_for_distributed(params.is_master)
+
 
 
 

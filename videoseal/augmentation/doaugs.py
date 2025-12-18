@@ -1,3 +1,8 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+# This source code is licensed under the license found in the
+# LICENSE file in the root directory of this source tree.
+ 
 """
 run this script to generate augmented frames for the appendix
     python -m videoseal.augmentation.doaugs
@@ -29,7 +34,7 @@ from videoseal.data.transforms import default_transform
 
 def main():
     # Define the video path
-    video_path = "/checkpoint/pfz/2025_logs/0227_vseal_eval_baselines/_scaling_w=0.2_checkpoint=0_dataset=sa-v-3s_is_video=true/006_val_1_wm.mp4"
+    video_path = "assets/videos/1.mp4"
     
     # Define the output directory
     output_dir = "figs/appendix/augs"
@@ -48,7 +53,6 @@ def main():
         (Brightness(), 1.5, "Brightness_strength_1.5"),
         (Hue(), -0.1, "Hue_strength_-0.1"),
         (Saturation(), 1.5, "Saturation_strength_1.5"),
-        (MedianFilter(), 3, "MedianFilter_strength_7"),
         (GaussianBlur(), 17, "GaussianBlur_strength_17"),
         (JPEG(), 40, "JPEG_strength_40"),
         (Crop(), 0.33, "Crop_strength_0.33"),

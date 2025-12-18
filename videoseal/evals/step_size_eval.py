@@ -1,6 +1,13 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+# This source code is licensed under the license found in the
+# LICENSE file in the root directory of this source tree.
+
 """
+Evaluate a model with different step sizes for video watermark propagation.
+
 python -m videoseal.evals.step_size_eval \
-    --checkpoint /checkpoint/pfz/2025_logs/0226_vseal_ydisc_mult1_bis/_scaling_w_schedule=1_scaling_w=1.0_attenuation=jnd_1_1_hidden_size_multiplier=1/checkpoint600.pth  --lowres_attenuation true \
+    --checkpoint videoseal_1.0  --lowres_attenuation true \
     --dataset sa-v --is_video true --num_samples 10 --save_first -1 --skip_image_metrics true  --only_combined true \
     --step_sizes 1 2 4 8 16 \
     --output_dir output/step_size_eval_combined
@@ -22,8 +29,8 @@ from torchvision.utils import save_image
 
 from .metrics import vmaf_on_tensor, bit_accuracy, iou, accuracy, pvalue, capacity, psnr, ssim, msssim, bd_rate
 from ..augmentation import get_validation_augs
-from ..models import VideoWam
-from ..modules.jnd import build_jnd
+from ..models import Videoseal
+from ..modules.jnd import JND
 from ..utils import Timer, bool_inst
 from ..utils.display import save_vid
 from ..utils.image import create_diff_img
@@ -63,9 +70,9 @@ def main():
                         help="Size of the input images for interpolation in the embedder/extractor models")
     group.add_argument("--scaling_w", default=None,
                         help="Scaling factor for the watermark in the embedder model")
-    group.add_argument('--videowam_chunk_size', type=int, default=32, 
+    group.add_argument('--videoseal_chunk_size', type=int, default=32, 
                         help='Number of frames to chunk during forward pass')
-    group.add_argument('--videowam_mode', type=str, default='repeat', 
+    group.add_argument('--videoseal_mode', type=str, default='repeat', 
                         help='The inference mode for videos')
 
     group = parser.add_argument_group('Experiment')
@@ -105,8 +112,8 @@ def main():
     
     # Override model parameters in args
     model.blender.scaling_w = float(args.scaling_w or model.blender.scaling_w)
-    model.chunk_size = args.videowam_chunk_size or model.chunk_size
-    model.video_mode = args.videowam_mode or model.mode
+    model.chunk_size = args.videoseal_chunk_size or model.chunk_size
+    model.video_mode = args.videoseal_mode or model.mode
     model.img_size = args.img_size_proc or model.img_size
 
     # Setup the device
@@ -116,8 +123,12 @@ def main():
 
     # Override attenuation build
     if args.attenuation is not None:
-        attenuation_cfg = omegaconf.OmegaConf.load(args.attenuation_config)
-        attenuation = build_jnd(args.attenuation, attenuation_cfg)
+        # should be on CPU to operate on high resolution videos
+        if args.attenuation.lower().startswith("jnd"):
+            attenuation_cfg = omegaconf.OmegaConf.load(args.attenuation_config)
+            attenuation = JND(**attenuation_cfg[args.attenuation])
+        else:
+            attenuation = None
         model.attenuation = attenuation
 
     # Setup the dataset

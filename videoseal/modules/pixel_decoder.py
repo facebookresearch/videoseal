@@ -1,4 +1,7 @@
-# SAM
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+# This source code is licensed under the license found in the
+# LICENSE file in the root directory of this source tree.
 
 import torch
 from torch import nn
@@ -52,11 +55,13 @@ class PixelDecoder(nn.Module):
             self.linear = nn.Linear(embed_dim, self.nbits + 1)
 
         self.sigmoid_output = sigmoid_output
+    
+        
             
     def forward(
         self,
         image_embeddings: torch.Tensor,
-    ) -> torch.Tensor:
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Predict masks given image and prompt embeddings.
 

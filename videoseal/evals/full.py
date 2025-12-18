@@ -1,17 +1,22 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+# This source code is licensed under the license found in the
+# LICENSE file in the root directory of this source tree.
+
 """
 Example:
 
 1/ Evaluate a checkpoint on images
 
 python -m videoseal.evals.full \
-    --checkpoint /checkpoint/pfz/2025_logs/0306_vseal_ydisc_release/_nbits=128/checkpoint600.pth \
+    --checkpoint /path/to/your/ckpt \
     --lowres_attenuation True --scaling_w 0.2 \
     --dataset sa-1b-full-resized --is_video false --num_samples 10 --save_first 10 
 
 2/ Evaluate a checkpoint on videos
 
 python -m videoseal.evals.full \
-    --checkpoint /checkpoint/pfz/2025_logs/0306_vseal_ydisc_release/_nbits=128/checkpoint600.pth \
+    --checkpoint /path/to/your/ckpt \
     --lowres_attenuation True --scaling_w 0.2 \
     --dataset sa-v --is_video true --num_samples 1 --save_first 1
 
@@ -27,7 +32,6 @@ Arguments invertory:
     
 import argparse
 import os
-import random
 
 import numpy as np
 import omegaconf
@@ -41,18 +45,17 @@ from torchvision.utils import save_image
 
 from .metrics import vmaf_on_tensor, bit_accuracy, iou, accuracy, pvalue, capacity, psnr, ssim, msssim, bd_rate
 from ..augmentation import get_validation_augs
-from ..models import VideoWam
-from ..modules.jnd import build_jnd
+from ..models import Videoseal
+from ..modules.jnd import JND
 from ..utils import Timer, bool_inst
 from ..utils.display import save_vid
 from ..utils.image import create_diff_img
 from ..utils.cfg import setup_dataset, setup_model_from_checkpoint
 from .metrics import accuracy, bit_accuracy, iou, vmaf_on_tensor
-from ..modules.ema import EMAModel
 
 @torch.no_grad()
 def evaluate(
-    model: VideoWam,
+    model: Videoseal,
     dataset: Dataset, 
     is_video: bool,
     output_dir: str,
@@ -67,12 +70,11 @@ def evaluate(
     interpolation: dict = {"mode": "bilinear", "align_corners": False, "antialias": True},
     lowres_attenuation: bool = False,
     skip_image_metrics: bool = False,
-    use_single_message: bool = False,
 ):
     """
     Gives detailed evaluation metrics for a model on a given dataset.
     Args:
-        model (VideoWam): The model to evaluate
+        model (Videoseal): The model to evaluate
         dataset (Dataset): The dataset to evaluate on
         is_video (bool): Whether the data is video
         output_dir (str): Directory to save the output images
@@ -90,11 +92,6 @@ def evaluate(
 
     # create lpips
     lpips_loss = LPIPS(net="alex").eval() if not skip_image_metrics else None
-
-    if use_single_message:
-        random_message = model.get_random_msg(1)
-        with open(os.path.join(output_dir, "message.txt"), "w") as f:
-            f.write(','.join(map(str, random_message.squeeze().tolist())))
 
     # save the metrics as csv
     metrics_path = os.path.join(output_dir, "metrics.csv")
@@ -119,9 +116,8 @@ def evaluate(
 
             # forward embedder, at any resolution
             # does cpu -> gpu -> cpu when gpu is available
-            print(f"embedding")
             timer.start()
-            outputs = model.embed(imgs, msgs=random_message if use_single_message else None, is_video=is_video, interpolation=interpolation, lowres_attenuation=lowres_attenuation)
+            outputs = model.embed(imgs, is_video=is_video, interpolation=interpolation, lowres_attenuation=lowres_attenuation)
             metrics['embed_time'] = timer.end()
             msgs = outputs["msgs"]  # b k
             imgs_w = outputs["imgs_w"]  # b c h w
@@ -134,7 +130,6 @@ def evaluate(
 
             # compute qualitative metrics
             if not skip_image_metrics:
-                print(f"Computing img metrics for iteration {it}")
                 metrics['psnr'] = psnr(
                     imgs_w[:num_frames], 
                     imgs[:num_frames],
@@ -191,7 +186,6 @@ def evaluate(
                     # metrics['save_vid_time'] = timer.end()
 
             # extract watermark and evaluate robustness
-            print(f"extracting")
             if detection or decoding:
                 # masks, for now, are all ones
                 masks = torch.ones_like(imgs[:, :1])  # b 1 h w
@@ -209,7 +203,7 @@ def evaluate(
                         # extract watermark
                         timer.start()
                         if is_video:
-                            preds = model.detect_and_aggregate(imgs_aug, video_aggregation, interpolation)  # 1 k
+                            preds = model.extract_message(imgs_aug, video_aggregation, interpolation)  # 1 k
                             preds = torch.cat([torch.ones(preds.size(0), 1).to(preds.device), preds], dim=1)  # 1 1+k
                             outputs = {"preds": preds}
                             msgs = msgs[:1]  # 1 k
@@ -283,19 +277,15 @@ def main():
                         help="Size of the input images for interpolation in the embedder/extractor models")
     group.add_argument("--scaling_w", default=None,
                         help="Scaling factor for the watermark in the embedder model")
-    group.add_argument('--videowam_chunk_size', type=int, default=32, 
+    group.add_argument('--videoseal_chunk_size', type=int, default=32, 
                         help='Number of frames to chunk during forward pass')
-    group.add_argument('--videowam_step_size', type=int, default=4,
+    group.add_argument('--videoseal_step_size', type=int, default=4,
                         help='The number of frames to propagate the watermark to')
-    group.add_argument('--videowam_mode', type=str, default='repeat', 
+    group.add_argument('--videoseal_mode', type=str, default='repeat', 
                         help='The inference mode for videos')
-    group.add_argument('--time_pooling_depth', type=int, default=None,
-                        help='The depth of the UNet at which applying the temporal pooling')
-    group.add_argument('--use_ema', type=bool_inst, default=False,
-                        help='If True, use Exponential Moving Average for model weights')
-    
+
     group = parser.add_argument_group('Experiment')
-    group.add_argument("--output_dir", type=str, default="output/", help="Output directory for logs and images (Default: /output)")
+    group.add_argument("--output_dir", type=str, default="outputs/", help="Output directory for logs and images (Default: /output)")
     group.add_argument('--save_first', type=int, default=-1, help='Number of images/videos to save')
     group.add_argument('--only_identity', type=bool_inst, default=False, help='Whether to only evaluate the identity augmentation')
     group.add_argument('--only_combined', type=bool_inst, default=False, help='Whether to only evaluate combined augmentations')
@@ -303,8 +293,7 @@ def main():
     group.add_argument('--decoding', type=bool_inst, default=True, help='Whether to evaluate decoding metrics')
     group.add_argument('--detection', type=bool_inst, default=False, help='Whether to evaluate detection metrics')
     group.add_argument('--skip_image_metrics', type=bool_inst, default=False, help='Whether to skip computing image quality metrics')
-    group.add_argument('--use_single_message', type=bool_inst, default=False, help='All images/videos will use the same random message')
-    
+
     group = parser.add_argument_group('Interpolation')
     group.add_argument('--interpolation_mode', type=str, default='bilinear',
                       choices=['nearest', 'bilinear', 'bicubic', 'area'],
@@ -326,9 +315,9 @@ def main():
     
     # Override model parameters in args
     model.blender.scaling_w = float(args.scaling_w or model.blender.scaling_w)
-    model.chunk_size = args.videowam_chunk_size or model.chunk_size
-    model.step_size = args.videowam_step_size or model.step_size
-    model.video_mode = args.videowam_mode or model.mode
+    model.chunk_size = args.videoseal_chunk_size or model.chunk_size
+    model.step_size = args.videoseal_step_size or model.step_size
+    model.video_mode = args.videoseal_mode or model.mode
     model.img_size = args.img_size_proc or model.img_size
 
     # Setup the device
@@ -336,25 +325,14 @@ def main():
     device = args.device or avail_device
     model.to(device)
 
-    if args.use_ema:
-        ema_model = EMAModel(model.parameters())
-        ema_state_dict = torch.load(args.checkpoint, map_location='cpu')['ema_model']
-        ema_model.load_state_dict(ema_state_dict)
-        ema_model.copy_to(model.parameters())
-
-    # Override the temporal pooling
-    if hasattr(model.embedder, 'unet') and hasattr(model.embedder.unet, 'time_pooling'):
-        if args.time_pooling_depth is not None:
-            model.embedder.unet.time_pooling = True
-            model.embedder.unet.time_pooling_depth = args.time_pooling_depth
-            model.embedder.unet.temporal_pool.kernel_size = model.step_size
-            # When doing time average pooling, the step size should be set to 1.
-            model.step_size = 1
-
     # Override attenuation build
     if args.attenuation is not None:
-        attenuation_cfg = omegaconf.OmegaConf.load(args.attenuation_config)
-        attenuation = build_jnd(args.attenuation, attenuation_cfg)
+        # should be on CPU to operate on high resolution videos
+        if args.attenuation.lower().startswith("jnd"):
+            attenuation_cfg = omegaconf.OmegaConf.load(args.attenuation_config)
+            attenuation = JND(**attenuation_cfg[args.attenuation])
+        else:
+            attenuation = None
         model.attenuation = attenuation
 
     # Setup the dataset
@@ -385,7 +363,6 @@ def main():
         interpolation = interpolation,
         lowres_attenuation = args.lowres_attenuation,
         skip_image_metrics = args.skip_image_metrics,
-        use_single_message = args.use_single_message,
     )
 
     # Print mean

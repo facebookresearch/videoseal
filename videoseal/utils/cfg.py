@@ -1,63 +1,27 @@
-import importlib.util
-import json
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+# This source code is licensed under the license found in the
+# LICENSE file in the root directory of this source tree.
+
 import os
 import requests
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Union
 from urllib.parse import urlparse
 
 import omegaconf
-from omegaconf import DictConfig, OmegaConf
-
 import torch
 import torch.distributed as dist
 import torchvision.transforms as transforms
+from omegaconf import DictConfig, OmegaConf
 
-import videoseal.utils.optim as uoptim
 import videoseal.utils.dist as udist
 from videoseal.augmentation.augmenter import get_dummy_augmenter
 from videoseal.data.datasets import CocoImageIDWrapper, ImageFolder, VideoDataset, SimpleVideoDataset
-from videoseal.models import VideoWam, build_embedder, build_extractor, build_baseline
-from videoseal.modules.jnd import build_jnd
+from videoseal.models import Videoseal, build_embedder, build_extractor, build_baseline
+from videoseal.modules.jnd import JND
 
-
-# in the yaml, allows for
-# vae:
-#   msg_processor:
-#     nbits: 16
-#     hidden_size: ${mul:${vae.msg_processor.nbits},2}
-# omegaconf.OmegaConf.register_new_resolver("mul", lambda x, y: x * y)
-# omegaconf.OmegaConf.register_new_resolver("add", lambda x, y: x + y)
-
-
-def is_url(string):
-    try:
-        result = urlparse(string)
-        return all([result.scheme, result.netloc])
-    except ValueError:
-        return False
-
-
-def maybe_download_checkpoint(url):
-    try:
-        basename = urlparse(url).path.split("/")[-1]
-        os.makedirs("checkpoints", exist_ok=True)
-        filename = os.path.abspath(os.path.join("checkpoints", basename))
-
-        if os.path.exists(filename):
-            print(f"File {filename} exists, skipping download")
-            return filename
-
-        response = requests.get(url)
-        response.raise_for_status()  # Raise an exception for HTTP errors
-        with open(filename, 'wb') as file:
-            file.write(response.content)
-        print(f"File {url} downloaded successfully to {filename}")
-    except requests.exceptions.RequestException as e:
-        print(f"Error downloading file: {e}")
-
-    return filename
+DEFAULT_CARD = 'videoseal_1.0'
 
 
 @dataclass
@@ -68,14 +32,24 @@ class SubModelConfig:
 
 
 @dataclass
-class VideoWamConfig:
+class VideosealConfig:
     """Configuration for a Video Seal model."""
     args: DictConfig
     embedder: SubModelConfig
     extractor: SubModelConfig
 
 
-def get_config_from_checkpoint(ckpt_path: Path) -> VideoWamConfig:
+def resolve_config_path(cfg_path):
+    # Resolve the config path in the following order:
+    # 1. Search from the working directory
+    # 2. Search from the source code directory
+    if not Path(cfg_path).is_file():
+        cfg_path = Path(__file__).parents[2].joinpath(cfg_path)
+
+    return cfg_path
+
+
+def get_config_from_checkpoint(ckpt_path: Path) -> VideosealConfig:
     """
     Load configuration from a checkpoint file.
 
@@ -83,24 +57,20 @@ def get_config_from_checkpoint(ckpt_path: Path) -> VideoWamConfig:
     ckpt_path (Path): Path to the checkpoint file.
 
     Returns:
-    VideoWamConfig: Loaded configuration.
+    VideosealConfig: Loaded configuration.
     """
-    exp_dir, exp_name = os.path.dirname(ckpt_path).rsplit('/', 1)
-    logfile_path = os.path.join(exp_dir, 'logs', exp_name + '.stdout')
+    checkpoint = torch.load(ckpt_path, map_location='cpu', weights_only=True)
+    args = checkpoint['args']
+    args = OmegaConf.create(args)
 
-    with open(logfile_path, 'r') as file:
-        for line in file:
-            if '__log__:' in line:
-                params = json.loads(line.split('__log__:')[1].strip())
-                break
-
-    args = OmegaConf.create(params)
     if not isinstance(args, DictConfig):
         raise Exception("Expected logfile to contain params dictionary.")
 
     # Load sub-model configurations
-    embedder_cfg = OmegaConf.load(args.embedder_config)
-    extractor_cfg = OmegaConf.load(args.extractor_config)
+    embedder_cfg_path = resolve_config_path(args.embedder_config)
+    embedder_cfg = OmegaConf.load(embedder_cfg_path)
+    extractor_cfg_path = resolve_config_path(args.extractor_config)
+    extractor_cfg = OmegaConf.load(extractor_cfg_path)
 
     # Create sub-model configurations
     embedder_model = args.embedder_model or embedder_cfg.model
@@ -108,23 +78,23 @@ def get_config_from_checkpoint(ckpt_path: Path) -> VideoWamConfig:
     extractor_model = args.extractor_model or extractor_cfg.model
     extractor_params = extractor_cfg[extractor_model]
 
-    return VideoWamConfig(
+    return VideosealConfig(
         args=args,
         embedder=SubModelConfig(model=embedder_model, params=embedder_params),
         extractor=SubModelConfig(model=extractor_model, params=extractor_params),
     )
 
 
-def setup_model(config: VideoWamConfig, ckpt_path: Path) -> VideoWam:
+def setup_model(config: VideosealConfig, ckpt_path: Path) -> Videoseal:
     """
     Set up a Video Seal model from a configuration and checkpoint file.
 
     Args:
-    config (VideoWamConfig): Model configuration.
+    config (VideosealConfig): Model configuration.
     ckpt_path (Path): Path to the checkpoint file.
 
     Returns:
-    VideoWam: Loaded model.
+    Videoseal: Loaded model.
     """
     args = config.args
 
@@ -139,17 +109,29 @@ def setup_model(config: VideoWamConfig, ckpt_path: Path) -> VideoWam:
     else:
         args.hidden_size_multiplier = 2
 
+    # Handle backward compatibility for videowam_* parameter names (from 1210-oss branch)
+    # If old parameter names exist (videowam_chunk_size, videowam_step_size), 
+    # use them to set the new names (videoseal_chunk_size, videoseal_step_size)
+    if "videowam_chunk_size" in args and "videoseal_chunk_size" not in args:
+        args.videoseal_chunk_size = args.videowam_chunk_size
+    if "videowam_step_size" in args and "videoseal_step_size" not in args:
+        args.videoseal_step_size = args.videowam_step_size
+
     # Build models
     embedder = build_embedder(config.embedder.model, config.embedder.params, args.nbits, args.hidden_size_multiplier)
     extractor = build_extractor(config.extractor.model, config.extractor.params, args.img_size, args.nbits)
     augmenter = get_dummy_augmenter()  # does nothing
 
     # Build attenuation
-    attenuation_cfg = omegaconf.OmegaConf.load(args.attenuation_config)
-    attenuation = build_jnd(args.attenuation, attenuation_cfg)
+    if args.attenuation.lower().startswith("jnd"):
+        attenuation_cfg_path = resolve_config_path(args.attenuation_config)
+        attenuation_cfg = omegaconf.OmegaConf.load(attenuation_cfg_path)
+        attenuation = JND(**attenuation_cfg[args.attenuation])
+    else:
+        attenuation = None
 
     # Build the complete model
-    wam = VideoWam(
+    wam = Videoseal(
         embedder,
         extractor,
         augmenter,
@@ -157,32 +139,21 @@ def setup_model(config: VideoWamConfig, ckpt_path: Path) -> VideoWam:
         scaling_w=args.scaling_w,
         scaling_i=args.scaling_i,
         img_size=args.img_size,
-        chunk_size=args.videowam_chunk_size,
-        step_size=args.videowam_step_size
+        chunk_size=args.videoseal_chunk_size,
+        step_size=args.videoseal_step_size
     )
-
-    scaling_scheduler = None
-    scaling_w_schedule_value = args.get('scaling_w_schedule', None)
-    if scaling_w_schedule_value is not None and scaling_w_schedule_value.lower() != "none":
-        scaling_w_schedule = uoptim.parse_params(scaling_w_schedule_value)
-        scaling_scheduler = uoptim.ScalingScheduler(
-            obj=wam.blender, attribute="scaling_w", scaling_o=args.scaling_w,
-            **scaling_w_schedule
-        )
 
     # Load the model weights
     if os.path.exists(ckpt_path):
         checkpoint = torch.load(ckpt_path, map_location='cpu', weights_only=True)
         msg = wam.load_state_dict(checkpoint['model'], strict=False)
         print(f"Model loaded successfully from {ckpt_path} with message: {msg}")
-        if scaling_scheduler is not None:
-            scaling_scheduler.step(checkpoint["epoch"])
     else:
         raise FileNotFoundError(f"Checkpoint path does not exist: {ckpt_path}")
 
     return wam
 
-def setup_model_from_checkpoint(ckpt_path: str) -> VideoWam:
+def setup_model_from_checkpoint(ckpt_path: str) -> Videoseal:
     """
     # Example usage
     ckpt_path = '/path/to/videoseal/checkpoint.pth'
@@ -191,37 +162,33 @@ def setup_model_from_checkpoint(ckpt_path: str) -> VideoWam:
     or 
     ckpt_path = 'baseline/wam'
     wam = setup_model_from_checkpoint(ckpt_path)
-    
-    or
-    ckpt_path = 'chunkyseal'  # Load from model card
-    wam = setup_model_from_checkpoint(ckpt_path)
     """
     # load baselines. Should be in the format of "baseline/{method}"
     if "baseline" in ckpt_path:
         method = ckpt_path.split('/')[-1]
         return build_baseline(method)
-    
-    # Check if ckpt_path matches any available model card names
-    cards_dir = Path("videoseal/cards")
-    available_cards = [card.stem for card in cards_dir.glob('*.yaml')]
-    if ckpt_path in available_cards:
-        # load videoseal model card
+    # load model card - check if it's a model card name (not a path)
+    # Model cards are YAML files in videoseal/cards/ directory
+    elif not ckpt_path.endswith('.pth') and '/' not in ckpt_path:
+        # This is likely a model card name (e.g., 'videoseal', 'chunkyseal', 'pixelseal')
         return setup_model_from_model_card(ckpt_path)
-    
-    # load videoseal checkpoints from file path
-    config = get_config_from_checkpoint(ckpt_path)
-    return setup_model(config, ckpt_path)
+    # load videoseal ckpts
+    else:
+        config = get_config_from_checkpoint(ckpt_path)
+        return setup_model(config, ckpt_path)
 
 
-def setup_model_from_model_card(model_card: Path | str) -> VideoWam:
+def setup_model_from_model_card(model_card: Path | str) -> Videoseal:
     """
     Set up a Video Seal model from a model card YAML file.
     Args:
         model_card (Path | str): Path to the model card YAML file or name of the model card.
     Returns:
-        VideoWam: Loaded model.
+        Videoseal: Loaded model.
     """
     cards_dir = Path("videoseal/cards")
+    if model_card == 'videoseal':
+        model_card = DEFAULT_CARD
 
     if isinstance(model_card, str):
         available_cards = [card.stem for card in cards_dir.glob('*.yaml')]
@@ -269,7 +236,7 @@ def setup_model_from_model_card(model_card: Path | str) -> VideoWam:
             repo_id="facebook/video_seal",  # The repository ID
             filename=fname  # Dynamically determined filename
         )
-    
+
     elif is_url(config.checkpoint_path):
         if udist.is_dist_avail_and_initialized():
             # download only on the main process
@@ -282,6 +249,43 @@ def setup_model_from_model_card(model_card: Path | str) -> VideoWam:
         raise RuntimeError(f"Path or uri {config.checkpoint_path} is unknown or does not exist")
 
     return setup_model(config, ckpt_path)
+
+
+def is_url(string):
+    try:
+        result = urlparse(string)
+        return all([result.scheme, result.netloc])
+    except ValueError:
+        return False
+
+
+def maybe_download_checkpoint(url):
+    try:
+        # Extract path components to create unique filename
+        # For URLs like .../videoseal/chunkyseal/checkpoint.pth, use chunkyseal_checkpoint.pth
+        path_parts = urlparse(url).path.split("/")
+        if len(path_parts) >= 2:
+            # Use parent directory + filename to make it unique
+            basename = f"{path_parts[-2]}_{path_parts[-1]}"
+        else:
+            basename = path_parts[-1]
+        os.makedirs("ckpts", exist_ok=True)
+        filename = os.path.abspath(os.path.join("ckpts", basename))
+
+        if os.path.exists(filename):
+            print(f"File {filename} exists, skipping download")
+            return filename
+
+        response = requests.get(url)
+        response.raise_for_status()  # Raise an exception for HTTP errors
+        with open(filename, 'wb') as file:
+            file.write(response.content)
+        print(f"File {url} downloaded successfully to {filename}")
+    except requests.exceptions.RequestException as e:
+        print(f"Error downloading file: {e}")
+
+    return filename
+
 
 def setup_dataset(args):
     try:

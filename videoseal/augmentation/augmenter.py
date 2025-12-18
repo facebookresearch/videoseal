@@ -1,3 +1,8 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+# This source code is licensed under the license found in the
+# LICENSE file in the root directory of this source tree.
+
 """
 Test with:
     python -m videoseal.augmentation.augmenter
@@ -12,40 +17,21 @@ from torchvision.utils import save_image
 
 from ..data.transforms import default_transform
 from .geometric import (Crop, HorizontalFlip, Identity, Perspective, Resize,
-                        Rotate, ZoomOut)
+                        Rotate)
 from .masks import get_mask_embedder
 from .valuemetric import (JPEG, Brightness, Contrast, GaussianBlur, Hue,
-                          MedianFilter, Saturation,
-                          GaussianNoise, ImpulseNoise,
-                          ShotNoise, SpeckleNoise, GammaExposure,
-                          LogExposure, SigmoidExposure)
-from .overlay import InsertMemeText, InsertText, InsertEmoji
+                          MedianFilter, Saturation)
 from .video import VideoCompressorAugmenter, DropFrame, H264, H265, H264rgb
-from .neuralcompression import (BMSHJ2018Hyperprior, BMSHJ2018Factorized, 
-                                MBT2018Mean, MBT2018, Cheng2020Anchor, Cheng2020Attn,
-                                StableDiffusionVAE, StableDiffusionXLVAE,
-                                VQGAN1024, VQGAN16384)
 
 name2aug = {
     'rotate': Rotate,
     'resize': Resize,
     'crop': Crop,
     'perspective': Perspective,
-    'zoom_out': ZoomOut,
     'hflip': HorizontalFlip,
     'identity': Identity,
     'jpeg': JPEG,
     'gaussian_blur': GaussianBlur,
-    'gaussian_noise': GaussianNoise,
-    'impulse_noise': ImpulseNoise,
-    'shot_noise': ShotNoise,
-    'speckle_noise': SpeckleNoise,
-    'gamma_exposure': GammaExposure,
-    'log_exposure': LogExposure,
-    'sigmoid_exposure': SigmoidExposure,
-    "meme": InsertMemeText,
-    "text": InsertText,
-    "emoji": InsertEmoji,
     'median_filter': MedianFilter,
     'brightness': Brightness,
     'contrast': Contrast,
@@ -55,21 +41,10 @@ name2aug = {
     'h264': H264,
     'h264rgb': H264rgb,
     'h265': H265,
-    'drop_frame': DropFrame,
-    'mbt2018_mean': MBT2018Mean,
-    'mbt2018': MBT2018,
-    'bmshj2018_hyperprior': BMSHJ2018Hyperprior,
-    'bmshj2018_factorized': BMSHJ2018Factorized,
-    'cheng2020_anchor': Cheng2020Anchor,
-    'cheng2020_attn': Cheng2020Attn,
-    'stable_diffusion_vae': StableDiffusionVAE,
-    'stable_diffusion_xl_vae': StableDiffusionXLVAE,
-    'vqgan_1024': VQGAN1024,
-    'vqgan_16384': VQGAN16384,
+    'drop_frame': DropFrame
 }
 video_augs = ['video_compression', 'h264', 'h264rgb', 'h265']
-neural_compression_augs = ['mbt2018_mean', 'mbt2018', 'bmshj2018_hyperprior', 'bmshj2018_factorized', 'cheng2020_anchor', 'cheng2020_attn']
-aes_augs = ['stable_diffusion_vae', 'stable_diffusion_xl_vae', 'vqgan_1024', 'vqgan_16384']
+
 
 def get_dummy_augmenter():
     """
@@ -93,7 +68,6 @@ class Augmenter(nn.Module):
         augs: dict,
         augs_params: dict,
         num_augs: int = 1,
-        relative_strength: float = 1.0,
         **kwargs: dict
     ) -> None:
         """
@@ -125,23 +99,6 @@ class Augmenter(nn.Module):
             is_video=True
         )
         self.num_augs = num_augs
-        # Put as module list to allow for to(device).
-        self.augs = nn.ModuleList(self.augs)  
-        self.relative_strength = relative_strength
-
-        for aug in self.augs + self.augs_video:
-            if not hasattr(aug, 'relative_strength'):
-                print(f"Warning: Augmentation {aug.__class__.__name__} does not have relative_strength attribute.")
-
-    def __setattr__(self, name, value):
-        if name == "relative_strength":
-            for aug in self.augs:
-                if hasattr(aug, 'relative_strength'):
-                    aug.relative_strength = value
-            for aug in self.augs_video:
-                if hasattr(aug, 'relative_strength'):
-                    aug.relative_strength = value
-        return super().__setattr__(name, value)
 
     def parse_augmentations(
         self,
@@ -164,15 +121,14 @@ class Augmenter(nn.Module):
             if aug_name in video_augs and not is_video:
                 continue
             aug_prob = float(augs[aug_name])
-            if aug_prob > 0:
-                aug_params = augs_params[aug_name] if aug_name in augs_params else {}
-                try:
-                    selected_aug = name2aug[aug_name](**aug_params)
-                except KeyError:
-                    raise ValueError(
-                        f"Augmentation {aug_name} not found. Add it in name2aug.")
-                augmentations.append(selected_aug)
-                probs.append(aug_prob)
+            aug_params = augs_params[aug_name] if aug_name in augs_params else {}
+            try:
+                selected_aug = name2aug[aug_name](**aug_params)
+            except KeyError:
+                raise ValueError(
+                    f"Augmentation {aug_name} not found. Add it in name2aug.")
+            augmentations.append(selected_aug)
+            probs.append(aug_prob)
         # normalize probabilities
         total_prob = sum(probs)
         probs = [prob / total_prob for prob in probs]
@@ -214,26 +170,27 @@ class Augmenter(nn.Module):
         """
         if self.training:
             # create mask targets
-            mask_targets = self.mask_embedder(imgs_w, masks=masks).to(imgs_w.device)
+            mask_targets = self.mask_embedder(
+                imgs_w, masks=masks).to(imgs_w.device)
             # watermark masking
             imgs_aug = imgs_w * mask_targets + imgs * (1 - mask_targets)
             # image augmentations
             selected_augs = []
-            for ii in range(self.num_augs):
-                imgs_aug, mask_targets, selected_aug_ = self.augment(imgs_aug, mask_targets, is_video, do_resize)
+            for _ in range(self.num_augs):
+                imgs_aug, mask_targets, selected_aug_ = self.augment(
+                    imgs_aug, mask_targets, is_video, do_resize)
                 selected_augs.append(selected_aug_)
             selected_aug = "+".join(selected_augs)
             return imgs_aug, mask_targets, selected_aug
         else:
             # no mask
             mask_targets = torch.ones_like(imgs_w)[:, 0:1, :, :]
-            imgs_aug = imgs_w * mask_targets + imgs * (1 - mask_targets)
             # image augmentations
             selected_augs = []
             for _ in range(self.num_augs):
-                imgs_aug, mask_targets, selected_aug_ = self.augment(imgs_aug, mask_targets, is_video, do_resize)
+                imgs_aug, mask_targets, selected_aug_ = self.augment(
+                    imgs_aug, mask_targets, is_video, do_resize)
                 selected_augs.append(selected_aug_)
-            selected_aug = "+".join(selected_augs)
             return imgs_aug, mask_targets, selected_aug
 
     def __repr__(self) -> str:

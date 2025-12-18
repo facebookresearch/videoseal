@@ -1,3 +1,8 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+# This source code is licensed under the license found in the
+# LICENSE file in the root directory of this source tree.
+
 """
 Test with:
     python -m videoseal.augmentation.video
@@ -30,8 +35,8 @@ class VideoCompression(nn.Module):
         self.fps = fps
 
     def _preprocess_frames(self, frames) -> torch.Tensor:
-        frames = (frames.clamp(0, 1) * 255).round().permute(0, 2, 3, 1)
-        frames = frames.to(torch.uint8).detach().cpu().numpy()
+        frames = frames.clamp(0, 1).permute(0, 2, 3, 1)
+        frames = (frames * 255).to(torch.uint8).detach().cpu().numpy()
         return frames
     
     def _postprocess_frames(self, frames) -> torch.Tensor:
@@ -90,10 +95,7 @@ class VideoCompression(nn.Module):
         Returns:
             torch.Tensor: Decompressed video frames as a tensor with shape (T, C, H, W).
         """
-        if crf is not None:
-            self.crf = crf
-        if self.crf == 0:
-            return frames, mask
+        self.crf = crf or self.crf
 
         # if width or height is not divisible by 2, pad the frames, as some codecs require even dimensions
         if frames.shape[2] % 2 != 0 or frames.shape[3] % 2 != 0:
@@ -149,16 +151,11 @@ class H264(VideoCompression):
             codec='libx264', fps=fps)
         self.min_crf = min_crf
         self.max_crf = max_crf
-        self.relative_strength = 1.0
 
     def get_random_crf(self):
         if self.min_crf is None or self.max_crf is None:
             raise ValueError("min_crf and max_crf must be provided")
-        crf = torch.randint(self.min_crf, self.max_crf + 1, size=(1,)).item()
-        crf = round(crf * self.relative_strength)
-        if crf < self.min_crf:
-            crf = 0  # if compression factor is lower than the minimum, return lossless video
-        return crf
+        return torch.randint(self.min_crf, self.max_crf + 1, size=(1,)).item()
 
     def forward(self, frames, mask=None, crf=None) -> torch.Tensor:
         crf = crf or self.get_random_crf()
@@ -174,16 +171,11 @@ class H264rgb(VideoCompression):
             codec='libx264rgb', fps=fps)
         self.min_crf = min_crf
         self.max_crf = max_crf
-        self.relative_strength = 1.0
 
     def get_random_crf(self):
         if self.min_crf is None or self.max_crf is None:
             raise ValueError("min_crf and max_crf must be provided")
-        crf = torch.randint(self.min_crf, self.max_crf + 1, size=(1,)).item()
-        crf = round(crf * self.relative_strength)
-        if crf < self.min_crf:
-            crf = 0  # if compression factor is lower than the minimum, return lossless video
-        return crf
+        return torch.randint(self.min_crf, self.max_crf + 1, size=(1,)).item()
 
     def forward(self, frames, mask=None, crf=None) -> torch.Tensor:
         crf = crf or self.get_random_crf()
@@ -200,16 +192,11 @@ class H265(VideoCompression):
             codec='libx265', fps=fps)
         self.min_crf = min_crf
         self.max_crf = max_crf
-        self.relative_strength = 1.0
 
     def get_random_crf(self):
         if self.min_crf is None or self.max_crf is None:
             raise ValueError("min_crf and max_crf must be provided")
-        crf = torch.randint(self.min_crf, self.max_crf + 1, size=(1,)).item()
-        crf = round(crf * self.relative_strength)
-        if crf < self.min_crf:
-            crf = 0  # if compression factor is lower than the minimum, return lossless video
-        return crf
+        return torch.randint(self.min_crf, self.max_crf + 1, size=(1,)).item()
 
     def forward(self, frames, mask=None, crf=None) -> torch.Tensor:
         crf = crf or self.get_random_crf()

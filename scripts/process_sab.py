@@ -1,3 +1,9 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+#
+# This source code is licensed under the license found in the
+# LICENSE file in the root directory of this source tree.
+
 """
 #!/bin/bash
 
@@ -10,7 +16,7 @@ mkdir -p logs
 # Loop through each job and submit it
 for ((i=0; i<num_jobs; i++)); do
   # Submit the job using srun and redirect output to a log file
-  srun -p learnlab --nodes=1 --ntasks=1 --cpus-per-task=40 --mem 240G --time 4320 python /private/home/pfz/09-videoseal/scripts/process_sab.py $i > logs/$i.log 2>&1 &
+  srun -p learnlab --nodes=1 --ntasks=1 --cpus-per-task=40 --mem 240G --time 4320 python process_sab.py $i > logs/$i.log 2>&1 &
 done
 """
 
@@ -23,11 +29,8 @@ import numpy as np
 from multiprocessing import Pool
 
 # Define the source and destination directories
-src_dir = '/datasets01/segment_anything/032023_anonymized_resized'
-dst_dir = '/large_experiments/omniseal/sa-1b/'
-# src_dir = '/checkpoint/pfz/datasets/coco/val2014_512'
-# dst_dir = '/checkpoint/pfz/trash'
-
+src_dir = '/path/to/your/data'
+dst_dir = '/path/to/your/splits'
 
 # Create the destination directories if they don't exist
 os.makedirs(dst_dir, exist_ok=True)

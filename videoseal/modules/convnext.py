@@ -1,9 +1,8 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
-
 # All rights reserved.
-
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
+
 
 """
 Test with:
@@ -101,8 +100,7 @@ class ConvNeXtV2(nn.Module):
         self, in_chans=3,
         depths=[3, 3, 9, 3], dims=[96, 192, 384, 768], 
         drop_path_rate=0., head_init_scale=1., 
-        temporal_convs=False, temporal_attention=False,
-        stem_stride=4,
+        temporal_convs=False, temporal_attention=False, stem_stride=4
     ) -> None:
         super().__init__()
         self.depths = depths
@@ -146,13 +144,15 @@ class ConvNeXtV2(nn.Module):
             nn.init.constant_(m.bias, 0)
 
     def forward_features(self, x):
-        for ii, (down, stage) in enumerate(zip(self.downsample_layers, self.stages)):
-            x = down(x)
-            x = stage(x)
+        for i in range(4):
+            x = self.downsample_layers[i](x)
+            x = self.stages[i](x)
         return x # no average pooling, (N, C, H, W)
+        # return self.norm(x.mean([-2, -1])) # global average pooling, (N, C, H, W) -> (N, C)
 
     def forward(self, x):
         x = self.forward_features(x)
+        # x = self.head(x)
         return x
 
 def convnextv2_atto(**kwargs):
@@ -195,7 +195,3 @@ if __name__ == '__main__':
     print(y.shape)
     print(model)
     print("ConvNeXtV2 model created successfully.")
-
-    # try scripting
-    scripted_model = torch.jit.script(model)
-    print(scripted_model)

@@ -1,0 +1,40 @@
+checkpoint_path: https://dl.fbaipublicfiles.com/videoseal/pixelseal/checkpoint.pth
+args:
+  attenuation_config: configs/attenuation.yaml
+  attenuation: jnd_1_1
+  nbits: 256
+  hidden_size_multiplier: 1.0
+  img_size_proc: 256
+  blending_method: additive
+  scaling_w: 0.2
+  scaling_i: 1.0
+  videowam_chunk_size: 32
+  videowam_step_size: 8
+embedder:
+  model: unet_base_yuv_quant
+  params:
+    msg_processor:
+      nbits: 16
+      hidden_size: 32
+      msg_processor_type: 'binary+concat'
+    unet:
+      in_channels: 1
+      out_channels: 1
+      z_channels: 16
+      num_blocks: 8
+      activation: 'relu'
+      normalization: 'batch'
+      z_channels_mults: [2, 4, 8, 16]
+      last_tanh: True
+extractor:
+  model: convnext_tiny
+  params:
+    encoder:
+      depths: [3, 3, 9, 3]
+      dims: [96, 192, 384, 768]
+    pixel_decoder:
+      pixelwise: False
+      upscale_stages: [1]
+      embed_dim: 768
+      nbits: 16
+      sigmoid_output: False

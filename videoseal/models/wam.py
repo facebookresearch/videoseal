@@ -31,7 +31,6 @@ class Wam(nn.Module):
         scaling_w: float = 1.0,
         scaling_i: float = 1.0,
         clamp: bool = True,
-        round: bool = True,
         img_size: int = 256,
         blending_method: str = "additive",
     ) -> None:
@@ -62,7 +61,6 @@ class Wam(nn.Module):
         self.blender = Blender(scaling_i, scaling_w, blending_method)
         self.attenuation = attenuation
         self.clamp = clamp
-        self.round = round
 
     def get_random_msg(self, bsz: int = 1, nb_repetitions=1) -> torch.Tensor:
         return self.embedder.get_random_msg(bsz, nb_repetitions)  # b x k
@@ -110,16 +108,9 @@ class Wam(nn.Module):
             imgs_w = self.attenuation(imgs, imgs_w)
         if self.clamp:
             imgs_w = torch.clamp(imgs_w, 0, 1)
-        if self.round:
-            imgs_w = (torch.round(imgs_w * 255) / 255 - imgs_w).detach() + imgs_w
         # augment
-
-        if isinstance(self.augmenter, Augmenter):
-            imgs_aug, masks, selected_aug = self.augmenter(
-                imgs_w, imgs, masks, is_video=False, do_resize=False)
-        else:
-            imgs_aug = self.augmenter(imgs_w, fill_image=imgs)
-            selected_aug = "NotAvailable"
+        imgs_aug, masks, selected_aug = self.augmenter(
+            imgs_w, imgs, masks, is_video=False, do_resize=False)
 
         # interpolate back
         if imgs_aug.shape[-2:] != (self.img_size, self.img_size):
@@ -181,11 +172,6 @@ class Wam(nn.Module):
             )
         else:
             preds_w = self.embedder(imgs_res, msgs.to(self.device))
-        raw_embedder_output = preds_w.clone()
-        # interpolate back
-        if imgs.shape[-2:] != (self.img_size, self.img_size):
-            raw_embedder_output = F.interpolate(raw_embedder_output, size=imgs.shape[-2:],
-                                    **interpolation)
 
         # attenuate at low resolution if needed
         if self.attenuation is not None and lowres_attenuation:
@@ -209,14 +195,11 @@ class Wam(nn.Module):
         imgs_w = self.blender(imgs, preds_w)
         if self.clamp:
             imgs_w = torch.clamp(imgs_w, 0, 1)
-        if self.round:
-            imgs_w = (torch.round(imgs_w * 255) / 255 - imgs_w).detach() + imgs_w
 
         outputs = {
             "msgs": msgs,  # original messages: b k
             "preds_w": preds_w,  # predicted watermarks: b c h w
             "imgs_w": imgs_w,  # watermarked images: b c h w
-            "raw_embedder_output": raw_embedder_output,  # raw embedder output
         }
         return outputs
 

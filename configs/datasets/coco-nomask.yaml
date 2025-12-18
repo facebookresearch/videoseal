@@ -1,4 +1,0 @@
-train_dir: /datasets01/COCO/060817/train2014/
-train_annotation_file: null
-val_dir: /datasets01/COCO/060817/val2014/
-val_annotation_file: null

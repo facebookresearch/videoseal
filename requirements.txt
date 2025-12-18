@@ -1,12 +1,14 @@
+pandas
+opencv-python
 omegaconf
 einops
 lpips
 timm==0.9.16
 pre-commit
 ipykernel
+pycocotools
+pandas
 PyWavelets
-pyav==13.0.0
-av
 scikit-image
 pandas
 tqdm
@@ -17,6 +19,8 @@ transformers
 safetensors
 pycocotools
 opencv-python
+tqdm
+timm
 scipy
 ffmpeg-python
-lightning
+av

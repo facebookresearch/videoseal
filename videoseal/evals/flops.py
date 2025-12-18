@@ -1,3 +1,8 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+# This source code is licensed under the license found in the
+# LICENSE file in the root directory of this source tree.
+
 """
 from root directory:
     python -m videoseal.evals.flops --device cuda --nbits 128 --hidden_size_multiplier 1

@@ -1,3 +1,8 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+# This source code is licensed under the license found in the
+# LICENSE file in the root directory of this source tree.
+
 """
 Test with:
     python -m videoseal.augmentation.geometric
@@ -12,7 +17,6 @@ import torchvision.transforms.functional as F
 class Identity(nn.Module):
     def __init__(self):
         super(Identity, self).__init__()
-        self.relative_strength = 1.0
 
     def forward(self, image, mask=None, *args, **kwargs):
         return image, mask
@@ -30,7 +34,6 @@ class Rotate(nn.Module):
             self.base_angles = torch.tensor([-90, 0, 0, 90])
         else:
             self.base_angles = torch.tensor([0])
-        self.relative_strength = 1.0
 
     def get_random_angle(self):
         if self.min_angle is None or self.max_angle is None:
@@ -38,25 +41,18 @@ class Rotate(nn.Module):
         base_angle = self.base_angles[
             torch.randint(0, len(self.base_angles), size=(1,))
         ].item()
-        if self.relative_strength < 0.5:
-            base_angle = 0
-        
-        min_angle = round(self.min_angle * self.relative_strength)
-        max_angle = round(self.max_angle * self.relative_strength)
-        return base_angle, torch.randint(min_angle, max_angle + 1, size=(1,)).item()
+        return base_angle + torch.randint(self.min_angle, self.max_angle + 1, size=(1,)).item()
 
     def forward(self, image, mask=None, angle=None):
-        if angle is not None:
-            image = F.rotate(image, angle)
-            mask = F.rotate(mask, angle) if mask is not None else mask
-        else:
-            base_angle, angle = self.get_random_angle()
-            # rotate base_angle first with expand=True to avoid cropping
-            image = F.rotate(image, base_angle, expand=True)
-            mask = F.rotate(mask, base_angle, expand=True) if mask is not None else mask
-            # rotate the rest with expand=False
-            image = F.rotate(image, angle)
-            mask = F.rotate(mask, angle) if mask is not None else mask
+        angle = angle or self.get_random_angle()
+        base_angle = angle // 90 * 90
+        angle = angle - base_angle
+        # rotate base_angle first with expand=True to avoid cropping
+        image = F.rotate(image, base_angle, expand=True)
+        mask = F.rotate(mask, base_angle, expand=True) if mask is not None else mask
+        # rotate the rest with expand=False
+        image = F.rotate(image, angle)
+        mask = F.rotate(mask, angle) if mask is not None else mask
         return image, mask
     
     def __repr__(self):
@@ -69,18 +65,15 @@ class Resize(nn.Module):
         # float between 0 and 1, representing the total area of the output image compared to the input image
         self.min_size = min_size
         self.max_size = max_size
-        self.relative_strength = 1.0
 
     def get_random_size(self, h, w):
         if self.min_size is None or self.max_size is None:
             raise ValueError("min_size and max_size must be provided")
-        min_size = self.min_size + (1 - self.min_size) * (1 - self.relative_strength)
-        max_size = self.max_size + (1 - self.max_size) * (1 - self.relative_strength)
         output_size = (
-            torch.randint(int(min_size * h),
-                          int(max_size * h) + 1, size=(1, )).item(),
-            torch.randint(int(min_size * w),
-                          int(max_size * w) + 1, size=(1, )).item()
+            torch.randint(int(self.min_size * h),
+                          int(self.max_size * h) + 1, size=(1, )).item(),
+            torch.randint(int(self.min_size * w),
+                          int(self.max_size * w) + 1, size=(1, )).item()
         )
         return output_size
 
@@ -103,18 +96,15 @@ class Crop(nn.Module):
         super(Crop, self).__init__()
         self.min_size = min_size
         self.max_size = max_size
-        self.relative_strength = 1.0
 
     def get_random_size(self, h, w):
         if self.min_size is None or self.max_size is None:
             raise ValueError("min_size and max_size must be provided")
-        min_size = self.min_size + (1 - self.min_size) * (1 - self.relative_strength)
-        max_size = self.max_size + (1 - self.max_size) * (1 - self.relative_strength)
         output_size = (
-            torch.randint(int(min_size * h),
-                          int(max_size * h) + 1, size=(1, )).item(),
-            torch.randint(int(min_size * w),
-                          int(max_size * w) + 1, size=(1, )).item()
+            torch.randint(int(self.min_size * h),
+                          int(self.max_size * h) + 1, size=(1, )).item(),
+            torch.randint(int(self.min_size * w),
+                          int(self.max_size * w) + 1, size=(1, )).item()
         )
         return output_size
 
@@ -139,15 +129,13 @@ class Perspective(nn.Module):
         super(Perspective, self).__init__()
         self.min_distortion_scale = min_distortion_scale
         self.max_distortion_scale = max_distortion_scale
-        self.relative_strength = 1.0
 
     def get_random_distortion_scale(self):
         if self.min_distortion_scale is None or self.max_distortion_scale is None:
             raise ValueError(
                 "min_distortion_scale and max_distortion_scale must be provided")
-        distortion = self.min_distortion_scale + torch.rand(1).item() * \
+        return self.min_distortion_scale + torch.rand(1).item() * \
             (self.max_distortion_scale - self.min_distortion_scale)
-        return distortion * self.relative_strength
 
     def forward(self, image, mask=None, distortion_scale=None):
         distortion_scale = distortion_scale or self.get_random_distortion_scale()
@@ -198,84 +186,14 @@ class Perspective(nn.Module):
 class HorizontalFlip(nn.Module):
     def __init__(self):
         super(HorizontalFlip, self).__init__()
-        self.relative_strength = 1.0
 
     def forward(self, image, mask=None, *args, **kwargs):
-        if self.relative_strength < 0.5:
-            return image, mask
         image = F.hflip(image)
         mask = F.hflip(mask) if mask is not None else mask
         return image, mask
 
     def __repr__(self):
         return f"HorizontalFlip"
-
-
-class ZoomOut(nn.Module):
-    """Zoom out by placing the image on a larger canvas with a random fill color.
-
-    size_factor: how much larger the canvas is relative to original (e.g. 1.2 means 20% border)
-    If size_factor is None, a random factor between min_factor and max_factor is used.
-    """
-    def __init__(self, min_factor=1.1, max_factor=1.5, fill=None):
-        super(ZoomOut, self).__init__()
-        self.min_factor = min_factor
-        self.max_factor = max_factor
-        self.fill = fill  # if None, choose random fill color per call
-        self.relative_strength = 1.0
-
-    def get_random_factor(self):
-        f = torch.rand(1).item() * (self.max_factor - self.min_factor) + self.min_factor
-        return 1.0 + (f - 1.0) * self.relative_strength
-
-    def forward(self, image, mask=None, factor=None):
-        factor = factor or self.get_random_factor()
-        
-        # Determine fill color
-        fill_color = self.fill
-        if fill_color is None:
-            fill_color = torch.rand(3).tolist() if image.dtype.is_floating_point else [0, 0, 0]
-        
-        # Handle dimensions
-        adapt_dim = len(image.shape) == 3
-        if adapt_dim:
-            image = image.unsqueeze(0)
-            if mask is not None and len(mask.shape) == 3:
-                mask = mask.unsqueeze(0)
-        
-        # Get dimensions
-        b, c, h, w = image.shape
-        new_h, new_w = int(round(h * factor)), int(round(w * factor))
-        
-        # Create canvas
-        canvas = torch.zeros((b, c, new_h, new_w), dtype=image.dtype, device=image.device)
-        fill_tensor = torch.tensor(fill_color, dtype=image.dtype, device=image.device)
-        if fill_tensor.numel() == 1:
-            fill_tensor = fill_tensor.expand(c)
-        canvas[:, :, :, :] = fill_tensor.view(1, c, 1, 1)
-        
-        # Random placement
-        top = torch.randint(0, max(new_h - h, 0) + 1, size=(1,)).item() if new_h > h else 0
-        left = torch.randint(0, max(new_w - w, 0) + 1, size=(1,)).item() if new_w > w else 0
-        canvas[:, :, top:top + h, left:left + w] = image
-        
-        # Resize back to original
-        out = nn.functional.interpolate(canvas, size=(h, w), mode='bilinear', align_corners=True)
-        
-        if mask is not None:
-            mask_canvas = torch.zeros((b, c, new_h, new_w), dtype=mask.dtype, device=mask.device)
-            mask_canvas[:, :, top:top + h, left:left + w] = mask
-            out_mask = nn.functional.interpolate(mask_canvas, size=(h, w), mode='nearest')
-            if adapt_dim:
-                return out.squeeze(0), out_mask.squeeze(0)
-            return out, out_mask
-        
-        if adapt_dim:
-            out = out.squeeze(0)
-        return out, mask
-
-    def __repr__(self):
-        return f"ZoomOut"
 
 
 if __name__ == "__main__":
@@ -292,7 +210,6 @@ if __name__ == "__main__":
         (Resize, [0.5, 0.75, 1.0]),      # size ratio
         (Crop, [0.5, 0.75, 1.0]),        # size ratio
         (Perspective, [0.2, 0.5, 0.8]),       # distortion_scale
-        (ZoomOut, [1.2, 1.5, 2.0]),      # size_factor
         (HorizontalFlip, [])             # No parameters needed for flip
     ]
 

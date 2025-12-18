@@ -21,8 +21,8 @@ args:
   scaling_w: 1.0
   scaling_w_schedule: null
   scaling_i: 1.0
-  videowam_chunk_size: 32
-  videowam_step_size: 4
+  videoseal_chunk_size: 32
+  videoseal_step_size: 4
   optimizer: AdamW,lr=1e-6
   optimizer_d: null
   scheduler: CosineLRScheduler,lr_min=1e-7,t_initial=301,warmup_lr_init=1e-8,warmup_t=10

@@ -1,3 +1,8 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+# This source code is licensed under the license found in the
+# LICENSE file in the root directory of this source tree.
+
 """
 heavily inspired from https://github.com/advimman/lama/blob/main/saicinpainting/training/data/masks.py
 """
@@ -115,7 +120,7 @@ def make_random_rectangle_mask(shape, margin=10, bbox_min_size=30, bbox_max_size
                 occupied[start_y:start_y + box_height, start_x:start_x + box_width] = True
             attempts += 1
         if not valid:
-            print(f"Warning: Could not place non-overlapping rectangle for mask {i + 1}")
+            print(f"Warning: Could not place non-overlapping rectangle for mask {ii + 1}")
     if no_overlap:
         return union_mask[None, ...], individual_masks
     else:

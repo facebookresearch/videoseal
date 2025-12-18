@@ -112,4 +112,16 @@ convnext_chunky: # Larger VideoSeal model (ConvNeXt-Base)
   pixel_decoder:
     pixelwise: False  # return msg per pixel (k h w)
     upscale_stages: [1]
+    sigmoid_output: False
+
+# Alias for backward compatibility with old checkpoints
+convnext_sweep_3_prop_stride2: # Same as convnext_chunky
+  proportional_dim: True
+  encoder:
+    stem_stride: 2
+    depths: [3, 3, 27, 3]
+    dims: [128, 256, 512, 1024]
+  pixel_decoder:
+    pixelwise: False
+    upscale_stages: [1]
     sigmoid_output: False 

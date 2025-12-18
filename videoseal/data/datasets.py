@@ -1,22 +1,29 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+# This source code is licensed under the license found in the
+# LICENSE file in the root directory of this source tree.
+
 # Video dataset adapted from https://github.com/facebookresearch/jepa/blob/main/src/datasets/video_dataset.py
 
-import functools
 import glob
 import json
 import logging
 import os
 import random
 import warnings
-
 import numpy as np
-import torch
-import torchvision
-import torchvision.transforms as transforms
 import tqdm
-from decord import VideoReader, cpu
 from PIL import Image
-from pycocotools import mask as maskUtils
 from pycocotools import mask as mask_utils
+
+try:
+    from decord import VideoReader, cpu
+    decord_available = True
+except ImportError:
+    VideoReader = None
+    decord_available = False
+
+import torch
 from torch.utils.data import Dataset
 from torchvision.datasets import CocoDetection
 from torchvision.datasets.folder import default_loader, is_image_file
@@ -36,12 +43,13 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 def get_image_paths(path):
-    if path.startswith('/large_experiments') or path.startswith('/datasets01'):
-        cache_dir = '/large_experiments/omniseal/cache/videoseal'
-    else:
-        cache_dir = '/checkpoint/avseal/cache/videoseal'
+    cache_dir = '.cache'
     cache_file = path.replace('/', '_') + '.json'
     cache_file = os.path.join(cache_dir, cache_file)
+
+    if not os.path.exists(cache_dir):
+        os.makedirs(cache_dir)
+    
     if os.path.exists(cache_file):
         with open(cache_file, 'r') as f:
             paths = json.load(f)
@@ -147,7 +155,7 @@ class CocoImageIDWrapper(CocoDetection):
             # one mask for all objects
             for ann in anns:
                 rle = self.coco.annToRLE(ann)
-                m = maskUtils.decode(rle)
+                m = mask_utils.decode(rle)
                 mask = np.maximum(mask, m)
             mask = torch.tensor(mask, dtype=torch.float32)
             return mask[None, ...]  # Add channel dimension
@@ -155,7 +163,7 @@ class CocoImageIDWrapper(CocoDetection):
             anns = anns[:self.max_nb_masks]
             for ann in anns:
                 rle = self.coco.annToRLE(ann)
-                m = maskUtils.decode(rle)
+                m = mask_utils.decode(rle)
                 masks.append(m)
             # Stack all masks along a new dimension to create a multi-channel mask tensor
             if masks:

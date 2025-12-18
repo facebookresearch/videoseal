@@ -1,8 +1,15 @@
+
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+#
+# This source code is licensed under the license found in the
+# LICENSE file in the root directory of this source tree.
+
 import argparse
 from pathlib import Path
-from videoseal.evals.full import get_config_from_checkpoint
 from omegaconf import OmegaConf
 
+from videoseal.evals.full import get_config_from_checkpoint
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(

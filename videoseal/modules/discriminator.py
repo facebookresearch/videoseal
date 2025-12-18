@@ -1,8 +1,11 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+# This source code is licensed under the license found in the
+# LICENSE file in the root directory of this source tree.
+
 # https://github.com/CompVis/taming-transformers/blob/master/taming/modules/discriminator/model.py
 
 import functools
-import math
-from typing import Tuple
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -11,20 +14,8 @@ from torch.nn.utils import spectral_norm
 
 from ..data.transforms import RGB2YUV
 
-
-def weights_init(m):
-    classname = m.__class__.__name__
-    if classname.find('Conv') != -1:
-        nn.init.normal_(m.weight.data, 0.0, 0.02)
-    elif classname.find('BatchNorm') != -1:
-        nn.init.normal_(m.weight.data, 1.0, 0.02)
-        nn.init.constant_(m.bias.data, 0)
-
-
 class ActNorm(nn.Module):
-    def __init__(
-        self, num_features, logdet=False, affine=True, allow_reverse_init=False
-    ):
+    def __init__(self, num_features, logdet=False, affine=True, allow_reverse_init=False):
         assert affine
         super().__init__()
         self.logdet = logdet
@@ -32,25 +23,13 @@ class ActNorm(nn.Module):
         self.scale = nn.Parameter(torch.ones(1, num_features, 1, 1))
         self.allow_reverse_init = allow_reverse_init
 
-        self.register_buffer("initialized", torch.tensor(0, dtype=torch.uint8))
+        self.register_buffer('initialized', torch.tensor(0, dtype=torch.uint8))
 
     def initialize(self, input):
         with torch.no_grad():
             flatten = input.permute(1, 0, 2, 3).contiguous().view(input.shape[1], -1)
-            mean = (
-                flatten.mean(1)
-                .unsqueeze(1)
-                .unsqueeze(2)
-                .unsqueeze(3)
-                .permute(1, 0, 2, 3)
-            )
-            std = (
-                flatten.std(1)
-                .unsqueeze(1)
-                .unsqueeze(2)
-                .unsqueeze(3)
-                .permute(1, 0, 2, 3)
-            )
+            mean = (flatten.mean(1).unsqueeze(1).unsqueeze(2).unsqueeze(3).permute(1, 0, 2, 3))
+            std = (flatten.std(1).unsqueeze(1).unsqueeze(2).unsqueeze(3).permute(1, 0, 2, 3))
 
             self.loc.data.copy_(-mean)
             self.scale.data.copy_(1 / (std + 1e-6))
@@ -59,7 +38,7 @@ class ActNorm(nn.Module):
         if reverse:
             return self.reverse(input)
         if len(input.shape) == 2:
-            input = input[:, :, None, None]
+            input = input[:,:,None,None]
             squeeze = True
         else:
             squeeze = False
@@ -77,7 +56,7 @@ class ActNorm(nn.Module):
 
         if self.logdet:
             log_abs = torch.log(torch.abs(self.scale))
-            logdet = height * width * torch.sum(log_abs)
+            logdet = height*width*torch.sum(log_abs)
             logdet = logdet * torch.ones(input.shape[0]).to(input)
             return h, logdet
 
@@ -95,7 +74,7 @@ class ActNorm(nn.Module):
                 self.initialized.fill_(1)
 
         if len(output.shape) == 2:
-            output = output[:, :, None, None]
+            output = output[:,:,None,None]
             squeeze = True
         else:
             squeeze = False
@@ -109,10 +88,9 @@ class ActNorm(nn.Module):
 
 class NLayerDiscriminator(nn.Module):
     """Defines a PatchGAN discriminator as in Pix2Pix
-    --> see https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix/blob/master/models/networks.py
+        --> see https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix/blob/master/models/networks.py
     """
-
-    def __init__(self, input_nc=3, ndf=32, n_layers=3, use_actnorm=False, norm_in_stem=False, center_input=False, spectral_norm=False):
+    def __init__(self, input_nc=3, ndf=32, n_layers=3, use_actnorm=False):
         """Construct a PatchGAN discriminator
         Parameters:
             input_nc (int)  -- the number of channels in input images
@@ -126,9 +104,7 @@ class NLayerDiscriminator(nn.Module):
             # norm_layer = nn.BatchNorm2d()
         else:
             norm_layer = ActNorm
-        if (
-            type(norm_layer) == functools.partial
-        ):  # no need to use bias as BatchNorm2d has affine parameters
+        if type(norm_layer) == functools.partial:  # no need to use bias as BatchNorm2d has affine parameters
             use_bias = norm_layer.func != nn.GroupNorm
             # use_bias = norm_layer.func != nn.BatchNorm2d
         else:
@@ -137,61 +113,31 @@ class NLayerDiscriminator(nn.Module):
 
         self.input_nc = input_nc
         self.rgb2yuv = RGB2YUV()
-        self.center_input = center_input
-
-        conv_layer = nn.Conv2d
-        if spectral_norm:
-            conv_layer = lambda *args, **kwargs: torch.nn.utils.parametrizations.spectral_norm(nn.Conv2d(*args, **kwargs))
 
         kw = 4
         padw = 1
-        if norm_in_stem:
-            sequence = [
-                conv_layer(input_nc, ndf, kernel_size=kw, stride=2, padding=padw),
-                norm_layer(ndf),
-                nn.LeakyReLU(0.2, True),
-            ]
-        else:
-            sequence = [
-                conv_layer(input_nc, ndf, kernel_size=kw, stride=2, padding=padw),
-                nn.LeakyReLU(0.2, True),
-            ]
+        sequence = [nn.Conv2d(input_nc, ndf, kernel_size=kw, stride=2, padding=padw), nn.LeakyReLU(0.2, True)]
         nf_mult = 1
         nf_mult_prev = 1
         for n in range(1, n_layers):  # gradually increase the number of filters
             nf_mult_prev = nf_mult
-            nf_mult = min(2**n, 8)
+            nf_mult = min(2 ** n, 8)
             sequence += [
-                conv_layer(
-                    ndf * nf_mult_prev,
-                    ndf * nf_mult,
-                    kernel_size=kw,
-                    stride=2,
-                    padding=padw,
-                    bias=use_bias,
-                ),
+                nn.Conv2d(ndf * nf_mult_prev, ndf * nf_mult, kernel_size=kw, stride=2, padding=padw, bias=use_bias),
                 norm_layer(ndf * nf_mult),
-                nn.LeakyReLU(0.2, True),
+                nn.LeakyReLU(0.2, True)
             ]
 
         nf_mult_prev = nf_mult
-        nf_mult = min(2**n_layers, 8)
+        nf_mult = min(2 ** n_layers, 8)
         sequence += [
-            conv_layer(
-                ndf * nf_mult_prev,
-                ndf * nf_mult,
-                kernel_size=kw,
-                stride=1,
-                padding=padw,
-                bias=use_bias,
-            ),
+            nn.Conv2d(ndf * nf_mult_prev, ndf * nf_mult, kernel_size=kw, stride=1, padding=padw, bias=use_bias),
             norm_layer(ndf * nf_mult),
-            nn.LeakyReLU(0.2, True),
+            nn.LeakyReLU(0.2, True)
         ]
 
         sequence += [
-            conv_layer(ndf * nf_mult, 1, kernel_size=kw, stride=1, padding=padw)
-        ]  # output 1 channel prediction map
+            nn.Conv2d(ndf * nf_mult, 1, kernel_size=kw, stride=1, padding=padw)]  # output 1 channel prediction map
         self.main = nn.Sequential(*sequence)
 
     def forward(self, input):
@@ -199,10 +145,6 @@ class NLayerDiscriminator(nn.Module):
         # If input has 3 channels but the model is for 1 channel, only use the first channel
         if self.input_nc == 1 and input.shape[1] == 3:
             input = self.rgb2yuv(input)[:, 0:1]
-        if self.center_input:
-            # Center input to [-1, 1]
-            # This works both for RGB and Y inputs as YUV has mean around [0.5, 0.0, 0.0] but the UV components are not used
-            input = input * 2 - 1
         return self.main(input)
 
 
@@ -244,17 +186,17 @@ class UNetDiscriminatorSN(nn.Module):
         x3 = F.leaky_relu(self.conv3(x2), negative_slope=0.2, inplace=True)
 
         # upsample
-        x3 = F.interpolate(x3, scale_factor=2, mode="bilinear", align_corners=False)
+        x3 = F.interpolate(x3, scale_factor=2, mode='bilinear', align_corners=False)
         x4 = F.leaky_relu(self.conv4(x3), negative_slope=0.2, inplace=True)
 
         if self.skip_connection:
             x4 = x4 + x2
-        x4 = F.interpolate(x4, scale_factor=2, mode="bilinear", align_corners=False)
+        x4 = F.interpolate(x4, scale_factor=2, mode='bilinear', align_corners=False)
         x5 = F.leaky_relu(self.conv5(x4), negative_slope=0.2, inplace=True)
 
         if self.skip_connection:
             x5 = x5 + x1
-        x5 = F.interpolate(x5, scale_factor=2, mode="bilinear", align_corners=False)
+        x5 = F.interpolate(x5, scale_factor=2, mode='bilinear', align_corners=False)
         x6 = F.leaky_relu(self.conv6(x5), negative_slope=0.2, inplace=True)
 
         if self.skip_connection:
@@ -266,302 +208,3 @@ class UNetDiscriminatorSN(nn.Module):
         out = self.conv9(out)
 
         return out
-
-
-class BlurBlock(nn.Module):
-    def __init__(self, kernel: Tuple[int] = (1, 3, 3, 1)):
-        """Initializes the blur block.
-
-        Args:
-            kernel -> Tuple[int]: The kernel size.
-        """
-        super().__init__()
-
-        self.kernel_size = len(kernel)
-
-        kernel = torch.tensor(kernel, dtype=torch.float32, requires_grad=False)
-        kernel = kernel[None, :] * kernel[:, None]
-        kernel /= kernel.sum()
-        kernel = kernel.unsqueeze(0).unsqueeze(0)
-        self.kernel = kernel
-
-    def calc_same_pad(self, i: int, k: int, s: int) -> int:
-        """Calculates the same padding for the BlurBlock.
-
-        Args:
-            i -> int: Input size.
-            k -> int: Kernel size.
-            s -> int: Stride.
-
-        Returns:
-            pad -> int: The padding.
-        """
-        return max((math.ceil(i / s) - 1) * s + (k - 1) + 1 - i, 0)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward pass.
-
-        Args:
-            x -> torch.Tensor: The input tensor.
-
-        Returns:
-            out -> torch.Tensor: The output tensor.
-        """
-        ic, ih, iw = x.size()[-3:]
-        pad_h = self.calc_same_pad(i=ih, k=self.kernel_size, s=2)
-        pad_w = self.calc_same_pad(i=iw, k=self.kernel_size, s=2)
-        if pad_h > 0 or pad_w > 0:
-            x = F.pad(
-                x, [pad_w // 2, pad_w - pad_w // 2, pad_h // 2, pad_h - pad_h // 2]
-            )
-
-        kernel_on_device = self.kernel.to(x.device)
-        weight = kernel_on_device.expand(ic, -1, -1, -1)
-
-        out = F.conv2d(input=x, weight=weight, stride=2, groups=x.shape[1])
-        return out
-
-
-class Conv2dSame(nn.Conv2d):
-    """Convolution wrapper for 2D convolutions using `SAME` padding."""
-
-    def calc_same_pad(self, i: int, k: int, s: int, d: int) -> int:
-        """Calculate padding such that the output has the same height/width when stride=1.
-
-        Args:
-            i -> int: Input size.
-            k -> int: Kernel size.
-            s -> int: Stride size.
-            d -> int: Dilation rate.
-        """
-        return max((math.ceil(i / s) - 1) * s + (k - 1) * d + 1 - i, 0)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward pass of the convolution applying explicit `same` padding.
-
-        Args:
-            x -> torch.Tensor: Input tensor.
-
-        Returns:
-            torch.Tensor: Output tensor.
-        """
-        ih, iw = x.size()[-2:]
-
-        pad_h = self.calc_same_pad(
-            i=ih, k=self.kernel_size[0], s=self.stride[0], d=self.dilation[0]
-        )
-        pad_w = self.calc_same_pad(
-            i=iw, k=self.kernel_size[1], s=self.stride[1], d=self.dilation[1]
-        )
-
-        if pad_h > 0 or pad_w > 0:
-            x = F.pad(
-                x, [pad_w // 2, pad_w - pad_w // 2, pad_h // 2, pad_h - pad_h // 2]
-            )
-        return super().forward(x)
-
-
-class NLayerDiscriminatorV2(nn.Module):
-    def __init__(
-        self,
-        num_channels: int = 3,
-        hidden_channels: int = 128,
-        num_stages: int = 3,
-        activation_fn: str = "leaky_relu",
-        blur_resample: bool = True,
-        blur_kernel_size: int = 4,
-        norm_in_stem: bool = False,
-        center_input: bool = False,
-        spectral_norm: bool = False,
-    ):
-        """Initializes the NLayerDiscriminatorV2. 
-        Discriminator taken from the MaskBit paper https://arxiv.org/abs/2409.16211
-
-        Args:
-            num_channels -> int: The number of input channels.
-            hidden_channels -> int: The number of hidden channels.
-            num_stages -> int: The number of stages.
-            activation_fn -> str: The activation function.
-            blur_resample -> bool: Whether to use blur resampling.
-            blur_kernel_size -> int: The blur kernel size.
-        """
-        super().__init__()
-        assert num_stages > 0, "Discriminator cannot have 0 stages"
-        assert (not blur_resample) or (
-            blur_kernel_size >= 3 and blur_kernel_size <= 5
-        ), "Blur kernel size must be in [3,5] when sampling]"
-        self.input_nc = num_channels
-        self.rgb2yuv = RGB2YUV()
-        self.center_input = center_input
-
-        in_channel_mult = (1,) + tuple(map(lambda t: 2**t, range(num_stages)))
-        init_kernel_size = 5
-        if activation_fn == "leaky_relu":
-            activation = functools.partial(nn.LeakyReLU, negative_slope=0.1)
-        else:
-            activation = nn.SiLU
-
-        conv_layer = Conv2dSame
-        if spectral_norm:
-            conv_layer = lambda *args, **kwargs: torch.nn.utils.parametrizations.spectral_norm(Conv2dSame(*args, **kwargs))
-
-        if norm_in_stem:
-            sequence = [
-                conv_layer(num_channels, hidden_channels, kernel_size=init_kernel_size),
-                nn.GroupNorm(32, hidden_channels),
-                activation(),
-            ]
-        else:
-            sequence = [
-                conv_layer(num_channels, hidden_channels, kernel_size=init_kernel_size),
-                activation(),
-            ]
-        
-
-        BLUR_KERNEL_MAP = {
-            3: (1, 2, 1),
-            4: (1, 3, 3, 1),
-            5: (1, 4, 6, 4, 1),
-        }
-
-        for i_level in range(num_stages):
-            in_channels = hidden_channels * in_channel_mult[i_level]
-            out_channels = hidden_channels * in_channel_mult[i_level + 1]
-            sequence += [
-                conv_layer(
-                    in_channels,
-                    out_channels,
-                    kernel_size=3,
-                ),
-                (
-                    nn.AvgPool2d(kernel_size=2, stride=2)
-                    if not blur_resample
-                    else BlurBlock(BLUR_KERNEL_MAP[blur_kernel_size])
-                ),
-                nn.GroupNorm(32, out_channels),
-                activation(),
-            ]
-        sequence += [nn.AdaptiveMaxPool2d((16, 16))]
-        sequence += [
-            conv_layer(out_channels, out_channels, 1),
-            activation(),
-            conv_layer(out_channels, 1, kernel_size=5),
-        ]
-        self.main = nn.Sequential(*sequence)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward pass.
-
-        Args:
-            x -> torch.Tensor: The input tensor.
-
-        Returns:
-            output -> torch.Tensor: The output tensor.
-        """
-        # If input has 3 channels but the model is for 1 channel, only use the first channel
-        if self.input_nc == 1 and x.shape[1] == 3:
-            x = self.rgb2yuv(x)[:, 0:1]
-        if self.center_input:
-            # Center input to [-1, 1]
-            # This works both for RGB and Y inputs as YUV has mean around [0.5, 0.0, 0.0] but the UV components are not used
-            x = x * 2 - 1
-        return self.main(x)
-
-
-class MultiscaleDisc(nn.Module):
-    def __init__(
-        self,
-        disc_scales: int,
-        version: str = "v1",
-        in_channels: int = 3,
-        num_layers: int = 3,
-        use_actnorm: bool = False,
-        norm_in_stem: bool = False,
-        center_input: bool = False,
-        spectral_norm: bool = False,
-    ):
-        super().__init__()
-        self.discriminators = nn.ModuleDict(
-            {
-                str(2**ii): build_discriminator(
-                    scales=1,
-                    version=version,
-                    in_channels=in_channels,
-                    num_layers=num_layers,
-                    use_actnorm=use_actnorm,
-                    norm_in_stem=norm_in_stem,
-                    center_input=center_input,
-                    spectral_norm=spectral_norm,
-                )
-                for ii in range(disc_scales)
-            }
-        )
-
-    def forward(self, inputs):
-        logits = []
-        for scale, disc in self.discriminators.items():
-            if scale == "1":
-                resized_inputs = inputs
-            else:
-                resized_inputs = F.interpolate(
-                    inputs,
-                    scale_factor=1 / int(scale),
-                    mode="bilinear",
-                    align_corners=False,
-                )
-            logits.append(disc(resized_inputs).reshape(inputs.size(0), -1))
-        logits = torch.cat(logits, dim=1)
-        return logits
-
-
-def build_discriminator(
-    scales: int = 1,
-    version: str = "v1",
-    in_channels: int = 3,
-    num_layers: int = 3,
-    use_actnorm: bool = False,
-    norm_in_stem: bool = False,
-    center_input: bool = False,
-    spectral_norm: bool = False,
-) -> nn.Module:
-    """
-    Choose which version of the discriminator to use.
-    Args:
-        version: (str) The version of the discriminator to use.
-            Options: "v1", "v2". v2 is MaskBit
-        in_channels: (int) The number of input channels for the discriminator.
-        num_layers: (int) The number of layers in the discriminator.
-        use_actnorm: (bool) Whether to use ActNorm in the discriminator.
-        norm_in_stem: (bool) Whether to use normalization in the stem of the discriminator.
-    """
-    if scales == 1:
-        if version == "v1":
-            return NLayerDiscriminator(
-                    input_nc=in_channels,
-                    n_layers=num_layers,
-                    use_actnorm=use_actnorm,
-                    norm_in_stem=norm_in_stem,
-                    center_input=center_input,
-                    spectral_norm=spectral_norm,
-            ).apply(weights_init)
-        elif version == "v2":
-            return NLayerDiscriminatorV2(
-                num_channels=in_channels,
-                num_stages=num_layers,
-                norm_in_stem=norm_in_stem,
-                center_input=center_input,
-                spectral_norm=spectral_norm,
-            )
-        else:
-            raise ValueError(f"Unknown discriminator version: {version}")
-    else:
-        return MultiscaleDisc(
-            scales,
-            version,
-            in_channels,
-            num_layers,
-            use_actnorm,
-            norm_in_stem,
-            center_input,
-            spectral_norm
-        )

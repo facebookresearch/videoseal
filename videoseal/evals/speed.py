@@ -1,24 +1,22 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+# This source code is licensed under the license found in the
+# LICENSE file in the root directory of this source tree.
+
 """
 Test the speed of different methods on CPU or CUDA.
 
 Example usage:
 python -m videoseal.evals.speed \
-    --checkpoint  \
-        /checkpoint/pfz/2025_logs/0314_vseal_moreaugs/_scaling_w_schedule=1_nbits=128_optimizer=AdamW,lr=5e-4/checkpoint550.pth \
-        /checkpoint/pfz/2025_logs/0306_vseal_ydisc_release/_nbits=128/checkpoint600.pth \
-    --dataset moviegen --is_video true --num_samples 10 \
-    --device cuda \
-    --videowam_chunk_size 128 --num_frames 240 --lowres_attenuation true
-
-        /checkpoint/soucek/2025_logs/0228_vseal_128bits_jnd_ftvid_complete/_optimizer=AdamW,lr=1e-5_videowam_step_size=1/checkpoint200.pth \
+    --checkpoint videoseal_1.0 \
         baselines/hidden \
         baselines/mbrs \
         baselines/cin \
         baselines/wam \
         baselines/trustmark \
-    --checkpoint /checkpoint/pfz/2025_logs/0303_vseal_ep500_ftvid_complete/_finetune_detector_start=2000_augmentation_config=0/checkpoint200.pth \
-
-python -m videoseal.evals.speed     --checkpoint /checkpoint/pfz/2025_logs/0303_vseal_ep500_ftvid_complete/_finetune_detector_start=2000_augmentation_config=0/checkpoint200.pth          baselines/trustmark     --dataset sa-v --is_video true --num_samples 10     --device cuda --videowam_chunk_size 128 --num_frames 240 --lowres_attenuation true
+    --dataset sa-v --is_video true --num_samples 10 \
+    --device cpu \
+    --videoseal_chunk_size 128 --num_frames 240 --lowres_attenuation true
 """
     
 import argparse
@@ -31,7 +29,7 @@ import tqdm
 import torch
 from torch.utils.data import Dataset, Subset
 
-from ..models import VideoWam
+from ..models import Videoseal
 from ..utils import Timer, bool_inst
 from ..utils.cfg import setup_dataset, setup_model_from_checkpoint
 
@@ -43,7 +41,7 @@ class SpeedTester:
     @torch.no_grad()
     def test_speed(
         self,
-        model: VideoWam,
+        model: Videoseal,
         dataset: Dataset, 
         is_video: bool,
         num_frames: int = 24*3,
@@ -104,9 +102,8 @@ class SpeedTester:
             # Warmup runs
             for _ in range(warmup_runs):
                 outputs = model.embed(imgs, is_video=is_video, interpolation=interpolation, lowres_attenuation=lowres_attenuation)
-                
                 if is_video:
-                    _ = model.detect_and_aggregate(outputs["imgs_w"], video_aggregation, interpolation)
+                    _ = model.extract_message(outputs["imgs_w"], video_aggregation, interpolation)
                 else:
                     _ = model.detect(outputs["imgs_w"], is_video=False)
             
@@ -115,9 +112,7 @@ class SpeedTester:
             for _ in range(num_runs):
                 torch.cuda.synchronize() if self.device == 'cuda' else None
                 start_time = time.time()
-                
                 outputs = model.embed(imgs, is_video=is_video, interpolation=interpolation, lowres_attenuation=lowres_attenuation)
-                
                 torch.cuda.synchronize() if self.device == 'cuda' else None
                 embed_times.append(time.time() - start_time)
             
@@ -131,7 +126,7 @@ class SpeedTester:
                 start_time = time.time()
                 
                 if is_video:
-                    _ = model.detect_and_aggregate(imgs_w, video_aggregation, interpolation)
+                    _ = model.extract_message(imgs_w, video_aggregation, interpolation)
                 else:
                     _ = model.detect(imgs_w, is_video=False)
                 
@@ -182,14 +177,12 @@ def main():
                         help="Size of the input images for interpolation in the embedder/extractor models")
     group.add_argument("--scaling_w", default=None,
                         help="Scaling factor for the watermark in the embedder model")
-    group.add_argument('--videowam_chunk_size', type=int, default=32, 
+    group.add_argument('--videoseal_chunk_size', type=int, default=32, 
                         help='Number of frames to chunk during forward pass')
-    group.add_argument('--videowam_step_size', type=int, default=4,
+    group.add_argument('--videoseal_step_size', type=int, default=4,
                         help='The number of frames to propagate the watermark to')
-    group.add_argument('--videowam_mode', type=str, default='repeat', 
+    group.add_argument('--videoseal_mode', type=str, default='repeat', 
                         help='The inference mode for videos')
-    group.add_argument('--time_pooling_depth', type=int, default=None,
-                        help='The depth of the UNet at which applying the temporal pooling')
 
     group = parser.add_argument_group('Interpolation')
     group.add_argument('--interpolation_mode', type=str, default='bilinear',
@@ -243,23 +236,14 @@ def main():
         if hasattr(model, 'blender') and hasattr(model.blender, 'scaling_w'):
             model.blender.scaling_w = float(args.scaling_w or model.blender.scaling_w)
         if hasattr(model, 'chunk_size'):
-            model.chunk_size = args.videowam_chunk_size or model.chunk_size
+            model.chunk_size = args.videoseal_chunk_size or model.chunk_size
         if hasattr(model, 'step_size'):
-            model.step_size = args.videowam_step_size or model.step_size
+            model.step_size = args.videoseal_step_size or model.step_size
         if hasattr(model, 'video_mode'):
-            model.video_mode = args.videowam_mode or model.mode
+            model.video_mode = args.videoseal_mode or model.mode
         if hasattr(model, 'img_size'):
             model.img_size = args.img_size_proc or model.img_size
-
-        # Override the temporal pooling
-        if hasattr(model.embedder, 'unet') and hasattr(model.embedder.unet, 'time_pooling'):
-            if args.time_pooling_depth is not None:
-                model.embedder.unet.time_pooling = True
-                model.embedder.unet.time_pooling_depth = args.time_pooling_depth
-                model.embedder.unet.temporal_pool.kernel_size = model.step_size
-                # When doing time average pooling, the step size should be set to 1.
-                model.step_size = 1
-
+        
         # Record checkpoint path
         model.checkpoint_path = checkpoint_path
         model.name = os.path.basename(os.path.dirname(checkpoint_path)) if '/' in checkpoint_path else 'unknown'

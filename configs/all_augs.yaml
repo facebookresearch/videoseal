@@ -17,7 +17,9 @@ augs:
   contrast:           1
   saturation:         1
   hue:                1
-  video_compression:  1
+  h264:               1
+  h264rgb:            1
+  h265:               1
 
 augs_params:
   resize:
@@ -25,11 +27,12 @@ augs_params:
     min_size: 0.7
     max_size: 1.5
   crop:
-    min_size: 0.7
+    min_size: 0.5
     max_size: 1.0
   rotate:
     min_angle: -10
     max_angle: 10
+    do90: True
   perspective:
     min_distortion_scale: 0.1
     max_distortion_scale: 0.5
@@ -42,7 +45,7 @@ augs_params:
     max_kernel_size: 17
   median_filter:
     min_kernel_size: 3
-    max_kernel_size: 7
+    max_kernel_size: 3
   brightness:
     min_factor: 0.5
     max_factor: 2
@@ -55,5 +58,12 @@ augs_params:
   hue:
     min_factor: -0.1
     max_factor: 0.1
-  video_compression:
-    crf_values: [28, 34, 40, 46]
+  h264:
+    min_crf: 28
+    max_crf: 36
+  h264rgb:
+    min_crf: 28
+    max_crf: 36
+  h265:
+    min_crf: 28
+    max_crf: 36

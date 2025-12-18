@@ -1,0 +1,12 @@
+model: convnext_tiny
+
+convnext_tiny:
+  encoder:
+    depths: [3, 3, 9, 3]
+    dims: [96, 192, 384, 768]
+  pixel_decoder:
+    pixelwise: False  # return msg per pixel (k h w)
+    upscale_stages: [1]
+    embed_dim: 768  # = encoder.out_chans
+    nbits: 16
+    sigmoid_output: False

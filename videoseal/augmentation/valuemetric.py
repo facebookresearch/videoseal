@@ -1,167 +1,22 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+# This source code is licensed under the license found in the
+# LICENSE file in the root directory of this source tree.
+
 """
 Test with:
     python -m videoseal.augmentation.valuemetric
 """
 
 import io
-import sys
-import random
-import typing as tp
+
 import torch
 import torch.nn as nn
 import torchvision.transforms as transforms
 import torchvision.transforms.functional as F
 from PIL import Image
 
-from ..data.transforms import default_transform
-
-
-def jpeg_compress(image: torch.Tensor, quality: int) -> torch.Tensor:
-    """
-    Compress a PyTorch image using JPEG compression and return as a PyTorch tensor.
-
-    Parameters:
-        image (torch.Tensor): The input image tensor of shape 3xhxw.
-        quality (int): The JPEG quality factor.
-
-    Returns:
-        torch.Tensor: The compressed image as a PyTorch tensor.
-    """
-    image = torch.clamp(image, 0, 1)  # clamp the pixel values to [0, 1]
-    image = (image * 255).round() / 255 
-    pil_image = transforms.ToPILImage()(image)  # convert to PIL image
-    # Create a BytesIO object and save the PIL image as JPEG to this object
-    buffer = io.BytesIO()
-    pil_image.save(buffer, format='JPEG', quality=quality)
-    # Load the JPEG image from the BytesIO object and convert back to a PyTorch tensor
-    buffer.seek(0)
-    compressed_image = Image.open(buffer)
-    tensor_image = transforms.ToTensor()(compressed_image)
-    return tensor_image
-
-def webp_compress(image: torch.Tensor, quality: int) -> torch.Tensor:
-    """
-    Compress a PyTorch image using WebP compression and return as a PyTorch tensor.
-
-    Parameters:
-        image (torch.Tensor): The input image tensor of shape 3xhxw.
-        quality (int): The WebP quality factor.
-
-    Returns:
-        torch.Tensor: The compressed image as a PyTorch tensor.
-    """
-    image = torch.clamp(image, 0, 1)  # clamp the pixel values to [0, 1]
-    image = (image * 255).round() / 255 
-    pil_image = transforms.ToPILImage()(image)  # convert to PIL image
-    # Create a BytesIO object and save the PIL image as WebP to this object
-    buffer = io.BytesIO()
-    pil_image.save(buffer, format='WebP', quality=quality)
-    # Load the WebP image from the BytesIO object and convert back to a PyTorch tensor
-    buffer.seek(0)
-    compressed_image = Image.open(buffer)
-    tensor_image = transforms.ToTensor()(compressed_image)
-    return tensor_image
-
-def median_filter(images: torch.Tensor, kernel_size: int) -> torch.Tensor:
-    """
-    Apply a median filter to a batch of images.
-
-    Parameters:
-        images (torch.Tensor): The input images tensor of shape BxCxHxW.
-        kernel_size (int): The size of the median filter kernel.
-
-    Returns:
-        torch.Tensor: The filtered images.
-    """
-    # Ensure the kernel size is odd
-    if kernel_size % 2 == 0:
-        raise ValueError("Kernel size must be odd.")
-    # Compute the padding size
-    padding = kernel_size // 2
-    # Pad the images
-    images_padded = torch.nn.functional.pad(
-        images, (padding, padding, padding, padding))
-    # Extract local blocks from the images
-    blocks = images_padded.unfold(2, kernel_size, 1).unfold(
-        3, kernel_size, 1)  # BxCxHxWxKxK
-    # Compute the median of each block
-    medians = blocks.median(dim=-1).values.median(dim=-1).values  # BxCxHxW
-    return medians
-
-
-def impulse_noise(image: torch.Tensor, amount: float, salt_vs_pepper: float = 0.5) -> torch.Tensor:
-    """Add per-pixel salt-and-pepper impulse noise."""
-    batched = image.dim() == 4
-    if not batched:
-        image = image.unsqueeze(0)
-    B, C, H, W = image.shape
-
-    # Probability mask for noisy pixels
-    mask = torch.rand((B, 1, H, W), device=image.device) < amount
-
-    # Salt or pepper choice per pixel
-    salt_mask = torch.rand((B, 1, H, W), device=image.device) < salt_vs_pepper
-    noise = torch.where(salt_mask, torch.ones_like(image), torch.zeros_like(image))
-    noisy = torch.where(mask, noise, image)
-    return noisy if batched else noisy.squeeze(0)
-
-
-def shot_noise(image: torch.Tensor, scale: float = 1.0) -> torch.Tensor:
-    """Apply Poisson (shot) noise using a straight-through estimator."""
-    if scale <= 0:
-        return image
-    img = torch.clamp(image, 0, 1)
-    vals = img * 255.0 / scale
-    noisy = vals + (torch.poisson(vals) - vals).detach()
-    noisy = noisy / (255.0 / scale)
-    return torch.clamp(noisy, 0, 1)
-
-
-
-def speckle_noise(image: torch.Tensor, mean: float = 0.0, std: float = 0.1) -> torch.Tensor:
-    """Multiplicative noise: image + image * gaussian_noise"""
-    if std <= 0:
-        return image
-    noise = torch.randn_like(image) * std + mean
-    return torch.clamp(image + image * noise, 0, 1)
-
-def gaussian_noise(image: torch.Tensor, std: float = 0.1, mean: float = 0.0) -> torch.Tensor:
-    """Additive Gaussian noise: image + gaussian_noise"""
-    if std <= 0:
-        return image
-    noise = torch.randn_like(image) * std + mean
-    return torch.clamp(image + noise, 0, 1)
-
-
-def adjust_gamma(x: torch.Tensor, gamma: float = 1.0, gain: float = 1.0) -> torch.Tensor:
-    """
-    Apply gamma correction: y = gain * x ** gamma
-    x is assumed to be in [0,1].
-    """
-    # Clamp to non-negative (to avoid nan from negative ^ non-integer) 
-    # and add a small epsilon to avoid backprop issues at 0
-    x_clamped = torch.clamp(x, min=0.0) + 1e-8
-    return (gain * x_clamped.pow(gamma)).clamp(0, 1)
-
-
-def adjust_log(x: torch.Tensor, gain: float = 1.0) -> torch.Tensor:
-    """
-    Apply logarithmic correction: y = gain * log(1 + x)
-    (assuming base e logs)
-    Note: x is assumed >= 0.
-    """
-    x_clamped = torch.clamp(x, min=0.0)
-    return (gain * torch.log1p(x_clamped)).clamp(0, 1)
-
-
-def adjust_sigmoid(x: torch.Tensor, cutoff: float = 0.5, gain: float = 10.0) -> torch.Tensor:
-    """
-    Sigmoid (contrast) correction:
-    y = 1 / (1 + exp(gain * (cutoff - x)))
-    """
-    y = torch.sigmoid(gain * (x - cutoff))
-    return y.clamp(0, 1)
-
+from ..utils.image import jpeg_compress, median_filter
 
 class JPEG(nn.Module):
     def __init__(self, min_quality=None, max_quality=None, passthrough=True):
@@ -169,13 +24,11 @@ class JPEG(nn.Module):
         self.min_quality = min_quality
         self.max_quality = max_quality
         self.passthrough = passthrough
-        self.relative_strength = 1.0
 
     def get_random_quality(self):
         if self.min_quality is None or self.max_quality is None:
             raise ValueError("Quality range must be specified")
-        quality = torch.randint(self.min_quality, self.max_quality + 1, size=(1,)).item()
-        return round(quality + (100 - quality) * (1 - self.relative_strength))
+        return torch.randint(self.min_quality, self.max_quality + 1, size=(1,)).item()
 
     def jpeg_single(self, image, quality):
         if self.passthrough:
@@ -192,9 +45,9 @@ class JPEG(nn.Module):
         else:
             image = self.jpeg_single(image, quality)
         return image, mask
-
+    
     def __repr__(self):
-        return "JPEG"
+        return f"JPEG"
 
 
 class GaussianBlur(nn.Module):
@@ -202,13 +55,11 @@ class GaussianBlur(nn.Module):
         super(GaussianBlur, self).__init__()
         self.min_kernel_size = min_kernel_size
         self.max_kernel_size = max_kernel_size
-        self.relative_strength = 1.0
 
     def get_random_kernel_size(self):
         if self.min_kernel_size is None or self.max_kernel_size is None:
             raise ValueError("Kernel size range must be specified")
         kernel_size = torch.randint(self.min_kernel_size, self.max_kernel_size + 1, size=(1,)).item()
-        kernel_size = round(kernel_size + (1 - kernel_size) * (1 - self.relative_strength))
         return kernel_size + 1 if kernel_size % 2 == 0 else kernel_size
 
     def forward(self, image, mask, kernel_size=None):
@@ -226,13 +77,11 @@ class MedianFilter(nn.Module):
         self.min_kernel_size = min_kernel_size
         self.max_kernel_size = max_kernel_size
         self.passthrough = passthrough
-        self.relative_strength = 1.0
 
     def get_random_kernel_size(self):
         if self.min_kernel_size is None or self.max_kernel_size is None:
             raise ValueError("Kernel size range must be specified")
         kernel_size = torch.randint(self.min_kernel_size, self.max_kernel_size + 1, size=(1,)).item()
-        kernel_size = round(kernel_size + (1 - kernel_size) * (1 - self.relative_strength))
         return kernel_size + 1 if kernel_size % 2 == 0 else kernel_size
 
     def forward(self, image, mask, kernel_size=None):
@@ -242,21 +91,21 @@ class MedianFilter(nn.Module):
         else:
             image = median_filter(image, kernel_size)
         return image, mask
-
+    
     def __repr__(self):
         return f"MedianFilter"
+
+
 class Brightness(nn.Module):
     def __init__(self, min_factor=None, max_factor=None):
         super(Brightness, self).__init__()
         self.min_factor = min_factor
         self.max_factor = max_factor
-        self.relative_strength = 1.0
 
     def get_random_factor(self):
         if self.min_factor is None or self.max_factor is None:
             raise ValueError("min_factor and max_factor must be provided")
-        factor = torch.rand(1).item() * (self.max_factor - self.min_factor) + self.min_factor
-        return factor + (1 - factor) * (1 - self.relative_strength)
+        return torch.rand(1).item() * (self.max_factor - self.min_factor) + self.min_factor
 
     def forward(self, image, mask, factor=None):
         factor = self.get_random_factor() if factor is None else factor
@@ -272,13 +121,11 @@ class Contrast(nn.Module):
         super(Contrast, self).__init__()
         self.min_factor = min_factor
         self.max_factor = max_factor
-        self.relative_strength = 1.0
 
     def get_random_factor(self):
         if self.min_factor is None or self.max_factor is None:
             raise ValueError("min_factor and max_factor must be provided")
-        factor = torch.rand(1).item() * (self.max_factor - self.min_factor) + self.min_factor
-        return factor + (1 - factor) * (1 - self.relative_strength)
+        return torch.rand(1).item() * (self.max_factor - self.min_factor) + self.min_factor
 
     def forward(self, image, mask, factor=None):
         factor = self.get_random_factor() if factor is None else factor
@@ -293,13 +140,11 @@ class Saturation(nn.Module):
         super(Saturation, self).__init__()
         self.min_factor = min_factor
         self.max_factor = max_factor
-        self.relative_strength = 1.0
 
     def get_random_factor(self):
         if self.min_factor is None or self.max_factor is None:
             raise ValueError("Factor range must be specified")
-        factor = torch.rand(1).item() * (self.max_factor - self.min_factor) + self.min_factor
-        return factor + (1 - factor) * (1 - self.relative_strength)
+        return torch.rand(1).item() * (self.max_factor - self.min_factor) + self.min_factor
 
     def forward(self, image, mask, factor=None):
         factor = self.get_random_factor() if factor is None else factor
@@ -314,13 +159,11 @@ class Hue(nn.Module):
         super(Hue, self).__init__()
         self.min_factor = min_factor
         self.max_factor = max_factor
-        self.relative_strength = 1.0
 
     def get_random_factor(self):
         if self.min_factor is None or self.max_factor is None:
             raise ValueError("Factor range must be specified")
-        factor = torch.rand(1).item() * (self.max_factor - self.min_factor) + self.min_factor
-        return factor * self.relative_strength
+        return torch.rand(1).item() * (self.max_factor - self.min_factor) + self.min_factor
 
     def forward(self, image, mask, factor=None):
         factor = self.get_random_factor() if factor is None else factor
@@ -330,25 +173,22 @@ class Hue(nn.Module):
     def __repr__(self):
         return f"Hue"
 
-
 class GaussianNoise(nn.Module):
-    def __init__(self, min_std=None, max_std=None, mean=0.0):
+    def __init__(self, min_std=None, max_std=None):
         super(GaussianNoise, self).__init__()
         self.min_std = min_std
         self.max_std = max_std
-        self.mean = mean
-        self.relative_strength = 1.0
 
     def get_random_std(self):
         if self.min_std is None or self.max_std is None:
             raise ValueError("Standard deviation range must be specified")
-        std = torch.rand(1).item() * (self.max_std - self.min_std) + self.min_std
-        return std * self.relative_strength
+        return torch.rand(1).item() * (self.max_std - self.min_std) + self.min_std
 
     def forward(self, image, mask, std=None):
         std = self.get_random_std() if std is None else std
-        out = gaussian_noise(image, std=std, mean=self.mean)
-        return out, mask
+        noise = torch.randn_like(image) * std
+        image = image + noise
+        return image, mask
 
     def __repr__(self):
         return f"GaussianNoise"
@@ -357,7 +197,6 @@ class GaussianNoise(nn.Module):
 class Grayscale(nn.Module):
     def __init__(self):
         super(Grayscale, self).__init__()
-        self.relative_strength = 1.0
         
     def forward(self, image, mask, *args, **kwargs):
         """
@@ -367,141 +206,10 @@ class Grayscale(nn.Module):
         # Y = 0.299 R + 0.587 G + 0.114 B
         grayscale = 0.299 * image[:, 0:1] + 0.587 * image[:, 1:2] + 0.114 * image[:, 2:3]
         grayscale = grayscale.expand_as(image)
-        grayscale = self.relative_strength * grayscale + (1 - self.relative_strength) * image
         return grayscale, mask
 
     def __repr__(self):
         return f"Grayscale"
-
-
-class ImpulseNoise(nn.Module):
-    def __init__(self, min_amount=0.01, max_amount=0.1, salt_vs_pepper=0.5):
-        super(ImpulseNoise, self).__init__()
-        self.min_amount = min_amount
-        self.max_amount = max_amount
-        self.salt_vs_pepper = salt_vs_pepper
-        self.relative_strength = 1.0
-
-    def get_random_amount(self):
-        amt = torch.rand(1).item() * (self.max_amount - self.min_amount) + self.min_amount
-        return amt * self.relative_strength
-
-    def forward(self, image, mask, amount=None):
-        amount = self.get_random_amount() if amount is None else amount
-        out = impulse_noise(image, amount, self.salt_vs_pepper)
-        return out, mask
-
-    def __repr__(self):
-        return f"ImpulseNoise"
-
-
-class ShotNoise(nn.Module):
-    def __init__(self, min_scale=0.8, max_scale=1.2):
-        super(ShotNoise, self).__init__()
-        self.min_scale = min_scale
-        self.max_scale = max_scale
-        self.relative_strength = 1.0
-
-    def get_random_scale(self):
-        sc = torch.rand(1).item() * (self.max_scale - self.min_scale) + self.min_scale
-        return sc * self.relative_strength
-
-    def forward(self, image, mask, scale=None):
-        scale = self.get_random_scale() if scale is None else scale
-        out = shot_noise(image, scale)
-        return out, mask
-
-    def __repr__(self):
-        return f"ShotNoise"
-
-
-class SpeckleNoise(nn.Module):
-    def __init__(self, min_std=0.01, max_std=0.2):
-        super(SpeckleNoise, self).__init__()
-        self.min_std = min_std
-        self.max_std = max_std
-        self.relative_strength = 1.0
-
-    def get_random_std(self):
-        s = torch.rand(1).item() * (self.max_std - self.min_std) + self.min_std
-        return s * self.relative_strength
-
-    def forward(self, image, mask, std=None):
-        std = self.get_random_std() if std is None else std
-        out = speckle_noise(image, 0.0, std)
-        return out, mask
-
-    def __repr__(self):
-        return f"SpeckleNoise"
-
-
-class GammaExposure(nn.Module):
-    def __init__(self, min_gamma: float = 0.5, max_gamma: float = 2.0, gain: float = 1.0):
-        super().__init__()
-        self.min_gamma = min_gamma
-        self.max_gamma = max_gamma
-        self.gain = gain
-        self.relative_strength = 1.0
-
-    def get_random_gamma(self):
-        gamma = torch.rand(1).item() * (self.max_gamma - self.min_gamma) + self.min_gamma
-        return 1.0 + (gamma - 1.0) * self.relative_strength
-
-    def forward(self, image, mask, gamma=None):
-        gamma = self.get_random_gamma() if gamma is None else gamma
-        adjusted = adjust_gamma(image, gamma=gamma, gain=self.gain)
-        adjusted = self.relative_strength * adjusted + (1 - self.relative_strength) * image
-        return adjusted.clamp(0, 1), mask
-
-    def __repr__(self):
-        return "GammaExposure"
-
-class LogExposure(nn.Module):
-    def __init__(self, min_gain: float = 0.7, max_gain: float = 1.3):
-        super().__init__()
-        self.min_gain = min_gain
-        self.max_gain = max_gain
-        self.relative_strength = 1.0
-
-    def get_random_gain(self):
-        gain = torch.rand(1).item() * (self.max_gain - self.min_gain) + self.min_gain
-        return 1.0 + (gain - 1.0) * self.relative_strength
-
-    def forward(self, image, mask, gain=None):
-        gain = self.get_random_gain() if gain is None else gain
-        adjusted = adjust_log(image, gain=gain)
-        adjusted = self.relative_strength * adjusted + (1 - self.relative_strength) * image
-        return adjusted.clamp(0, 1), mask
-
-    def __repr__(self):
-        return "LogExposure"
-
-
-class SigmoidExposure(nn.Module):
-    def __init__(self, min_cutoff: float = 0.35, max_cutoff: float = 0.65,
-                 min_gain: float = 4.0, max_gain: float = 12.0):
-        super().__init__()
-        self.min_cutoff = min_cutoff
-        self.max_cutoff = max_cutoff
-        self.min_gain = min_gain
-        self.max_gain = max_gain
-        self.relative_strength = 1.0
-
-    def get_random_params(self):
-        cutoff = torch.rand(1).item() * (self.max_cutoff - self.min_cutoff) + self.min_cutoff
-        gain = torch.rand(1).item() * (self.max_gain - self.min_gain) + self.min_gain
-        cutoff = 0.5 + (cutoff - 0.5) * self.relative_strength
-        gain = 1.0 + (gain - 1.0) * self.relative_strength
-        return cutoff, gain
-
-    def forward(self, image, mask, params=None):
-        cutoff, gain = self.get_random_params() if params is None else params
-        adjusted = adjust_sigmoid(image, cutoff=cutoff, gain=gain)
-        adjusted = self.relative_strength * adjusted + (1 - self.relative_strength) * image
-        return adjusted.clamp(0, 1), mask
-
-    def __repr__(self):
-        return "SigmoidExposure"
 
 
 if __name__ == "__main__":
@@ -509,14 +217,13 @@ if __name__ == "__main__":
 
     import torch
     from PIL import Image
+    from torchvision.transforms import ToTensor
     from torchvision.utils import save_image
 
     from ..data.transforms import default_transform
 
     # Define the transformations and their parameter ranges
     transformations = [
-        # (Brightness, [0.5, 1.5]),
-        # (Contrast, [0.5, 1.5]),
         (Brightness, [0.5, 1.5]),
         (Contrast, [0.5, 1.5]),
         (Saturation, [0.5, 1.5]),
@@ -525,13 +232,8 @@ if __name__ == "__main__":
         (GaussianBlur, [3, 5, 9, 17]),
         (MedianFilter, [3, 5, 9, 17]),
         (GaussianNoise, [0.05, 0.1, 0.15, 0.2]),
-        (ImpulseNoise, [0.01, 0.05, 0.1]),
-        (ShotNoise, [0.1, 0.5, 1.0, 2.0, 4.0]),
-        (SpeckleNoise, [0.05, 0.1, 0.2]),
-        (GammaExposure, [0.5, 1.0, 1.5, 2.0]),
-        (LogExposure, [0.8, 1.0, 1.2]),
-        (SigmoidExposure, [(0.3, 6.0), (0.5, 6.0), (0.5, 12.0)]),
-        (Grayscale, [-1]),
+        (Grayscale, [-1]),  # Grayscale doesn't need a strength parameter
+        # (bmshj2018, [2, 4, 6, 8])
     ]
 
     # Load images
@@ -539,7 +241,7 @@ if __name__ == "__main__":
         Image.open("/private/home/pfz/_images/gauguin_256.png"),
         Image.open("/private/home/pfz/_images/tahiti_256.png")
     ]
-    imgs = torch.stack([default_transform(img) for img in imgs]).to(device='cuda')
+    imgs = torch.stack([default_transform(img) for img in imgs])
 
     # Create the output directory
     output_dir = "outputs"

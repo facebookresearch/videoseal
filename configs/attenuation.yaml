@@ -2,16 +2,6 @@ jnd_1_1:
   in_channels: 1
   out_channels: 1
 
-jnd_1_1_reflect:
-  in_channels: 1
-  out_channels: 1
-  padding_mode: "reflect"
-
-jnd_1_1_clamp:
-  in_channels: 1
-  out_channels: 1
-  apply_mode: "clamp"
-
 jnd_3_3:
   in_channels: 3
   out_channels: 3
@@ -23,51 +13,3 @@ jnd_1_3:
 jnd_3_1:
   in_channels: 3
   out_channels: 1
-
-
-# made by use. remove luminance masking
-nolum_1_1_scale10:
-  in_channels: 1
-  out_channels: 1
-  alpha: 10.0  # make it s.t. with/without jnd gives ≈ same max amplitude
-
-nolum_1_1_scale5:
-  in_channels: 1
-  out_channels: 1
-  alpha: 5.0  # make it s.t. with/without jnd gives ≈ same max amplitude
-
-nolum_1_1:
-  in_channels: 1
-  out_channels: 1
-
-nolum_1_1_reflect:
-  in_channels: 1
-  out_channels: 1
-  padding_mode: "reflect"
-
-
-# made by prod to go faster
-simplified_1_1:
-  in_channels: 1
-  out_channels: 1
-
-
-# made by prod to be more imperceptible
-variance_jnd:
-  mode: "variance"
-  max_variance_value_for_clipping: 300
-  min_heatmap_value: 0.1
-  avg_pool_kernel_size: 3
-
-variance_jnd_min0:
-  mode: "variance"
-  max_variance_value_for_clipping: 300
-  min_heatmap_value: 0.0
-  avg_pool_kernel_size: 3
-
-variance_jnd_min0_clamp:
-  mode: "variance"
-  max_variance_value_for_clipping: 300
-  min_heatmap_value: 0.0
-  avg_pool_kernel_size: 3
-  apply_mode: "clamp"

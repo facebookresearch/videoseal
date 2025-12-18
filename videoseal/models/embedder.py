@@ -1,3 +1,7 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+# This source code is licensed under the license found in the
+# LICENSE file in the root directory of this source tree.
 
 import torch
 from torch import nn
@@ -6,7 +10,6 @@ from ..modules.hidden import HiddenEncoder
 from ..modules.msg_processor import MsgProcessor
 from ..modules.unet import UNetMsg
 from ..modules.vae import VAEDecoder, VAEEncoder
-from ..modules.patchmixer import PatchmixerMsg
 from ..modules.dvmark import DVMarkEncoder
 
 
@@ -17,10 +20,8 @@ class Embedder(nn.Module):
 
     def __init__(self) -> None:
         super(Embedder, self).__init__()
-        self.yuv = False  # used by WAM module to know if the model should take YUV images
-
-    def preprocess(self, imgs: torch.Tensor) -> torch.Tensor:
-        return imgs * 2 - 1
+        self.preprocess = lambda x: x * 2 - 1
+        self.yuv = False  # used by WAM to know if the model should take YUV images
 
     def get_random_msg(self, bsz: int = 1, nb_repetitions=1) -> torch.Tensor:
         """
