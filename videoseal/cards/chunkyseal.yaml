@@ -1,7 +1,5 @@
 checkpoint_path: https://dl.fbaipublicfiles.com/videoseal/chunkyseal/checkpoint.pth
-# also in /checkpoint/avseal/pfz/2025_logs/0917_chunkyseal_ft_sweep/_optimizer=AdamW,lr=1e-4_image_dataset=sa-1b-aws-ori_resume_from=1/checkpoint.pth
-# also at https://dl.fbaipublicfiles.com/videoseal/chunkyseal/checkpoint.pth
-# also in s3://fairusersglobal/users/AROAZVFNDK3MPX5WVK24S:hadyelsahar/chunkyseal/checkpoint.pth
+
 args:
   attenuation_config: configs/attenuation.yaml
   attenuation: jnd_1_1
