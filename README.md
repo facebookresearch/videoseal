@@ -15,7 +15,7 @@
   </tr>
   <tr>
     <td align="center"><a href="https://arxiv.org/abs/2412.09492"><img src="https://img.shields.io/badge/arXiv-2412.09492-b31b1b.svg" alt="arXiv"></a></td>
-    <td align="center"><em>Coming soon</em></td>
+    <td align="center"><a href="https://ai.meta.com/research/publications/pixel-seal-adversarial-only-training-for-invisible-image-and-video-watermarking/"><img src="https://img.shields.io/badge/Paper-Meta_AI-0668E1.svg" alt="Paper"></a></td>
     <td align="center"><a href="https://arxiv.org/abs/2510.12812"><img src="https://img.shields.io/badge/arXiv-2510.12812-b31b1b.svg" alt="arXiv"></a></td>
     <td align="center"><a href="https://arxiv.org/abs/2510.20468"><img src="https://img.shields.io/badge/arXiv-2510.20468-b31b1b.svg" alt="arXiv"></a></td>
   </tr>
@@ -276,7 +276,7 @@ Despite rapid progress in deep learning-based image watermarking, the capacity o
 
 ### PixelSeal: Adversarial-Only Training for Invisible Watermarking
 
-*Paper coming soon*
+[**Paper**](https://ai.meta.com/research/publications/pixel-seal-adversarial-only-training-for-invisible-image-and-video-watermarking/)
 
 *Tomáš Souček\*, Pierre Fernandez\*, Hady Elsahar, Sylvestre-Alvise Rebuffi, Valeriu Lacatusu, Tuan Tran, Tom Sander, Alexandre Mourachko*
 
