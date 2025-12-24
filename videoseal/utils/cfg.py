@@ -42,9 +42,10 @@ class VideosealConfig:
 def resolve_config_path(cfg_path):
     # Resolve the config path in the following order:
     # 1. Search from the working directory
-    # 2. Search from the source code directory
+    # 2. Search from the package directory (for pip-installed packages)
     if not Path(cfg_path).is_file():
-        cfg_path = Path(__file__).parents[2].joinpath(cfg_path)
+        # Use parents[1] to resolve relative to the videoseal package root
+        cfg_path = Path(__file__).parents[1].joinpath(cfg_path)
 
     return cfg_path
 
@@ -186,7 +187,8 @@ def setup_model_from_model_card(model_card: Path | str) -> Videoseal:
     Returns:
         Videoseal: Loaded model.
     """
-    cards_dir = Path("videoseal/cards")
+    # Use package-relative path for pip-installed packages
+    cards_dir = Path(__file__).parent.parent / "cards"
     if model_card == 'videoseal':
         model_card = DEFAULT_CARD
 
