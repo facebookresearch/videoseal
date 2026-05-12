@@ -272,7 +272,7 @@ def maybe_download_checkpoint(url):
         else:
             basename = path_parts[-1]
         ckpts_dir = Path(__file__).parents[1] / "ckpts"
-	os.makedirs(ckpts_dir, exist_ok=True)
+		os.makedirs(ckpts_dir, exist_ok=True)
         filename = os.path.abspath(os.path.join(ckpts_dir, basename))
 
         if os.path.exists(filename):
