@@ -11,6 +11,7 @@ dynamic = ["version", "description"]
 dependencies = [
     "PyWavelets",
     "av",
+    "bchlib",
     "calflops",
     "decord",
     "einops",

@@ -24,3 +24,4 @@ timm
 scipy
 ffmpeg-python
 av
+bchlib
