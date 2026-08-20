@@ -154,6 +154,11 @@ def detect_video(model: Videoseal, input_path: str, chunk_size: int) -> None:
         pbar.update(1)
         if frame_count % chunk_size == 0:
             soft_msgs.append(detect_video_clip(model, chunk))
+    # Process the final partial chunk so no frames are missed when the total
+    # number of frames is not a multiple of chunk_size.
+    remainder = frame_count % chunk_size
+    if remainder != 0:
+        soft_msgs.append(detect_video_clip(model, chunk[:remainder]))
     process1.stdout.close()
     process1.wait()
 
