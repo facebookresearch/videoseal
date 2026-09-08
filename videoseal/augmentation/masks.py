@@ -12,7 +12,6 @@ import hashlib
 from enum import Enum
 
 import os
-import cv2
 import numpy as np
 import os
 from PIL import Image
@@ -43,6 +42,9 @@ class DrawMethod(Enum):
 
 
 def make_random_irregular_mask(shape, max_angle=4, max_len=60, max_width=20, min_len=10, min_width=5, min_times=0, max_times=10, draw_method=DrawMethod.LINE):
+    # imported here so that inference-only installs do not need opencv
+    import cv2
+
     draw_method = DrawMethod(draw_method)
 
     height, width = shape
