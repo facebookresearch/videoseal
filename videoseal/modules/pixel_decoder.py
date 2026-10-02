@@ -61,7 +61,7 @@ class PixelDecoder(nn.Module):
     def forward(
         self,
         image_embeddings: torch.Tensor,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> torch.Tensor:
         """
         Predict masks given image and prompt embeddings.
 

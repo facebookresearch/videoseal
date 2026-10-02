@@ -22,8 +22,13 @@ class Extractor(nn.Module):
 
     def __init__(self) -> None:
         super(Extractor, self).__init__()
-        self.preprocess = lambda x: x * 2 - 1
-        self.postprocess = lambda x: (x + 1) / 2
+
+    def preprocess(self, x: torch.Tensor) -> torch.Tensor:
+        # a plain method, not a lambda attribute, so TorchScript can compile it
+        return x * 2 - 1
+
+    def postprocess(self, x: torch.Tensor) -> torch.Tensor:
+        return (x + 1) / 2
 
     def forward(
         self,
