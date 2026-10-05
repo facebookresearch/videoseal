@@ -25,7 +25,12 @@ class Wam(nn.Module):
     @property
     def device(self):
         """Return the device of the model."""
-        return next(self.parameters()).device
+        # Was `next(self.parameters()).device`: TorchScript supports neither
+        # next() on an iterator nor the `yield`-based generator that
+        # self.parameters() itself is built on. A dedicated non-persistent
+        # buffer moves with every .to(device) call exactly like a parameter
+        # does, and reading its .device is fully scriptable.
+        return self._device_marker.device
 
     def __init__(
         self,
@@ -54,6 +59,8 @@ class Wam(nn.Module):
             clamp: Whether to clamp the output images to [0, 1]
         """
         super().__init__()
+        # non-persistent marker buffer backing the `device` property (see above)
+        self.register_buffer("_device_marker", torch.zeros(1), persistent=False)
         # modules
         self.embedder = embedder
         self.detector = detector
