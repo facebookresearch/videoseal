@@ -60,7 +60,7 @@ class JND(nn.Module):
         # setup apply mode
         self.apply_mode = apply_mode
 
-    def jnd_la(self, x, alpha=1.0, eps=1e-5):
+    def jnd_la(self, x: torch.Tensor, alpha: float = 1.0, eps: float = 1e-5) -> torch.Tensor:
         """ Luminance masking: x must be in [0,255] """
         la = self.conv_lum(x) / 32
         mask_lum = la <= 127
@@ -68,7 +68,7 @@ class JND(nn.Module):
         la[~mask_lum] = 3/128 * (la[~mask_lum] - 127) + 3
         return alpha * la
 
-    def jnd_cm(self, x, beta=0.117, eps=1e-5):
+    def jnd_cm(self, x: torch.Tensor, beta: float = 0.117, eps: float = 1e-5) -> torch.Tensor:
         """ Contrast masking: x must be in [0,255] """
         grad_x = self.conv_x(x)
         grad_y = self.conv_y(x)
