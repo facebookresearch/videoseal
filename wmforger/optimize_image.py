@@ -33,7 +33,11 @@ def get_artifact_discriminator(ckpt_path, device="cuda:0"):
     return model
 
 
-def optimize(img: Image, model, device="cuda:0", num_steps=50, lr=0.05):
+def optimize(img: Image, model, device="cuda:0", num_steps=64, lr=0.2):
+    """
+    Optimizes the image at 768x768 to maximize the preference model output.
+    The number of steps sets the strength of the attack (more steps, larger perturbation).
+    """
     img = transform_image(img).to(device)
     param = torch.nn.Parameter(torch.zeros_like(img)).to(device)
 
@@ -48,11 +52,22 @@ def optimize(img: Image, model, device="cuda:0", num_steps=50, lr=0.05):
 
 
 def get_watermark(img: Image, optimized_img: torch.Tensor):
-    optimized_img = optimized_img.mul(255).round().to(torch.uint8).permute(0, 2, 3, 1).squeeze(0).numpy()
-    optimized_img = Image.fromarray(optimized_img).resize(img.size, Image.BILINEAR)
+    """
+    Returns the cleaned image and the stolen watermark (in [0, 255] units, at the size of img).
 
-    watermark = np.array(img).astype(np.float32) - np.array(optimized_img).astype(np.float32)
-    return optimized_img, watermark
+    Only the perturbation found by the optimization is resized back to the original size, i.e. the
+    watermark is resize(transform_image(img) - optimized_img). Taking the original image minus the
+    optimized image resized back instead would add the error of the resize round trip
+    (original -> 768x768 -> original), which on typical images is as large as the watermark itself.
+    """
+    img_small = transform_image(img).to(optimized_img.device)
+    watermark = torch.nn.functional.interpolate(
+        img_small - optimized_img, size=img.size[::-1], mode="bilinear", align_corners=True, antialias=False
+    )
+    img_torch = torchvision.transforms.functional.to_tensor(img.convert("RGB")).unsqueeze(0)
+    cleaned = (img_torch - watermark.cpu()).clip(0, 1)
+    cleaned_img = Image.fromarray(cleaned.mul(255).round().to(torch.uint8).permute(0, 2, 3, 1).squeeze(0).numpy())
+    return cleaned_img, watermark.squeeze(0).permute(1, 2, 0).cpu().numpy() * 255
 
 
 if __name__ == "__main__":
@@ -60,13 +75,16 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--image", type=str, help="Path to the image file", required=True)
     parser.add_argument("--ckpt_path", type=str, help="Path to the checkpoint file", required=True)
+    parser.add_argument("--num_steps", type=int, default=64,
+                        help="Optimization steps; more steps remove more of the watermark but change the image more")
+    parser.add_argument("--lr", type=float, default=0.2, help="SGD learning rate")
     args = parser.parse_args()
 
     device = "cuda"
     model = get_artifact_discriminator(ckpt_path=args.ckpt_path, device=device)
 
     image = Image.open(args.image).convert("RGB")
-    optimized_img = optimize(image, model, device=device, num_steps=50, lr=0.05)
+    optimized_img = optimize(image, model, device=device, num_steps=args.num_steps, lr=args.lr)
     
     cleaned_image, watermark = get_watermark(image, optimized_img)
 
