@@ -8,7 +8,6 @@ import warnings
 
 import torch
 import torch.nn.functional as F
-from decord import VideoReader, cpu
 from torch.utils.data import DataLoader, DistributedSampler
 
 from ..utils.dist import is_dist_avail_and_initialized
@@ -27,6 +26,9 @@ def load_video(fname, num_workers=8):
     Raises:
         warnings.warn: If the video file is not found or is too short.
     """
+    # imported here so that inference-only installs do not need decord
+    from decord import VideoReader, cpu
+
     if not os.path.exists(fname):
         warnings.warn(f'video path not found {fname=}')
         return [], None

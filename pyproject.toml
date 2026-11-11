@@ -12,7 +12,6 @@ dependencies = [
     "PyWavelets",
     "av",
     "calflops",
-    "decord",
     "einops",
     "lpips",
     "omegaconf",
@@ -32,6 +31,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+  # decord has no wheel for macOS/arm64 and is only needed to read videos for training
+  train = [
+    "decord",
+  ]
   dev = [
     "black",
     "conda-pack",
