@@ -58,9 +58,9 @@ from PIL import Image
 import torchvision.transforms as T
 
 # Load any model by name (automatically downloads on first use)
-model = videoseal.load("videoseal")     # VideoSeal v1.0 (256-bit, stable)
-# model = videoseal.load("pixelseal")   # PixelSeal (SOTA imperceptibility & robustness)
-# model = videoseal.load("chunkyseal")  # ChunkySeal (1024-bit high capacity)
+model = videoseal.load("videoseal").eval()     # VideoSeal v1.0 (256-bit, stable)
+# model = videoseal.load("pixelseal").eval()   # PixelSeal (SOTA imperceptibility & robustness)
+# model = videoseal.load("chunkyseal").eval()  # ChunkySeal (1024-bit high capacity)
 
 # Watermark an image 🎨
 img_tensor = T.ToTensor()(Image.open("image.jpg")).unsqueeze(0)
@@ -79,7 +79,7 @@ import videoseal
 import torchvision
 
 # Load and watermark video 🎬
-model = videoseal.load("videoseal")
+model = videoseal.load("videoseal").eval()
 video, _, _ = torchvision.io.read_video("video.mp4")
 video = video.permute(0, 3, 1, 2).float() / 255.0
 
