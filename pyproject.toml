@@ -1,5 +1,5 @@
 [build-system]
-requires = ["flit_core >=3.2,<4", "packaging~=23.1", "setuptools~=67.8", "wheel~=0.40"]
+requires = ["flit_core >=3.2,<4"]
 build-backend = "flit_core.buildapi"
 
 [project]
@@ -23,7 +23,6 @@ dependencies = [
     "safetensors",
     "scikit-image",
     "scipy",
-    "setuptools",
     "tensorboard",
     "timm==0.9.16",
     "torch>=2.3.1",
