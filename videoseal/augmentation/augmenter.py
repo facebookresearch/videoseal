@@ -185,12 +185,14 @@ class Augmenter(nn.Module):
         else:
             # no mask
             mask_targets = torch.ones_like(imgs_w)[:, 0:1, :, :]
+            imgs_aug = imgs_w
             # image augmentations
             selected_augs = []
             for _ in range(self.num_augs):
                 imgs_aug, mask_targets, selected_aug_ = self.augment(
                     imgs_aug, mask_targets, is_video, do_resize)
                 selected_augs.append(selected_aug_)
+            selected_aug = "+".join(selected_augs)
             return imgs_aug, mask_targets, selected_aug
 
     def __repr__(self) -> str:
