@@ -28,15 +28,7 @@ class Blender(nn.Module):
         self.scaling_i = scaling_i
         self.scaling_w = scaling_w
 
-        # Map method names to functions
-        self.blend_methods = {
-            "additive": self.additive_blend,
-            "multiplicative": self.multiplicative_blend,
-            "spatial_smoothed": self.spatial_smoothed_blend,
-            "variance_based": self.variance_based_blend,
-        }
-
-        if self.method not in self.blend_methods:
+        if self.method not in self.AVAILABLE_BLENDING_METHODS:
             raise ValueError(f"Unknown blending method: {self.method}")
 
     def forward(self, imgs, preds_w):
@@ -52,11 +44,17 @@ class Blender(nn.Module):
         Returns:
             torch.Tensor: Blended and attenuated image batch.
         """
-        # Perform blending
-        blend_function = self.blend_methods[self.method]
-        blended_output = blend_function(imgs, preds_w)
-
-        return blended_output
+        # Perform blending. An explicit branch (not a dict of bound methods) because
+        # TorchScript cannot type a dict whose values are callables; self.method is
+        # fixed and validated in __init__, so this covers every real instance.
+        if self.method == "additive":
+            return self.additive_blend(imgs, preds_w)
+        elif self.method == "multiplicative":
+            return self.multiplicative_blend(imgs, preds_w)
+        elif self.method == "spatial_smoothed":
+            return self.spatial_smoothed_blend(imgs, preds_w)
+        else:
+            return self.variance_based_blend(imgs, preds_w)
 
     def additive_blend(self, imgs, preds_w):
         """
