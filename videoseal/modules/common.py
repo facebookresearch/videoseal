@@ -151,7 +151,12 @@ class LayerNorm(nn.Module):
     def forward(self, x):
         if self.data_format == "channels_last":
             return F.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
-        elif self.data_format == "channels_first":
+        else:
+            # __init__ only allows "channels_last" or "channels_first", but without
+            # this being an explicit else (rather than elif), TorchScript sees a
+            # possible third fallthrough path with no return, and infers this
+            # method's return type as Optional[Tensor] instead of Tensor — which
+            # then breaks scripting for any nn.Sequential using this as a norm layer.
             u = x.mean(1, keepdim=True)
             s = (x - u).pow(2).mean(1, keepdim=True)
             x = (x - u) / torch.sqrt(s + self.eps)

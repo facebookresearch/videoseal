@@ -20,8 +20,11 @@ class Embedder(nn.Module):
 
     def __init__(self) -> None:
         super(Embedder, self).__init__()
-        self.preprocess = lambda x: x * 2 - 1
         self.yuv = False  # used by WAM to know if the model should take YUV images
+
+    def preprocess(self, x: torch.Tensor) -> torch.Tensor:
+        # a plain method, not a lambda attribute, so TorchScript can compile it
+        return x * 2 - 1
 
     def get_random_msg(self, bsz: int = 1, nb_repetitions=1) -> torch.Tensor:
         """

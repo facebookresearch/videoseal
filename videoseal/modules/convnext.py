@@ -144,9 +144,12 @@ class ConvNeXtV2(nn.Module):
             nn.init.constant_(m.bias, 0)
 
     def forward_features(self, x):
-        for i in range(4):
-            x = self.downsample_layers[i](x)
-            x = self.stages[i](x)
+        # TorchScript only allows ModuleList/Sequential indexing with an integer
+        # literal or via enumerate(), not a loop variable like the former `self.
+        # downsample_layers[i]` — zip() keeps the same pairing without that.
+        for downsample_layer, stage in zip(self.downsample_layers, self.stages):
+            x = downsample_layer(x)
+            x = stage(x)
         return x # no average pooling, (N, C, H, W)
         # return self.norm(x.mean([-2, -1])) # global average pooling, (N, C, H, W) -> (N, C)
 
